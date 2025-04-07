@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getCardById } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 const CardNumberForm: React.FC = () => {
   const [cardNumber, setCardNumber] = useState("");
@@ -25,14 +26,16 @@ const CardNumberForm: React.FC = () => {
     }
 
     setIsLoading(true);
+    console.log(`Vérification de la carte: ${cardNumber.trim()}`);
 
     try {
       const card = await getCardById(cardNumber.trim());
+      console.log('Résultat de la recherche:', card);
       
       if (!card) {
         toast({
           title: "Carte non trouvée",
-          description: "Ce numéro de carte n'existe pas dans notre système",
+          description: "Ce numéro de carte n'existe pas dans notre système. Veuillez vérifier le numéro et réessayer.",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -45,7 +48,7 @@ const CardNumberForm: React.FC = () => {
       console.error('Error checking card:', error);
       toast({
         title: "Erreur",
-        description: "Une erreur s'est produite lors de la vérification de la carte",
+        description: "Une erreur s'est produite lors de la vérification de la carte. Veuillez réessayer plus tard.",
         variant: "destructive",
       });
     } finally {
@@ -69,7 +72,12 @@ const CardNumberForm: React.FC = () => {
         className="w-full bg-white text-amber-800 hover:bg-amber-50"
         disabled={isLoading}
       >
-        {isLoading ? "Vérification..." : "Accéder au paiement"}
+        {isLoading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Vérification...
+          </>
+        ) : "Accéder au paiement"}
       </Button>
     </form>
   );

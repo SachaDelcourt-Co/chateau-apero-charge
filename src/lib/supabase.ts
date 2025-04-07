@@ -15,18 +15,26 @@ export interface Card {
 }
 
 export async function getCardById(cardNumber: string): Promise<Card | null> {
-  const { data, error } = await supabase
-    .from('cards')
-    .select('*')
-    .eq('card_number', cardNumber)
-    .single();
+  console.log(`Recherche de la carte avec numéro: ${cardNumber}`);
+  
+  try {
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*')
+      .eq('card_number', cardNumber)
+      .maybeSingle();
 
-  if (error) {
-    console.error('Error fetching card:', error);
+    if (error) {
+      console.error('Error fetching card:', error);
+      return null;
+    }
+
+    console.log('Réponse de Supabase:', data);
+    return data;
+  } catch (error) {
+    console.error('Exception lors de la récupération de la carte:', error);
     return null;
   }
-
-  return data;
 }
 
 export async function updateCardAmount(cardNumber: string, amount: string): Promise<boolean> {
