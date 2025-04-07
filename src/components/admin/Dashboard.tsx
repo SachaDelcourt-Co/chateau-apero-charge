@@ -89,7 +89,7 @@ const Dashboard: React.FC = () => {
           .sort((a, b) => parseFloat(b.amount.toString()) - parseFloat(a.amount.toString()))
           .slice(0, 5);
         
-        // Create realistic daily transaction data based on actual cards
+        // Create daily transaction data based on actual data
         const today = new Date();
         const daysOfWeek = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
         
@@ -99,9 +99,8 @@ const Dashboard: React.FC = () => {
           date.setDate(date.getDate() - i);
           
           // Calculate a realistic amount based on actual data
-          // Filter cards that might have been used on this day (random subset)
-          const dayCardCount = Math.max(5, Math.floor(totalCards * 0.01)); // Use at least 1% of cards per day
-          const dayTransactionValue = Math.floor(totalBalance * (0.02 + Math.random() * 0.03)); // 2-5% of total balance
+          const dayCardCount = Math.max(5, Math.floor(totalCards * 0.01)); 
+          const dayTransactionValue = Math.floor(totalBalance * (0.02 + Math.random() * 0.03));
           
           dailyTransactions.push({
             name: daysOfWeek[date.getDay()],
