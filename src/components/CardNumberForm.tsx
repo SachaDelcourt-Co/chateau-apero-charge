@@ -3,12 +3,12 @@ import React, { useState } from 'react';
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { getCardById } from "@/lib/supabase";
+import { getTableCardById } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 const CardNumberForm: React.FC = () => {
-  const [cardNumber, setCardNumber] = useState("");
+  const [cardId, setCardId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -16,26 +16,26 @@ const CardNumberForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!cardNumber.trim()) {
+    if (!cardId.trim()) {
       toast({
         title: "Erreur",
-        description: "Veuillez entrer un numéro de carte",
+        description: "Veuillez entrer un ID de carte",
         variant: "destructive",
       });
       return;
     }
 
     setIsLoading(true);
-    console.log(`Vérification de la carte: ${cardNumber.trim()}`);
+    console.log(`Vérification de la carte: ${cardId.trim()}`);
 
     try {
-      const card = await getCardById(cardNumber.trim());
+      const card = await getTableCardById(cardId.trim());
       console.log('Résultat de la recherche:', card);
       
       if (!card) {
         toast({
           title: "Carte non trouvée",
-          description: "Ce numéro de carte n'existe pas dans notre système. Veuillez vérifier le numéro et réessayer.",
+          description: "Cet ID de carte n'existe pas dans notre système. Veuillez vérifier l'ID et réessayer.",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -43,7 +43,7 @@ const CardNumberForm: React.FC = () => {
       }
 
       // Si nous avons trouvé la carte, redirigez vers la page de paiement
-      navigate(`/payment/${card.card_number}`);
+      navigate(`/payment/${card.id}`);
     } catch (error) {
       console.error('Error checking card:', error);
       toast({
@@ -61,9 +61,9 @@ const CardNumberForm: React.FC = () => {
       <div className="space-y-2">
         <Input
           type="text"
-          placeholder="Numéro de carte"
-          value={cardNumber}
-          onChange={(e) => setCardNumber(e.target.value)}
+          placeholder="ID de carte (ex: CARD001)"
+          value={cardId}
+          onChange={(e) => setCardId(e.target.value)}
           className="bg-white/80 border-amber-200 placeholder:text-amber-800/50"
         />
       </div>

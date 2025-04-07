@@ -7,7 +7,7 @@ import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getCardById, updateCardAmount } from '@/lib/supabase';
+import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
 import { Loader2 } from "lucide-react";
 
 const Payment: React.FC = () => {
@@ -15,21 +15,21 @@ const Payment: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [card, setCard] = useState<any>(null);
+  const [card, setCard] = useState<TableCard | null>(null);
   const [amount, setAmount] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!id) {
-      setError("Numéro de carte non valide");
+      setError("ID de carte non valide");
       setLoading(false);
       return;
     }
 
     const fetchCardDetails = async () => {
       try {
-        const cardData = await getCardById(id);
+        const cardData = await getTableCardById(id);
 
         if (!cardData) {
           setError("Carte non trouvée");
@@ -62,7 +62,7 @@ const Payment: React.FC = () => {
     setProcessing(true);
 
     try {
-      const success = await updateCardAmount(id!, amount);
+      const success = await updateTableCardAmount(id!, amount);
       
       if (success) {
         // Redirection vers la page de succès
@@ -130,7 +130,8 @@ const Payment: React.FC = () => {
           <ChateauLogo />
           <div className="text-white text-center w-full">
             <h2 className="text-xl font-bold mb-4">Recharger votre carte</h2>
-            <p className="mb-6">Numéro de carte: <span className="font-mono">{id}</span></p>
+            <p className="mb-6">ID de carte: <span className="font-mono">{id}</span></p>
+            <p className="mb-6">Montant actuel: <span className="font-mono">{card?.amount || '0.00'}€</span></p>
             
             <div className="space-y-4">
               <div>

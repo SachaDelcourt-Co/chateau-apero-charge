@@ -30,6 +30,21 @@ export type Database = {
         }
         Relationships: []
       }
+      table_cards: {
+        Row: {
+          amount: string | null
+          id: string
+        }
+        Insert: {
+          amount?: string | null
+          id: string
+        }
+        Update: {
+          amount?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -14,6 +14,11 @@ export interface Card {
   amount?: string | null;
 }
 
+export interface TableCard {
+  id: string;
+  amount: string;
+}
+
 export async function getCardById(cardNumber: string): Promise<Card | null> {
   console.log(`Recherche de la carte avec numéro: ${cardNumber}`);
   
@@ -45,6 +50,45 @@ export async function updateCardAmount(cardNumber: string, amount: string): Prom
 
   if (error) {
     console.error('Error updating card amount:', error);
+    return false;
+  }
+
+  return true;
+}
+
+// Nouvelles fonctions pour table_cards
+
+export async function getTableCardById(id: string): Promise<TableCard | null> {
+  console.log(`Recherche de la carte avec ID: ${id}`);
+  
+  try {
+    const { data, error } = await supabase
+      .from('table_cards')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching card from table_cards:', error);
+      return null;
+    }
+
+    console.log('Réponse de Supabase (table_cards):', data);
+    return data;
+  } catch (error) {
+    console.error('Exception lors de la récupération de la carte (table_cards):', error);
+    return null;
+  }
+}
+
+export async function updateTableCardAmount(id: string, amount: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('table_cards')
+    .update({ amount })
+    .eq('id', id);
+
+  if (error) {
+    console.error('Error updating table_card amount:', error);
     return false;
   }
 
