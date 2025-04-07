@@ -7,7 +7,7 @@ import { getCardById } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
 
 const CardNumberForm: React.FC = () => {
-  const [cardId, setCardId] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -15,10 +15,10 @@ const CardNumberForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!cardId.trim()) {
+    if (!cardNumber.trim()) {
       toast({
         title: "Erreur",
-        description: "Veuillez entrer un ID de carte",
+        description: "Veuillez entrer un numéro de carte",
         variant: "destructive",
       });
       return;
@@ -27,12 +27,12 @@ const CardNumberForm: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const card = await getCardById(cardId.trim());
+      const card = await getCardById(cardNumber.trim());
       
       if (!card) {
         toast({
           title: "Carte non trouvée",
-          description: "Cet ID de carte n'existe pas dans notre système",
+          description: "Ce numéro de carte n'existe pas dans notre système",
           variant: "destructive",
         });
         setIsLoading(false);
@@ -40,7 +40,7 @@ const CardNumberForm: React.FC = () => {
       }
 
       // Si nous avons trouvé la carte, redirigez vers la page de paiement
-      navigate(`/payment/${card.id}`);
+      navigate(`/payment/${card.card_number}`);
     } catch (error) {
       console.error('Error checking card:', error);
       toast({
@@ -58,9 +58,9 @@ const CardNumberForm: React.FC = () => {
       <div className="space-y-2">
         <Input
           type="text"
-          placeholder="ID de carte"
-          value={cardId}
-          onChange={(e) => setCardId(e.target.value)}
+          placeholder="Numéro de carte"
+          value={cardNumber}
+          onChange={(e) => setCardNumber(e.target.value)}
           className="bg-white/80 border-amber-200 placeholder:text-amber-800/50"
         />
       </div>

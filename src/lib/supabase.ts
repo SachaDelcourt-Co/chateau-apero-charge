@@ -8,17 +8,17 @@ const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface Card {
-  id: string;
+  card_number: string;
   qr_code_file?: string | null;
   url?: string | null;
   amount?: string | null;
 }
 
-export async function getCardById(id: string): Promise<Card | null> {
+export async function getCardById(cardNumber: string): Promise<Card | null> {
   const { data, error } = await supabase
     .from('cards')
     .select('*')
-    .eq('id', id)
+    .eq('card_number', cardNumber)
     .single();
 
   if (error) {
@@ -29,11 +29,11 @@ export async function getCardById(id: string): Promise<Card | null> {
   return data;
 }
 
-export async function updateCardAmount(id: string, amount: string): Promise<boolean> {
+export async function updateCardAmount(cardNumber: string, amount: string): Promise<boolean> {
   const { error } = await supabase
     .from('cards')
     .update({ amount })
-    .eq('id', id);
+    .eq('card_number', cardNumber);
 
   if (error) {
     console.error('Error updating card amount:', error);

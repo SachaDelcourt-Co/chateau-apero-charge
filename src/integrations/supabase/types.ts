@@ -12,19 +12,19 @@ export type Database = {
       cards: {
         Row: {
           amount: string | null
-          id: string
+          card_number: string
           qr_code_file: string | null
           url: string | null
         }
         Insert: {
           amount?: string | null
-          id: string
+          card_number: string
           qr_code_file?: string | null
           url?: string | null
         }
         Update: {
           amount?: string | null
-          id?: string
+          card_number?: string
           qr_code_file?: string | null
           url?: string | null
         }

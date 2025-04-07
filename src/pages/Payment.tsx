@@ -22,7 +22,7 @@ const Payment: React.FC = () => {
 
   useEffect(() => {
     if (!id) {
-      setError("ID de carte non valide");
+      setError("Numéro de carte non valide");
       setLoading(false);
       return;
     }
@@ -130,7 +130,7 @@ const Payment: React.FC = () => {
           <ChateauLogo />
           <div className="text-white text-center w-full">
             <h2 className="text-xl font-bold mb-4">Recharger votre carte</h2>
-            <p className="mb-6">ID de carte: <span className="font-mono">{id}</span></p>
+            <p className="mb-6">Numéro de carte: <span className="font-mono">{id}</span></p>
             
             <div className="space-y-4">
               <div>
