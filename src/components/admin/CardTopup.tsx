@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -6,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CreditCard, CheckCircle } from "lucide-react";
-import { getCardById, getTableCardById, updateCardAmount, updateTableCardAmount } from '@/lib/supabase';
+import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
 
 const CardTopup: React.FC = () => {
   const [cardId, setCardId] = useState('');
@@ -32,7 +31,7 @@ const CardTopup: React.FC = () => {
     setSuccess(false);
     
     try {
-      // Vérifier d'abord dans table_cards
+      // Vérifier dans table_cards
       let tableCard = await getTableCardById(cardId);
       
       if (tableCard) {
@@ -60,40 +59,11 @@ const CardTopup: React.FC = () => {
           });
         }
       } else {
-        // Vérifier dans la table cards
-        const card = await getCardById(cardId);
-        
-        if (card) {
-          // Carte trouvée dans cards
-          const currentAmountValue = card.amount || '0';
-          setCurrentAmount(currentAmountValue);
-          
-          // Calculer le nouveau montant
-          const newAmount = (parseFloat(currentAmountValue) + parseFloat(amount)).toString();
-          
-          // Mettre à jour le montant
-          const success = await updateCardAmount(cardId, newAmount);
-          
-          if (success) {
-            setSuccess(true);
-            toast({
-              title: "Carte rechargée",
-              description: `La carte ${cardId} a été rechargée de ${amount}€`,
-            });
-          } else {
-            toast({
-              title: "Erreur",
-              description: "Erreur lors de la mise à jour du montant",
-              variant: "destructive"
-            });
-          }
-        } else {
-          toast({
-            title: "Carte non trouvée",
-            description: "Aucune carte trouvée avec ce numéro",
-            variant: "destructive"
-          });
-        }
+        toast({
+          title: "Carte non trouvée",
+          description: "Aucune carte trouvée avec cet identifiant",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error("Erreur lors de la recharge:", error);

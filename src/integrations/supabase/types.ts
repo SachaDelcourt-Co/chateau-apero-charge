@@ -9,27 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      cards: {
-        Row: {
-          amount: string | null
-          card_number: string
-          qr_code_file: string | null
-          url: string | null
-        }
-        Insert: {
-          amount?: string | null
-          card_number: string
-          qr_code_file?: string | null
-          url?: string | null
-        }
-        Update: {
-          amount?: string | null
-          card_number?: string
-          qr_code_file?: string | null
-          url?: string | null
-        }
-        Relationships: []
-      }
       table_cards: {
         Row: {
           amount: number | null

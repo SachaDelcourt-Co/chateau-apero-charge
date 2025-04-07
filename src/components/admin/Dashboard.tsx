@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -48,34 +47,24 @@ const Dashboard: React.FC = () => {
       try {
         setLoading(true);
         
-        // Fetch all cards from both tables
+        // Only fetch cards from the table_cards table that exists
         const { data: tableCards, error: tableCardsError } = await supabase
           .from('table_cards')
           .select('*');
           
         if (tableCardsError) throw tableCardsError;
         
-        const { data: clientCards, error: cardsError } = await supabase
-          .from('cards')
-          .select('*');
-          
-        if (cardsError) throw cardsError;
+        console.log("Fetched cards from table_cards:", tableCards?.length || 0);
         
-        // Format data from both tables into a unified format
+        // Format data from table_cards
         const formattedTableCards = (tableCards || []).map(card => ({
           id: card.id,
           amount: card.amount?.toString() || '0',
           description: card.description || 'Table Card'
         }));
         
-        const formattedClientCards = (clientCards || []).map(card => ({
-          id: card.card_number,
-          amount: card.amount || '0',
-          description: 'Carte client'
-        }));
-        
-        // Combine data from both tables
-        const allCards = [...formattedTableCards, ...formattedClientCards];
+        // Use only the available table
+        const allCards = formattedTableCards;
         
         // Calculate summary metrics
         const validCards = allCards.filter(card => card && card.amount);
