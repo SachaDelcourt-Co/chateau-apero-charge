@@ -1,11 +1,10 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from "@/components/ui/use-toast";
 import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
-import { Button } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { supabase } from '@/lib/supabase';
 import { Loader2 } from "lucide-react";
 
