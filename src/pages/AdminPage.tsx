@@ -46,7 +46,7 @@ const AdminPage: React.FC = () => {
           </Button>
         </div>
         
-        <div className="bg-black/70 text-white p-6 rounded-lg shadow-xl">
+        <div className="bg-white/95 p-6 rounded-lg shadow-xl">
           <h1 className="text-2xl font-bold mb-6 text-center">Administration</h1>
           
           <Tabs defaultValue="topup" className="w-full">

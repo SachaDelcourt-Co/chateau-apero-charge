@@ -123,10 +123,10 @@ const LoginPage: React.FC = () => {
           <ChateauLogo />
         </div>
         
-        <Card className="bg-black/70 text-white border-gray-700">
+        <Card className="border-amber-200 shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl text-center">Administration</CardTitle>
-            <CardDescription className="text-center text-gray-400">
+            <CardDescription className="text-center">
               Connectez-vous pour accéder à l'espace administrateur
             </CardDescription>
           </CardHeader>
@@ -148,7 +148,6 @@ const LoginPage: React.FC = () => {
                       placeholder="votre@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="bg-gray-800 border-gray-700"
                       disabled={isLoading}
                     />
                   </div>
@@ -161,7 +160,6 @@ const LoginPage: React.FC = () => {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="bg-gray-800 border-gray-700"
                       disabled={isLoading}
                     />
                   </div>
@@ -200,7 +198,6 @@ const LoginPage: React.FC = () => {
                       placeholder="votre@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="bg-gray-800 border-gray-700"
                       disabled={isLoading}
                     />
                   </div>
@@ -213,7 +210,6 @@ const LoginPage: React.FC = () => {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="bg-gray-800 border-gray-700"
                       disabled={isLoading}
                     />
                   </div>
