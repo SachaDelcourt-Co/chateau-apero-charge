@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CreditCard, CheckCircle } from "lucide-react";
 import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
 
-const CardTopup: React.FC = () => {
+interface CardTopupProps {
+  onSuccess?: () => void;
+}
+
+const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
   const [cardId, setCardId] = useState('');
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +56,11 @@ const CardTopup: React.FC = () => {
             title: "Carte rechargée",
             description: `La carte ${cardId} a été rechargée de ${amount}€`,
           });
+          
+          // Call the onSuccess callback if provided
+          if (onSuccess) {
+            onSuccess();
+          }
         } else {
           toast({
             title: "Erreur",

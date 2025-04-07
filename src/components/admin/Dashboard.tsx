@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -47,7 +48,7 @@ const Dashboard: React.FC = () => {
       try {
         setLoading(true);
         
-        // Only fetch cards from the table_cards table that exists
+        // Fetch all cards from the table_cards table
         const { data: tableCards, error: tableCardsError } = await supabase
           .from('table_cards')
           .select('*');
@@ -69,9 +70,17 @@ const Dashboard: React.FC = () => {
         // Calculate summary metrics
         const validCards = allCards.filter(card => card && card.amount);
         const totalCards = validCards.length;
+        
+        // Filter cards with balance greater than 0.01 for average calculation
+        const cardsWithBalance = validCards.filter(card => 
+          parseFloat(card.amount.toString()) >= 0.01);
+        
         const totalBalance = validCards.reduce((sum, card) => 
           sum + (parseFloat(card.amount.toString()) || 0), 0);
-        const avgBalance = totalCards > 0 ? totalBalance / totalCards : 0;
+        
+        // Calculate average only for cards with balance > 0.01
+        const avgBalance = cardsWithBalance.length > 0 ? 
+          totalBalance / cardsWithBalance.length : 0;
         
         // Get top 5 cards by amount
         const topCards = [...validCards]
