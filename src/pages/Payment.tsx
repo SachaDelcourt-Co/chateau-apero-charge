@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from "@/components/ui/use-toast";
@@ -5,13 +6,17 @@ import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
-import { supabase } from '@/lib/supabase';
+import { Input } from "@/components/ui/input";
+import { getCardById, updateCardAmount } from '@/lib/supabase';
 import { Loader2 } from "lucide-react";
 
 const Payment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [card, setCard] = useState<any>(null);
+  const [amount, setAmount] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -24,29 +29,16 @@ const Payment: React.FC = () => {
 
     const fetchCardDetails = async () => {
       try {
-        const { data, error } = await supabase
-          .from('cards')
-          .select('*')
-          .eq('id', id)
-          .single();
+        const cardData = await getCardById(id);
 
-        if (error || !data) {
+        if (!cardData) {
           setError("Carte non trouvée");
           setLoading(false);
           return;
         }
 
-        // Si la carte existe, nous pouvons maintenant rediriger vers Stripe
-        // Normalement, nous devrions appeler une fonction Edge Supabase ici
-        // Cependant, pour la démonstration, nous simulerons cette partie
-        
-        // Simulation de l'appel à la fonction Edge pour créer une session Stripe
-        setTimeout(() => {
-          setLoading(false);
-          // Dans un cas réel, nous redirigerions vers l'URL de session Stripe retournée par la fonction Edge
-          // Pour la démo, nous redirigeons vers la page de succès
-          navigate("/payment-success");
-        }, 1500);
+        setCard(cardData);
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching card details:', error);
         setError("Une erreur s'est produite");
@@ -55,7 +47,44 @@ const Payment: React.FC = () => {
     };
 
     fetchCardDetails();
-  }, [id, navigate]);
+  }, [id]);
+
+  const handleRecharge = async () => {
+    if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
+      toast({
+        title: "Montant invalide",
+        description: "Veuillez entrer un montant valide",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setProcessing(true);
+
+    try {
+      const success = await updateCardAmount(id!, amount);
+      
+      if (success) {
+        // Redirection vers la page de succès
+        navigate("/payment-success");
+      } else {
+        toast({
+          title: "Erreur",
+          description: "Impossible de mettre à jour le montant de la carte",
+          variant: "destructive"
+        });
+        setProcessing(false);
+      }
+    } catch (error) {
+      console.error("Error updating card amount:", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite lors de la mise à jour du montant",
+        variant: "destructive"
+      });
+      setProcessing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -65,7 +94,7 @@ const Payment: React.FC = () => {
             <ChateauLogo />
             <div className="text-white text-center">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              <p>Préparation de votre paiement...</p>
+              <p>Chargement des détails de la carte...</p>
             </div>
           </div>
         </ChateauCard>
@@ -99,8 +128,43 @@ const Payment: React.FC = () => {
       <ChateauCard className="w-full max-w-md">
         <div className="flex flex-col items-center justify-center space-y-6">
           <ChateauLogo />
-          <div className="text-white text-center">
-            <p>Redirection vers la page de paiement...</p>
+          <div className="text-white text-center w-full">
+            <h2 className="text-xl font-bold mb-4">Recharger votre carte</h2>
+            <p className="mb-6">ID de carte: <span className="font-mono">{id}</span></p>
+            
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="amount" className="block text-sm mb-1">Montant à recharger (€)</label>
+                <Input
+                  id="amount"
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="bg-white/80 border-amber-200 placeholder:text-amber-800/50 w-full"
+                />
+              </div>
+              
+              <Button
+                className="w-full bg-white text-amber-800 hover:bg-amber-50"
+                onClick={handleRecharge}
+                disabled={processing}
+              >
+                {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                {processing ? "Traitement en cours..." : "Recharger la carte"}
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="w-full bg-transparent text-white border-white hover:bg-white/10"
+                onClick={() => navigate("/")}
+                disabled={processing}
+              >
+                Annuler
+              </Button>
+            </div>
           </div>
         </div>
       </ChateauCard>

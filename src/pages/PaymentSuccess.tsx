@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
@@ -16,8 +16,8 @@ const PaymentSuccess: React.FC = () => {
         <div className="flex flex-col items-center justify-center space-y-6">
           <ChateauLogo />
           <div className="text-white text-center space-y-4">
-            <CheckCircle className="h-12 w-12 mx-auto" />
-            <h2 className="text-xl font-medium">Paiement réussi !</h2>
+            <CheckCircle className="h-12 w-12 mx-auto text-green-400" />
+            <h2 className="text-xl font-medium">Rechargement réussi !</h2>
             <p>Votre carte a été rechargée avec succès.</p>
             <p className="text-sm">
               Traitez cette carte comme du cash.<br />

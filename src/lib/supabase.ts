@@ -9,16 +9,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface Card {
   id: string;
-  card_number: string;
-  amount: number;
-  created_at: string;
+  qr_code_file?: string | null;
+  url?: string | null;
+  amount?: string | null;
 }
 
-export async function getCardByNumber(cardNumber: string): Promise<Card | null> {
+export async function getCardById(id: string): Promise<Card | null> {
   const { data, error } = await supabase
     .from('cards')
     .select('*')
-    .eq('card_number', cardNumber)
+    .eq('id', id)
     .single();
 
   if (error) {
@@ -29,7 +29,7 @@ export async function getCardByNumber(cardNumber: string): Promise<Card | null> 
   return data;
 }
 
-export async function updateCardAmount(id: string, amount: number): Promise<boolean> {
+export async function updateCardAmount(id: string, amount: string): Promise<boolean> {
   const { error } = await supabase
     .from('cards')
     .update({ amount })
