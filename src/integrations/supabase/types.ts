@@ -32,18 +32,15 @@ export type Database = {
       }
       table_cards: {
         Row: {
-          amount: number | null
-          description: string | null
+          amount: string | null
           id: string
         }
         Insert: {
-          amount?: number | null
-          description?: string | null
+          amount?: string | null
           id: string
         }
         Update: {
-          amount?: number | null
-          description?: string | null
+          amount?: string | null
           id?: string
         }
         Relationships: []
