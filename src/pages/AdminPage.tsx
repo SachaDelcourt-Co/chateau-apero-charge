@@ -3,7 +3,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import ChateauBackground from '@/components/ChateauBackground';
 import ChateauLogo from '@/components/ChateauLogo';
 import CardTopup from '@/components/admin/CardTopup';
 import Dashboard from '@/components/admin/Dashboard';
@@ -36,7 +35,7 @@ const AdminPage: React.FC = () => {
   };
 
   return (
-    <ChateauBackground>
+    <div className="min-h-screen bg-gray-50">
       <div className="w-full max-w-6xl mx-auto p-4">
         <div className="flex justify-between items-center mb-6">
           <ChateauLogo />
@@ -46,26 +45,26 @@ const AdminPage: React.FC = () => {
           </Button>
         </div>
         
-        <div className="bg-white/95 p-6 rounded-lg shadow-xl">
+        <div className="bg-white p-6 rounded-lg shadow-xl">
           <h1 className="text-2xl font-bold mb-6 text-center">Administration</h1>
           
-          <Tabs defaultValue="topup" className="w-full">
+          <Tabs defaultValue="dashboard" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="topup">Recharge de carte</TabsTrigger>
               <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
+              <TabsTrigger value="topup">Recharge de carte</TabsTrigger>
             </TabsList>
-            
-            <TabsContent value="topup" className="mt-4">
-              <CardTopup />
-            </TabsContent>
             
             <TabsContent value="dashboard" className="mt-4">
               <Dashboard />
             </TabsContent>
+            
+            <TabsContent value="topup" className="mt-4">
+              <CardTopup />
+            </TabsContent>
           </Tabs>
         </div>
       </div>
-    </ChateauBackground>
+    </div>
   );
 };
 

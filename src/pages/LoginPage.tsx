@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, LogIn } from "lucide-react";
 import { supabase } from '@/lib/supabase';
-import ChateauBackground from '@/components/ChateauBackground';
 import ChateauLogo from '@/components/ChateauLogo';
 
 const LoginPage: React.FC = () => {
@@ -73,7 +72,7 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <ChateauBackground>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="w-full max-w-md p-4">
         <div className="flex justify-center mb-8">
           <ChateauLogo />
@@ -136,7 +135,7 @@ const LoginPage: React.FC = () => {
           </form>
         </Card>
       </div>
-    </ChateauBackground>
+    </div>
   );
 };
 
