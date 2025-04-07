@@ -115,7 +115,7 @@ const CardTopup: React.FC = () => {
   };
 
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card>
       <CardContent className="pt-6">
         <h2 className="text-xl font-semibold mb-4">Recharger une carte</h2>
         
@@ -136,13 +136,13 @@ const CardTopup: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="card-id">Numéro de carte</Label>
               <div className="relative">
-                <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="card-id"
                   value={cardId}
                   onChange={(e) => setCardId(e.target.value)}
                   placeholder="Entrez le numéro de la carte"
-                  className="pl-10 bg-gray-700 border-gray-600"
+                  className="pl-10"
                   disabled={isLoading}
                 />
               </div>
@@ -158,7 +158,6 @@ const CardTopup: React.FC = () => {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="Montant à recharger"
-                className="bg-gray-700 border-gray-600"
                 disabled={isLoading}
               />
             </div>
