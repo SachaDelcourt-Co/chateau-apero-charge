@@ -44,7 +44,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         const currentAmountValue = tableCard.amount?.toString() || '0';
         setCurrentAmount(currentAmountValue);
         
-        // Calculer le nouveau montant
+        // Calculer le nouveau montant en additionnant l'ancien montant et le montant de recharge
         const newAmount = (parseFloat(currentAmountValue) + parseFloat(amount)).toString();
         
         // Mettre à jour le montant

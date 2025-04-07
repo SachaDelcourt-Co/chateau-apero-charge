@@ -62,7 +62,12 @@ const Payment: React.FC = () => {
     setProcessing(true);
 
     try {
-      const success = await updateTableCardAmount(id!, amount);
+      // Calculate new amount by adding the recharge amount to the existing balance
+      const currentAmount = card?.amount ? parseFloat(card.amount.toString()) : 0;
+      const rechargeAmount = parseFloat(amount);
+      const newAmount = (currentAmount + rechargeAmount).toString();
+      
+      const success = await updateTableCardAmount(id!, newAmount);
       
       if (success) {
         // Redirection vers la page de succès
