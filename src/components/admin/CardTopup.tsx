@@ -33,11 +33,11 @@ const CardTopup: React.FC = () => {
     
     try {
       // Vérifier d'abord dans table_cards
-      let card = await getTableCardById(cardId);
+      let tableCard = await getTableCardById(cardId);
       
-      if (card) {
+      if (tableCard) {
         // Carte trouvée dans table_cards
-        const currentAmountValue = card.amount?.toString() || '0';
+        const currentAmountValue = tableCard.amount?.toString() || '0';
         setCurrentAmount(currentAmountValue);
         
         // Calculer le nouveau montant
@@ -61,7 +61,7 @@ const CardTopup: React.FC = () => {
         }
       } else {
         // Vérifier dans la table cards
-        card = await getCardById(cardId);
+        const card = await getCardById(cardId);
         
         if (card) {
           // Carte trouvée dans cards

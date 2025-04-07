@@ -5,7 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
 
 export interface Card {
   card_number: string;
@@ -17,6 +23,7 @@ export interface Card {
 export interface TableCard {
   id: string;
   amount: string;
+  description?: string | null;
 }
 
 export async function getCardById(cardNumber: string): Promise<Card | null> {
@@ -56,7 +63,7 @@ export async function updateCardAmount(cardNumber: string, amount: string): Prom
   return true;
 }
 
-// Nouvelles fonctions pour table_cards
+// Fonctions pour table_cards
 
 export async function getTableCardById(id: string): Promise<TableCard | null> {
   console.log(`Recherche de la carte avec ID: ${id}`);
