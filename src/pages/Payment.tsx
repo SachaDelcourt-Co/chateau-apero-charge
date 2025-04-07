@@ -7,7 +7,8 @@ import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
+import { getTableCardById, TableCard } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { Loader2 } from "lucide-react";
 
 const Payment: React.FC = () => {
@@ -62,24 +63,26 @@ const Payment: React.FC = () => {
     setProcessing(true);
 
     try {
-      const success = await updateTableCardAmount(id!, amount);
-      
-      if (success) {
-        // Redirection vers la page de succès
-        navigate("/payment-success");
+      // Appeler la fonction Edge Stripe pour créer une session de paiement
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: { cardId: id, amount },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // Rediriger l'utilisateur vers la page de paiement Stripe
+      if (data?.url) {
+        window.location.href = data.url;
       } else {
-        toast({
-          title: "Erreur",
-          description: "Impossible de mettre à jour le montant de la carte",
-          variant: "destructive"
-        });
-        setProcessing(false);
+        throw new Error("Impossible d'obtenir l'URL de paiement");
       }
     } catch (error) {
-      console.error("Error updating card amount:", error);
+      console.error("Error creating payment session:", error);
       toast({
         title: "Erreur",
-        description: "Une erreur s'est produite lors de la mise à jour du montant",
+        description: "Une erreur s'est produite lors de la création de la session de paiement",
         variant: "destructive"
       });
       setProcessing(false);
@@ -154,7 +157,7 @@ const Payment: React.FC = () => {
                 disabled={processing}
               >
                 {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {processing ? "Traitement en cours..." : "Recharger la carte"}
+                {processing ? "Traitement en cours..." : "Payer avec Stripe"}
               </Button>
               
               <Button
