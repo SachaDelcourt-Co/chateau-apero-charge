@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -52,6 +53,11 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				chateau: {
+					light: '#FEC87F',
+					DEFAULT: '#FEB455',
+					dark: '#E89530',
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
@@ -89,6 +95,12 @@ export default {
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out'
+			},
+			fontFamily: {
+				'dancing': ['Dancing Script', 'cursive'],
+			},
+			backgroundImage: {
+				'chateau-gradient': 'linear-gradient(135deg, #FEC87F 0%, #E89530 100%)',
 			}
 		}
 	},
