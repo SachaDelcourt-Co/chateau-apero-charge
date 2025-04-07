@@ -1,10 +1,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-// Nous prenons les valeurs depuis l'environnement ou initialisons avec des valeurs vides
-// Ces valeurs doivent être fournies par l'intégration Supabase de Lovable
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// We use the values from the Supabase integration
+const supabaseUrl = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
