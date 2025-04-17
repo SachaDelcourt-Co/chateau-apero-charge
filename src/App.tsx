@@ -14,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import ScanRedirect from "./pages/ScanRedirect";
 import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
+import BarPage from "./pages/BarPage";
 
 // Sauvegardons l'image du logo
 import "./assets/logo.png";
@@ -68,6 +69,7 @@ const App = () => {
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/s/:id" element={<ScanRedirect />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/bar" element={<BarPage />} />
             <Route 
               path="/admin" 
               element={

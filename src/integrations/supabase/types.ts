@@ -9,6 +9,103 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      bar_order_items: {
+        Row: {
+          id: string
+          is_deposit: boolean | null
+          is_return: boolean | null
+          order_id: string | null
+          price: number
+          product_name: string
+          quantity: number
+        }
+        Insert: {
+          id?: string
+          is_deposit?: boolean | null
+          is_return?: boolean | null
+          order_id?: string | null
+          price: number
+          product_name: string
+          quantity?: number
+        }
+        Update: {
+          id?: string
+          is_deposit?: boolean | null
+          is_return?: boolean | null
+          order_id?: string | null
+          price?: number
+          product_name?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bar_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "bar_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bar_orders: {
+        Row: {
+          card_id: string | null
+          created_at: string | null
+          id: string
+          status: string | null
+          total_amount: number
+        }
+        Insert: {
+          card_id?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          total_amount: number
+        }
+        Update: {
+          card_id?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bar_orders_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
+            referencedRelation: "table_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bar_products: {
+        Row: {
+          category: string | null
+          id: number
+          is_deposit: boolean | null
+          is_return: boolean | null
+          name: string
+          price: number
+        }
+        Insert: {
+          category?: string | null
+          id?: number
+          is_deposit?: boolean | null
+          is_return?: boolean | null
+          name: string
+          price: number
+        }
+        Update: {
+          category?: string | null
+          id?: number
+          is_deposit?: boolean | null
+          is_return?: boolean | null
+          name?: string
+          price?: number
+        }
+        Relationships: []
+      }
       table_cards: {
         Row: {
           amount: number | null
