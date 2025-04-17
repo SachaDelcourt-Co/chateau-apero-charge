@@ -65,7 +65,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
         setPaymentSuccess(true);
         toast({
           title: "Paiement réussi",
-          description: `La commande a été traitée avec succès.`
+          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - order.total_amount).toFixed(2)}€`
         });
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");

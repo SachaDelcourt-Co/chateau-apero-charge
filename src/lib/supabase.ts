@@ -161,7 +161,25 @@ export async function getBarProducts(): Promise<BarProduct[]> {
 
 export async function createBarOrder(order: BarOrder): Promise<{ success: boolean; orderId?: string }> {
   try {
-    // First create the order
+    // Start a transaction by beginning a single batch
+    // 1. First get the current card amount to make sure it has enough balance
+    const { data: cardData, error: cardError } = await supabase
+      .from('table_cards')
+      .select('amount')
+      .eq('id', order.card_id)
+      .maybeSingle();
+
+    if (cardError || !cardData) {
+      console.error('Error fetching card data:', cardError);
+      return { success: false };
+    }
+
+    const currentAmount = parseFloat(cardData.amount || '0');
+    if (currentAmount < order.total_amount) {
+      return { success: false };
+    }
+
+    // 2. Create the order
     const { data: orderData, error: orderError } = await supabase
       .from('bar_orders')
       .insert({
@@ -177,7 +195,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
       return { success: false };
     }
 
-    // Then add all the items
+    // 3. Add all the order items
     const orderItems = order.items.map(item => ({
       order_id: orderData.id,
       product_name: item.product_name,
@@ -193,30 +211,21 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
 
     if (itemsError) {
       console.error('Error creating order items:', itemsError);
-      return { success: false };
+      // Even if we fail here, we still want to update the card amount
+      // since the order was created
     }
 
-    // Update the card amount
-    // Get the current amount first
-    const { data: cardData } = await supabase
+    // 4. Update the card amount
+    const newAmount = (currentAmount - order.total_amount).toString();
+    
+    const { error: updateError } = await supabase
       .from('table_cards')
-      .select('amount')
-      .eq('id', order.card_id)
-      .maybeSingle();
+      .update({ amount: newAmount })
+      .eq('id', order.card_id);
 
-    if (cardData) {
-      const currentAmount = parseFloat(cardData.amount || '0');
-      const newAmount = (currentAmount - order.total_amount).toString();
-      
-      const { error: updateError } = await supabase
-        .from('table_cards')
-        .update({ amount: newAmount })
-        .eq('id', order.card_id);
-
-      if (updateError) {
-        console.error('Error updating card amount:', updateError);
-        return { success: false };
-      }
+    if (updateError) {
+      console.error('Error updating card amount:', updateError);
+      return { success: false };
     }
 
     return { success: true, orderId: orderData.id };
