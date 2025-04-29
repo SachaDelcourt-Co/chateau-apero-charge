@@ -7,15 +7,20 @@ import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { CheckCircle, CreditCard, Loader2, Euro } from "lucide-react";
 import { getTableCardById, TableCard } from '@/lib/supabase';
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from '@/hooks/use-toast';
 
 const PaymentSuccess: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [amount, setAmount] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const [card, setCard] = useState<TableCard | null>(null);
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [showRetryDialog, setShowRetryDialog] = useState(false);
 
   useEffect(() => {
     // Get parameters from URL if present
@@ -42,28 +47,57 @@ const PaymentSuccess: React.FC = () => {
   const fetchCardData = async (id: string) => {
     setLoading(true);
     try {
-      // Add a small delay to ensure the webhook has time to process the update
-      // Increase delay to 3 seconds to ensure webhook has completed processing
+      // Add a significant delay to ensure the webhook has time to process the update
+      // Especially since the webhook can take time to be triggered by Stripe
       if (sessionId) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
       }
       
       const cardData = await getTableCardById(id);
+      
+      if (!cardData) {
+        throw new Error("Card data not found");
+      }
+      
+      console.log('Fetched card data:', cardData);
       setCard(cardData);
+      
+      // Check if we have the amount parameter and the current card amount
+      if (amount && cardData.amount) {
+        const expectedAmount = (parseFloat(amount) + parseFloat(cardData.amount)).toFixed(2);
+        console.log(`Expected amount: ${expectedAmount}, Current amount: ${cardData.amount}`);
+        
+        // If the expected amount is different from the card amount after delay, 
+        // and we haven't retried too many times, retry fetching
+        if (parseFloat(expectedAmount) !== parseFloat(cardData.amount) && retryCount < 3) {
+          setRetryCount(prev => prev + 1);
+          setTimeout(() => fetchCardData(id), 2000);
+        }
+      }
     } catch (error) {
       console.error('Error fetching card details:', error);
+      // If we have retried a few times and still can't get the updated data, show retry dialog
+      if (retryCount >= 2) {
+        setShowRetryDialog(true);
+      } else {
+        setRetryCount(prev => prev + 1);
+        setTimeout(() => fetchCardData(id), 2000);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate the expected new balance for display before the webhook completes
-  const calculateExpectedBalance = (): string => {
-    if (!card || !amount) return "Chargement...";
-    
-    const currentAmount = parseFloat(card.amount || '0');
-    const rechargeAmount = parseFloat(amount);
-    return (currentAmount + rechargeAmount).toFixed(2);  // Add recharge amount to show expected balance
+  // Manual refresh button handler
+  const handleManualRefresh = () => {
+    if (cardId) {
+      toast({
+        title: "Rafraîchissement en cours",
+        description: "Récupération des données de la carte...",
+      });
+      setShowRetryDialog(false);
+      fetchCardData(cardId);
+    }
   };
 
   return (
@@ -113,8 +147,31 @@ const PaymentSuccess: React.FC = () => {
           >
             Retour à l'accueil
           </Button>
+          <Button
+            variant="outline"
+            className="bg-transparent text-white border-white hover:bg-white/10 w-full"
+            onClick={handleManualRefresh}
+          >
+            Rafraîchir le solde
+          </Button>
         </div>
       </ChateauCard>
+      
+      {/* Retry Dialog */}
+      <Dialog open={showRetryDialog} onOpenChange={setShowRetryDialog}>
+        <DialogContent className="bg-amber-800 text-white border-0">
+          <DialogTitle>Mise à jour du solde</DialogTitle>
+          <p>Le solde de votre carte est en cours de mise à jour. Cela peut prendre quelques instants.</p>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button 
+              className="bg-white text-amber-800 hover:bg-amber-50"
+              onClick={handleManualRefresh}
+            >
+              Rafraîchir maintenant
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </ChateauBackground>
   );
 };
