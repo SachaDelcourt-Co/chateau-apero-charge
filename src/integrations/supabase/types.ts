@@ -153,7 +153,7 @@ export type Database = {
       }
       refunds: {
         Row: {
-          account: number | null
+          account: string | null
           created_at: string
           email: string | null
           "first name": string | null
@@ -162,7 +162,7 @@ export type Database = {
           "last name": string | null
         }
         Insert: {
-          account?: number | null
+          account?: string | null
           created_at?: string
           email?: string | null
           "first name"?: string | null
@@ -171,7 +171,7 @@ export type Database = {
           "last name"?: string | null
         }
         Update: {
-          account?: number | null
+          account?: string | null
           created_at?: string
           email?: string | null
           "first name"?: string | null

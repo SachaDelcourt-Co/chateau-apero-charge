@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -41,11 +42,11 @@ const RefundPage: React.FC = () => {
       const { error } = await supabase
         .from('refunds')
         .insert({
-          'id_card': cardId,
+          id_card: cardId,
           'first name': firstName,
           'last name': lastName,
-          'email': email,
-          'account': account  // Store as string in the database
+          email: email,
+          account: account  // Store as string in the database
         });
       
       if (error) throw error;
