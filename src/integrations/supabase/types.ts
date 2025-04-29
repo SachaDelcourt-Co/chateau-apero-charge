@@ -106,30 +106,6 @@ export type Database = {
         }
         Relationships: []
       }
-      paiements: {
-        Row: {
-          amount: number | null
-          created_at: string
-          id: number
-          id_card: string | null
-          paid_by_card: boolean | null
-        }
-        Insert: {
-          amount?: number | null
-          created_at?: string
-          id?: number
-          id_card?: string | null
-          paid_by_card?: boolean | null
-        }
-        Update: {
-          amount?: number | null
-          created_at?: string
-          id?: number
-          id_card?: string | null
-          paid_by_card?: boolean | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           created_at: string | null
