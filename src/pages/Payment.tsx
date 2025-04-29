@@ -7,14 +7,13 @@ import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
+import { getTableCardById, TableCard } from '@/lib/supabase';
 import { Loader2, CreditCard, AlertCircle } from "lucide-react";
 import { redirectToCheckout } from '@/api/stripe';
 
 const Payment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
@@ -79,48 +78,6 @@ const Payment: React.FC = () => {
         variant: "destructive"
       });
       setStripeProcessing(false);
-    }
-  };
-
-  const handleRecharge = async () => {
-    if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
-      toast({
-        title: "Montant invalide",
-        description: "Veuillez entrer un montant valide",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setProcessing(true);
-
-    try {
-      // Calculate new amount by adding the recharge amount to the existing balance
-      const currentAmount = card?.amount ? parseFloat(card.amount.toString()) : 0;
-      const rechargeAmount = parseFloat(amount);
-      const newAmount = (currentAmount + rechargeAmount).toString();
-      
-      const success = await updateTableCardAmount(id!, newAmount);
-      
-      if (success) {
-        // Redirection vers la page de succès avec le montant rechargé
-        navigate(`/payment-success?amount=${rechargeAmount}&cardId=${id}`);
-      } else {
-        toast({
-          title: "Erreur",
-          description: "Impossible de mettre à jour le montant de la carte",
-          variant: "destructive"
-        });
-        setProcessing(false);
-      }
-    } catch (error) {
-      console.error("Error updating card amount:", error);
-      toast({
-        title: "Erreur",
-        description: "Une erreur s'est produite lors de la mise à jour du montant",
-        variant: "destructive"
-      });
-      setProcessing(false);
     }
   };
 
@@ -203,19 +160,10 @@ const Payment: React.FC = () => {
               </Button>
               
               <Button
-                className="w-full bg-white text-amber-800 hover:bg-amber-50"
-                onClick={handleRecharge}
-                disabled={processing || stripeProcessing}
-              >
-                {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {processing ? "Traitement en cours..." : "Recharger avec espèces"}
-              </Button>
-              
-              <Button
                 variant="outline"
                 className="w-full bg-transparent text-white border-white hover:bg-white/10"
                 onClick={() => navigate("/")}
-                disabled={processing || stripeProcessing}
+                disabled={stripeProcessing}
               >
                 Annuler
               </Button>
