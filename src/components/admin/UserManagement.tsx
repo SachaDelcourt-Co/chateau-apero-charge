@@ -57,17 +57,37 @@ const UserManagement: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // D'abord récupérer tous les utilisateurs de la table auth
+      const { data: authUsers, error: authError } = await supabase
         .from('profiles')
-        .select('id, email, role, created_at')
-        .order('role', { ascending: true })
-        .order('email', { ascending: true });
+        .select('id, role, created_at');
       
-      if (error) {
-        throw error;
+      if (authError) {
+        throw authError;
       }
       
-      setUsers(data || []);
+      // Ensuite récupérer les emails des utilisateurs via l'API auth
+      const usersWithEmails = await Promise.all(authUsers.map(async (user) => {
+        // Utiliser le client supabase pour récupérer les emails
+        const { data, error } = await supabase
+          .auth
+          .admin
+          .getUserById(user.id);
+          
+        let email = '';
+        if (!error && data) {
+          email = data.user.email || '';
+        } else {
+          console.error('Erreur lors de la récupération de l\'email:', error);
+        }
+        
+        return {
+          ...user,
+          email
+        };
+      }));
+      
+      setUsers(usersWithEmails as UserProfile[]);
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({

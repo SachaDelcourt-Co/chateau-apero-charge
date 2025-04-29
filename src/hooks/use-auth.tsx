@@ -40,20 +40,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setAuthState(prev => ({ ...prev, session, user: session?.user || null }));
         
         if (session?.user) {
-          // Get the user's role and email from profiles
+          // Get the user's role from profiles
           setTimeout(async () => {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('role, email')
-              .eq('id', session.user.id)
-              .single();
+            try {
+              const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', session.user.id)
+                .single();
+                
+              if (profileError) {
+                console.error('Erreur lors de la récupération du profil:', profileError);
+                setAuthState(prev => ({ ...prev, isLoading: false }));
+                return;
+              }
               
-            setAuthState(prev => ({ 
-              ...prev, 
-              role: profile?.role as Role || null,
-              email: profile?.email || session.user.email || null,
-              isLoading: false
-            }));
+              setAuthState(prev => ({ 
+                ...prev, 
+                role: profile?.role as Role || null,
+                email: session.user.email || null,
+                isLoading: false
+              }));
+            } catch (err) {
+              console.error('Exception lors de la récupération du profil:', err);
+              setAuthState(prev => ({ ...prev, isLoading: false }));
+            }
           }, 0);
         } else {
           setAuthState(prev => ({ ...prev, role: null, email: null, isLoading: false }));
@@ -66,19 +77,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setAuthState(prev => ({ ...prev, session, user: session?.user || null }));
       
       if (session?.user) {
-        // Get the user's role and email from profiles
+        // Get the user's role from profiles
         supabase
           .from('profiles')
-          .select('role, email')
+          .select('role')
           .eq('id', session.user.id)
           .single()
-          .then(({ data: profile }) => {
+          .then(({ data: profile, error }) => {
+            if (error) {
+              console.error('Erreur lors de la récupération du profil:', error);
+              setAuthState(prev => ({ ...prev, isLoading: false }));
+              return;
+            }
+
             setAuthState(prev => ({ 
               ...prev, 
               role: profile?.role as Role || null,
-              email: profile?.email || session.user.email || null,
+              email: session.user.email || null,
               isLoading: false
             }));
+          })
+          .catch(err => {
+            console.error('Exception lors de la récupération du profil:', err);
+            setAuthState(prev => ({ ...prev, isLoading: false }));
           });
       } else {
         setAuthState(prev => ({ ...prev, isLoading: false }));
@@ -102,7 +123,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Get the user's role
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('role, email')
+          .select('role')
           .eq('id', data.user.id)
           .single();
           
@@ -142,7 +163,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Update the user's role in the profiles table
         const { error: updateError } = await supabase
           .from('profiles')
-          .update({ role, email })
+          .update({ role })
           .eq('id', data.user.id);
 
         if (updateError) {
