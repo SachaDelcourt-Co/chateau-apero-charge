@@ -18,7 +18,6 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<Role>('bar');
-  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { signIn, user, role } = useAuth();
@@ -44,7 +43,6 @@ const LoginPage: React.FC = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorDetails(null);
     
     if (!email || !password) {
       toast({
@@ -71,7 +69,6 @@ const LoginPage: React.FC = () => {
 
       // La redirection se fera automatiquement grâce au useEffect
     } catch (error: any) {
-      setErrorDetails(error.message || "Une erreur inconnue s'est produite");
       toast({
         title: "Erreur de connexion",
         description: error.message || "Impossible de se connecter. Vérifiez vos identifiants.",
@@ -133,7 +130,7 @@ const LoginPage: React.FC = () => {
                 </div>
               </CardContent>
               
-              <CardFooter className="flex flex-col space-y-4">
+              <CardFooter>
                 <Button 
                   type="submit" 
                   className="w-full" 
@@ -151,13 +148,6 @@ const LoginPage: React.FC = () => {
                     </>
                   )}
                 </Button>
-                
-                {errorDetails && (
-                  <div className="p-3 bg-red-100 border border-red-200 text-red-700 rounded text-sm">
-                    <p className="font-semibold">Détails de l'erreur:</p>
-                    <p className="whitespace-pre-wrap">{errorDetails}</p>
-                  </div>
-                )}
               </CardFooter>
             </form>
           </Tabs>
