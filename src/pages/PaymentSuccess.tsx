@@ -43,8 +43,9 @@ const PaymentSuccess: React.FC = () => {
     setLoading(true);
     try {
       // Add a small delay to ensure the webhook has time to process the update
+      // Increase delay to 3 seconds to ensure webhook has completed processing
       if (sessionId) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
       
       const cardData = await getTableCardById(id);
@@ -91,7 +92,7 @@ const PaymentSuccess: React.FC = () => {
             ) : (
               card && (
                 <div className="bg-green-600/20 p-3 rounded-lg">
-                  <p className="text-lg">Solde actuel: <span className="font-bold">{calculateExpectedBalance()}€</span></p>
+                  <p className="text-lg">Solde actuel: <span className="font-bold">{card.amount}€</span></p>
                 </div>
               )
             )}

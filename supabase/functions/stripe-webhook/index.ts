@@ -60,10 +60,11 @@ serve(async (req) => {
         return new Response(`Error fetching card data: ${cardError?.message || 'Card not found'}`, { status: 400 });
       }
 
-      // Calculate new amount - FIXED to ensure proper addition
+      // Calculate new amount - ensure proper addition with toFixed(2)
       const currentAmount = parseFloat(cardData.amount || '0');
       const rechargeAmount = parseFloat(amount);
-      const newAmount = (currentAmount + rechargeAmount).toFixed(2); // Using toFixed for consistent decimal handling
+      // Addition and then format to 2 decimal places
+      const newAmount = (currentAmount + rechargeAmount).toFixed(2);
 
       console.log(`Card ${cardId} current balance: ${currentAmount}, recharge: ${rechargeAmount}, new balance: ${newAmount}`);
 
