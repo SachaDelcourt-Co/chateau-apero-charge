@@ -149,7 +149,7 @@ const Payment: React.FC = () => {
                   placeholder="0.00"
                   min="0"
                   step="0.01"
-                  className="bg-white/80 border-amber-200 placeholder:text-amber-800/50 w-full"
+                  className="bg-white/80 border-amber-200 placeholder:text-amber-800/50 w-full text-black"
                 />
               </div>
               
