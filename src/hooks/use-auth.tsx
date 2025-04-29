@@ -40,7 +40,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setAuthState(prev => ({ ...prev, session, user: session?.user || null }));
         
         if (session?.user) {
-          // Get the user's role
+          // Get the user's role and email from profiles
           setTimeout(async () => {
             const { data: profile } = await supabase
               .from('profiles')
@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setAuthState(prev => ({ 
               ...prev, 
               role: profile?.role as Role || null,
-              email: profile?.email || null,
+              email: profile?.email || session.user.email || null,
               isLoading: false
             }));
           }, 0);
@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setAuthState(prev => ({ ...prev, session, user: session?.user || null }));
       
       if (session?.user) {
-        // Get the user's role
+        // Get the user's role and email from profiles
         supabase
           .from('profiles')
           .select('role, email')
@@ -76,7 +76,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setAuthState(prev => ({ 
               ...prev, 
               role: profile?.role as Role || null,
-              email: profile?.email || null,
+              email: profile?.email || session.user.email || null,
               isLoading: false
             }));
           });
@@ -111,7 +111,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           return { success: false, message: 'Erreur lors de la récupération du profil utilisateur' };
         }
         
-        const userRole = profile?.role as Role;
         return { success: true };
       }
       

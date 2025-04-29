@@ -27,11 +27,13 @@ const ProtectedRoute = ({ children, requiredRoles }: ProtectedRouteProps) => {
   }
 
   if (!hasAccess(requiredRoles)) {
-    // Rediriger vers une page d'erreur ou la page d'accueil si l'utilisateur n'a pas le rôle requis
+    console.log(`Accès refusé: utilisateur avec rôle ${role} essaie d'accéder à une page nécessitant les rôles:`, requiredRoles);
+    // Rediriger vers une page d'erreur si l'utilisateur n'a pas le rôle requis
     return <Navigate to="/unauthorized" replace />;
   }
 
   // Si l'utilisateur est authentifié et a le rôle requis, afficher le contenu
+  console.log(`Accès autorisé: utilisateur avec rôle ${role} accède à la page`);
   return <>{children}</>;
 };
 

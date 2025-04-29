@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,31 +17,27 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<Role>('admin');
+  const [activeTab, setActiveTab] = useState<Role>('bar');
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { signIn, user } = useAuth();
+  const { signIn, user, role } = useAuth();
 
-  // Si l'utilisateur est déjà connecté, redirigez-le
-  React.useEffect(() => {
+  // Si l'utilisateur est déjà connecté, redirigez-le en fonction de son rôle
+  useEffect(() => {
     if (user) {
-      redirectBasedOnRole(activeTab);
+      redirectBasedOnUserRole();
     }
-  }, [user, activeTab]);
+  }, [user, role]);
 
-  const redirectBasedOnRole = (role: string) => {
-    switch(role) {
-      case 'admin':
-        navigate('/admin');
-        break;
-      case 'bar':
-        navigate('/bar');
-        break;
-      case 'recharge':
-        navigate('/recharge');
-        break;
-      default:
-        navigate('/admin');
+  const redirectBasedOnUserRole = () => {
+    if (!role) return;
+    
+    if (role === 'admin') {
+      navigate('/admin');
+    } else if (role === 'bar') {
+      navigate('/bar');
+    } else if (role === 'recharge') {
+      navigate('/recharge');
     }
   };
 
@@ -71,7 +67,7 @@ const LoginPage: React.FC = () => {
         description: "Vous êtes maintenant connecté"
       });
 
-      redirectBasedOnRole(activeTab);
+      // La redirection se fera automatiquement grâce au useEffect
     } catch (error: any) {
       toast({
         title: "Erreur de connexion",
@@ -116,6 +112,7 @@ const LoginPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isLoading}
+                    autoComplete="username"
                   />
                 </div>
                 
@@ -128,6 +125,7 @@ const LoginPage: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
+                    autoComplete="current-password"
                   />
                 </div>
               </CardContent>
