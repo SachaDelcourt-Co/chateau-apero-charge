@@ -16,19 +16,65 @@ export const BarProductList: React.FC<BarProductListProps> = ({
 }) => {
   const isMobile = useIsMobile();
 
-  // Function to determine button color based on product category
+  // Function to determine button color based on product category and name
   const getButtonColor = (product: BarProduct): string => {
+    // Special cases first
     if (product.is_return) return "bg-green-600 hover:bg-green-700";
     if (product.is_deposit) return "bg-yellow-600 hover:bg-yellow-700";
     
-    switch (product.category?.toLowerCase()) {
-      case 'soft': return "bg-blue-600 hover:bg-blue-700";
-      case 'bière': return "bg-amber-600 hover:bg-amber-700";
-      case 'cocktail': return "bg-purple-600 hover:bg-purple-700";
-      case 'vin': return "bg-red-600 hover:bg-red-700";
-      case 'caution': return "bg-gray-600 hover:bg-gray-700";
-      default: return "bg-primary hover:bg-primary/90";
+    // Base colors for categories
+    const categoryColors: Record<string, string[]> = {
+      'soft': [
+        "bg-blue-500 hover:bg-blue-600",
+        "bg-blue-600 hover:bg-blue-700",
+        "bg-blue-700 hover:bg-blue-800",
+        "bg-cyan-500 hover:bg-cyan-600",
+        "bg-cyan-600 hover:bg-cyan-700",
+        "bg-sky-500 hover:bg-sky-600"
+      ],
+      'bière': [
+        "bg-amber-400 hover:bg-amber-500",
+        "bg-amber-500 hover:bg-amber-600",
+        "bg-amber-600 hover:bg-amber-700",
+        "bg-amber-700 hover:bg-amber-800",
+        "bg-yellow-500 hover:bg-yellow-600",
+        "bg-orange-500 hover:bg-orange-600"
+      ],
+      'cocktail': [
+        "bg-purple-400 hover:bg-purple-500",
+        "bg-purple-500 hover:bg-purple-600",
+        "bg-purple-600 hover:bg-purple-700",
+        "bg-fuchsia-500 hover:bg-fuchsia-600",
+        "bg-pink-500 hover:bg-pink-600",
+        "bg-violet-500 hover:bg-violet-600"
+      ],
+      'vin': [
+        "bg-red-400 hover:bg-red-500",
+        "bg-red-500 hover:bg-red-600",
+        "bg-red-600 hover:bg-red-700",
+        "bg-rose-500 hover:bg-rose-600",
+        "bg-rose-600 hover:bg-rose-700",
+        "bg-red-700 hover:bg-red-800"
+      ],
+      'caution': [
+        "bg-gray-500 hover:bg-gray-600",
+        "bg-gray-600 hover:bg-gray-700",
+        "bg-slate-500 hover:bg-slate-600"
+      ]
+    };
+
+    const category = product.category?.toLowerCase() || "default";
+    
+    // If we have colors defined for this category
+    if (categoryColors[category]) {
+      // Use product name to create a consistent index for color selection
+      const nameHash = product.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const colorIndex = nameHash % categoryColors[category].length;
+      return categoryColors[category][colorIndex];
     }
+    
+    // Default fallback
+    return "bg-primary hover:bg-primary/90";
   };
 
   // Get button text color - ensure high contrast
