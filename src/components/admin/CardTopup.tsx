@@ -55,6 +55,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         
         if (success) {
           // Enregistrer la recharge dans la nouvelle table recharge
+          // Utilisation directe du client Supabase avec la syntaxe correcte pour la table recharge
           const { error } = await supabase
             .from('recharge')
             .insert({

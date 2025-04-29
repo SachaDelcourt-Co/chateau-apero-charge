@@ -43,23 +43,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (session?.user) {
         // Get the user's role from profiles
-        supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single()
-          .then(({ data, error }) => {
-            if (error) {
-              console.error('Error fetching user role:', error);
-              setRole(null);
-            } else {
-              setRole(data?.role || null);
-            }
-          })
-          .catch(error => {
-            console.error('Exception when fetching user role:', error);
+        try {
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+            
+          if (error) {
+            console.error('Error fetching user role:', error);
             setRole(null);
-          });
+          } else {
+            setRole(data?.role || null);
+          }
+        } catch (error) {
+          console.error('Exception when fetching user role:', error);
+          setRole(null);
+        }
       } else {
         setRole(null);
       }
