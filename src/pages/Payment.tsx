@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
@@ -7,7 +8,7 @@ import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
-import { Loader2, CreditCard } from "lucide-react";
+import { Loader2, CreditCard, AlertCircle } from "lucide-react";
 import { redirectToCheckout } from '@/api/stripe';
 
 const Payment: React.FC = () => {
@@ -16,6 +17,7 @@ const Payment: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stripeError, setStripeError] = useState<string | null>(null);
   const [card, setCard] = useState<TableCard | null>(null);
   const [amount, setAmount] = useState("");
   const { toast } = useToast();
@@ -30,7 +32,10 @@ const Payment: React.FC = () => {
 
     const fetchCardDetails = async () => {
       try {
+        console.log('Vérification de la carte:', id);
         const cardData = await getTableCardById(id);
+        
+        console.log('Résultat de la recherche:', cardData);
 
         if (!cardData) {
           setError("Carte non trouvée");
@@ -61,11 +66,13 @@ const Payment: React.FC = () => {
     }
 
     setStripeProcessing(true);
+    setStripeError(null);
 
     try {
       await redirectToCheckout(parseFloat(amount), id!);
     } catch (error) {
       console.error("Error creating checkout session:", error);
+      setStripeError("Une erreur s'est produite lors de la création de la session de paiement");
       toast({
         title: "Erreur",
         description: "Une erreur s'est produite lors de la création de la session de paiement",
@@ -97,7 +104,7 @@ const Payment: React.FC = () => {
       
       if (success) {
         // Redirection vers la page de succès avec le montant rechargé
-        navigate(`/payment-success?amount=${rechargeAmount}`);
+        navigate(`/payment-success?amount=${rechargeAmount}&cardId=${id}`);
       } else {
         toast({
           title: "Erreur",
@@ -178,6 +185,13 @@ const Payment: React.FC = () => {
                   className="bg-white/80 border-amber-200 placeholder:text-amber-800/50 w-full text-black"
                 />
               </div>
+              
+              {stripeError && (
+                <div className="bg-red-500/20 text-white p-3 rounded-md flex items-center">
+                  <AlertCircle className="h-5 w-5 mr-2" />
+                  {stripeError}
+                </div>
+              )}
               
               <Button
                 className="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white"

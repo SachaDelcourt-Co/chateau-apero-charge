@@ -4,6 +4,7 @@
  */
 
 import { loadStripe } from '@stripe/stripe-js';
+import { supabase } from '@/lib/supabase';
 
 // Initialize Stripe with the public key
 const stripePromise = loadStripe('pk_test_51RBXwoPK5Kb6COYPP4YQqSTKUrScqdkZD0KYx8amXdFISxpulmfyPpHWFx8EzK72Ulo6t94D3s9TeZgc7sDsuuLq00zvPP4z4k');
@@ -16,21 +17,16 @@ const stripePromise = loadStripe('pk_test_51RBXwoPK5Kb6COYPP4YQqSTKUrScqdkZD0KYx
  */
 export const createCheckoutSession = async (amount: number, cardId: string) => {
   try {
-    // Build the URL for the Supabase Edge Function
-    const response = await fetch('/api/create-checkout-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ amount, cardId }),
+    // Call the Supabase Edge Function
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { amount, cardId }
     });
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Failed to create checkout session');
+    if (error) {
+      throw new Error(error.message || 'Failed to create checkout session');
     }
     
-    return await response.json();
+    return data;
   } catch (error) {
     console.error('Error creating checkout session:', error);
     throw error;
