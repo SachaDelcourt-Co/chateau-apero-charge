@@ -15,13 +15,14 @@ const PaymentSuccess: React.FC = () => {
   const [cardId, setCardId] = useState<string | null>(null);
   const [card, setCard] = useState<TableCard | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     // Get parameters from URL if present
     const params = new URLSearchParams(location.search);
     const amountParam = params.get('amount');
     const cardIdParam = params.get('cardId');
-    const sessionId = params.get('session_id');
+    const sessionIdParam = params.get('session_id');
     
     if (amountParam) {
       setAmount(amountParam);
@@ -32,11 +33,20 @@ const PaymentSuccess: React.FC = () => {
       // Fetch the current card data to show the updated balance
       fetchCardData(cardIdParam);
     }
+
+    if (sessionIdParam) {
+      setSessionId(sessionIdParam);
+    }
   }, [location]);
 
   const fetchCardData = async (id: string) => {
     setLoading(true);
     try {
+      // Add a small delay to ensure the webhook has time to process the update
+      if (sessionId) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+      
       const cardData = await getTableCardById(id);
       setCard(cardData);
     } catch (error) {
@@ -44,6 +54,15 @@ const PaymentSuccess: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate the expected new balance for display before the webhook completes
+  const calculateExpectedBalance = (): string => {
+    if (!card || !amount) return "Chargement...";
+    
+    const currentAmount = parseFloat(card.amount || '0');
+    const rechargeAmount = parseFloat(amount);
+    return (currentAmount).toFixed(2);
   };
 
   return (
@@ -72,7 +91,7 @@ const PaymentSuccess: React.FC = () => {
             ) : (
               card && (
                 <div className="bg-green-600/20 p-3 rounded-lg">
-                  <p className="text-lg">Solde actuel: <span className="font-bold">{card.amount}€</span></p>
+                  <p className="text-lg">Solde actuel: <span className="font-bold">{calculateExpectedBalance()}€</span></p>
                 </div>
               )
             )}
