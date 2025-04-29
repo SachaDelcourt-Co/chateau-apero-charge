@@ -1,7 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
@@ -9,10 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
 import { Loader2, CreditCard } from "lucide-react";
-import { loadStripe } from '@stripe/stripe-js';
-
-// Initialize Stripe with the public key
-const stripePromise = loadStripe('pk_test_51RBXwoPK5Kb6COYPP4YQqSTKUrScqdkZD0KYx8amXdFISxpulmfyPpHWFx8EzK72Ulo6t94D3s9TeZgc7sDsuuLq00zvPP4z4k');
+import { redirectToCheckout } from '@/api/stripe';
 
 const Payment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -67,47 +63,7 @@ const Payment: React.FC = () => {
     setStripeProcessing(true);
 
     try {
-      // Create a Stripe checkout session
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          amount: parseFloat(amount),
-          cardId: id
-        }),
-      });
-
-      const session = await response.json();
-      
-      if (session.error) {
-        toast({
-          title: "Erreur",
-          description: session.error,
-          variant: "destructive"
-        });
-        setStripeProcessing(false);
-        return;
-      }
-      
-      // Redirect to Stripe Checkout
-      const stripe = await stripePromise;
-      if (!stripe) {
-        throw new Error("Stripe couldn't be loaded");
-      }
-      
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: session.id,
-      });
-
-      if (error) {
-        toast({
-          title: "Erreur Stripe",
-          description: error.message,
-          variant: "destructive"
-        });
-      }
+      await redirectToCheckout(parseFloat(amount), id!);
     } catch (error) {
       console.error("Error creating checkout session:", error);
       toast({
@@ -115,7 +71,6 @@ const Payment: React.FC = () => {
         description: "Une erreur s'est produite lors de la création de la session de paiement",
         variant: "destructive"
       });
-    } finally {
       setStripeProcessing(false);
     }
   };
