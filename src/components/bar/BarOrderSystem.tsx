@@ -8,6 +8,7 @@ import { BarProduct, OrderItem, BarOrder, getBarProducts } from '@/lib/supabase'
 import { toast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export const BarOrderSystem: React.FC = () => {
   const [products, setProducts] = useState<BarProduct[]>([]);
@@ -16,6 +17,7 @@ export const BarOrderSystem: React.FC = () => {
   const [paymentStep, setPaymentStep] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [defaultCategory, setDefaultCategory] = useState<string>('');
+  const isMobile = useIsMobile();
 
   // Load products on component mount
   useEffect(() => {
@@ -154,26 +156,26 @@ export const BarOrderSystem: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
       {!paymentStep ? (
         <>
           {/* Product selection - 2/3 width on desktop */}
           <div className="md:col-span-2">
             <Card className="bg-white/90 shadow-lg h-full">
-              <CardContent className="p-6">
-                <h3 className="text-xl font-semibold mb-4">Sélection des produits</h3>
+              <CardContent className={`${isMobile ? 'p-3' : 'p-6'}`}>
+                <h3 className="text-xl font-semibold mb-3 md:mb-4">Sélection des produits</h3>
                 
                 <Tabs defaultValue={defaultCategory}>
-                  <TabsList className="mb-4 flex flex-wrap">
+                  <TabsList className="mb-3 flex flex-wrap">
                     {categories.map(category => (
-                      <TabsTrigger key={category} value={category}>
+                      <TabsTrigger key={category} value={category} className="text-xs sm:text-sm md:text-base py-1.5 px-2 sm:py-2 sm:px-3">
                         {category}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                   
                   {categories.map(category => (
-                    <TabsContent key={category} value={category}>
+                    <TabsContent key={category} value={category} className="mt-2 md:mt-3">
                       <BarProductList 
                         products={products.filter(p => p.category === category)} 
                         onAddProduct={handleAddProduct} 

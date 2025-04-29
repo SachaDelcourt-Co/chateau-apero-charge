@@ -83,21 +83,21 @@ export const BarProductList: React.FC<BarProductListProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 sm:gap-3">
+    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 sm:gap-3">
       {products.map(product => (
         <Button
           key={product.id}
-          className={`h-auto py-3 px-2 sm:p-4 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
+          className={`h-auto py-2 px-1.5 sm:py-3 sm:px-2 md:p-4 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
           onClick={() => onAddProduct(product)}
         >
-          <span className="text-base sm:text-lg font-medium text-center line-clamp-2">
+          <span className="text-sm sm:text-base md:text-lg font-medium text-center line-clamp-2 min-h-[2.5rem]">
             {product.name}
           </span>
           <div className="flex items-center mt-1">
             <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
             <span>{product.price.toFixed(2)}</span>
           </div>
-          <Plus className="mt-2 h-4 w-4 sm:h-5 sm:w-5" />
+          <Plus className="mt-1 sm:mt-2 h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
         </Button>
       ))}
     </div>
