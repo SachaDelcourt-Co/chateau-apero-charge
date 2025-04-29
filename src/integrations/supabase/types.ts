@@ -151,6 +151,36 @@ export type Database = {
         }
         Relationships: []
       }
+      refunds: {
+        Row: {
+          account: number | null
+          created_at: string
+          email: string | null
+          "first name": string | null
+          id: number
+          id_card: string | null
+          "last name": string | null
+        }
+        Insert: {
+          account?: number | null
+          created_at?: string
+          email?: string | null
+          "first name"?: string | null
+          id?: number
+          id_card?: string | null
+          "last name"?: string | null
+        }
+        Update: {
+          account?: number | null
+          created_at?: string
+          email?: string | null
+          "first name"?: string | null
+          id?: number
+          id_card?: string | null
+          "last name"?: string | null
+        }
+        Relationships: []
+      }
       table_cards: {
         Row: {
           amount: number | null

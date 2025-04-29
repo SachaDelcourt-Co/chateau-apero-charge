@@ -13,6 +13,7 @@ import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import BarPage from "./pages/BarPage";
 import RechargePage from "./pages/RechargePage";
+import RefundPage from "./pages/RefundPage";
 import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "@/hooks/use-auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -36,6 +37,7 @@ const App = () => {
               <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/s/:id" element={<ScanRedirect />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/refund" element={<RefundPage />} />
               <Route 
                 path="/bar" 
                 element={
