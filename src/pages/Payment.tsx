@@ -8,12 +8,17 @@ import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getTableCardById, updateTableCardAmount, TableCard } from '@/lib/supabase';
-import { Loader2 } from "lucide-react";
+import { Loader2, CreditCard } from "lucide-react";
+import { loadStripe } from '@stripe/stripe-js';
+
+// Initialize Stripe with the public key
+const stripePromise = loadStripe('pk_test_51RBXwoPK5Kb6COYPP4YQqSTKUrScqdkZD0KYx8amXdFISxpulmfyPpHWFx8EzK72Ulo6t94D3s9TeZgc7sDsuuLq00zvPP4z4k');
 
 const Payment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
+  const [stripeProcessing, setStripeProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [card, setCard] = useState<TableCard | null>(null);
   const [amount, setAmount] = useState("");
@@ -49,6 +54,72 @@ const Payment: React.FC = () => {
     fetchCardDetails();
   }, [id]);
 
+  const handleStripePayment = async () => {
+    if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
+      toast({
+        title: "Montant invalide",
+        description: "Veuillez entrer un montant valide",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setStripeProcessing(true);
+
+    try {
+      // Create a Stripe checkout session
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          amount: parseFloat(amount),
+          cardId: id
+        }),
+      });
+
+      const session = await response.json();
+      
+      if (session.error) {
+        toast({
+          title: "Erreur",
+          description: session.error,
+          variant: "destructive"
+        });
+        setStripeProcessing(false);
+        return;
+      }
+      
+      // Redirect to Stripe Checkout
+      const stripe = await stripePromise;
+      if (!stripe) {
+        throw new Error("Stripe couldn't be loaded");
+      }
+      
+      const { error } = await stripe.redirectToCheckout({
+        sessionId: session.id,
+      });
+
+      if (error) {
+        toast({
+          title: "Erreur Stripe",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite lors de la création de la session de paiement",
+        variant: "destructive"
+      });
+    } finally {
+      setStripeProcessing(false);
+    }
+  };
+
   const handleRecharge = async () => {
     if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
       toast({
@@ -70,8 +141,8 @@ const Payment: React.FC = () => {
       const success = await updateTableCardAmount(id!, newAmount);
       
       if (success) {
-        // Redirection vers la page de succès
-        navigate("/payment-success");
+        // Redirection vers la page de succès avec le montant rechargé
+        navigate(`/payment-success?amount=${rechargeAmount}`);
       } else {
         toast({
           title: "Erreur",
@@ -154,19 +225,28 @@ const Payment: React.FC = () => {
               </div>
               
               <Button
+                className="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleStripePayment}
+                disabled={stripeProcessing}
+              >
+                {stripeProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
+                {stripeProcessing ? "Traitement en cours..." : "Payer par carte bancaire"}
+              </Button>
+              
+              <Button
                 className="w-full bg-white text-amber-800 hover:bg-amber-50"
                 onClick={handleRecharge}
-                disabled={processing}
+                disabled={processing || stripeProcessing}
               >
                 {processing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {processing ? "Traitement en cours..." : "Recharger la carte"}
+                {processing ? "Traitement en cours..." : "Recharger avec espèces"}
               </Button>
               
               <Button
                 variant="outline"
                 className="w-full bg-transparent text-white border-white hover:bg-white/10"
                 onClick={() => navigate("/")}
-                disabled={processing}
+                disabled={processing || stripeProcessing}
               >
                 Annuler
               </Button>
