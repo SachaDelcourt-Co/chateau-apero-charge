@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (session?.user) {
         // Get the user's role from profiles
-        // Fix: Use proper Promise error handling
+        // Fix: Use proper Promise chain with error handling
         supabase
           .from('profiles')
           .select('role')
