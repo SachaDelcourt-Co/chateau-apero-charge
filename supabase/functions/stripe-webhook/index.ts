@@ -46,6 +46,8 @@ serve(async (req) => {
         return new Response('Missing cardId or amount in metadata', { status: 400 });
       }
 
+      console.log(`Processing payment for card ${cardId} with amount ${amount}`);
+
       // Get the current card details
       const { data: cardData, error: cardError } = await supabaseClient
         .from('table_cards')
@@ -63,6 +65,8 @@ serve(async (req) => {
       const rechargeAmount = parseFloat(amount);
       const newAmount = (currentAmount + rechargeAmount).toString();
 
+      console.log(`Card ${cardId} current balance: ${currentAmount}, recharge: ${rechargeAmount}, new balance: ${newAmount}`);
+
       // Update the card amount
       const { error: updateError } = await supabaseClient
         .from('table_cards')
@@ -73,6 +77,8 @@ serve(async (req) => {
         console.error('Error updating card amount:', updateError);
         return new Response(`Error updating card amount: ${updateError.message}`, { status: 400 });
       }
+
+      console.log(`Successfully updated card ${cardId} balance to ${newAmount}`);
 
       // Log the payment in the paiements table
       const { error: paymentError } = await supabaseClient
@@ -89,7 +95,12 @@ serve(async (req) => {
         // We don't return an error here because the card has been successfully recharged
       }
 
-      return new Response(JSON.stringify({ received: true }), { status: 200 });
+      return new Response(JSON.stringify({ 
+        received: true,
+        cardId: cardId,
+        rechargeAmount: rechargeAmount,
+        newBalance: newAmount 
+      }), { status: 200 });
     }
 
     // Return a response for other events

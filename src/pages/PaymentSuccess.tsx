@@ -5,7 +5,7 @@ import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
-import { CheckCircle, CreditCard, Loader2 } from "lucide-react";
+import { CheckCircle, CreditCard, Loader2, Euro } from "lucide-react";
 import { getTableCardById, TableCard } from '@/lib/supabase';
 
 const PaymentSuccess: React.FC = () => {
@@ -13,7 +13,6 @@ const PaymentSuccess: React.FC = () => {
   const location = useLocation();
   const [amount, setAmount] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<string>("cash");
   const [card, setCard] = useState<TableCard | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -32,11 +31,6 @@ const PaymentSuccess: React.FC = () => {
       setCardId(cardIdParam);
       // Fetch the current card data to show the updated balance
       fetchCardData(cardIdParam);
-    }
-    
-    // If we have a session_id, it means the payment was made with Stripe
-    if (sessionId) {
-      setPaymentMethod("stripe");
     }
   }, [location]);
 
@@ -61,12 +55,10 @@ const PaymentSuccess: React.FC = () => {
             <CheckCircle className="h-12 w-12 mx-auto text-green-400" />
             <h2 className="text-xl font-medium">Rechargement réussi !</h2>
             
-            {paymentMethod === "stripe" && (
-              <div className="inline-flex items-center bg-blue-600/20 px-3 py-1 rounded-full text-sm">
-                <CreditCard className="h-3 w-3 mr-1" />
-                Paiement par carte bancaire
-              </div>
-            )}
+            <div className="inline-flex items-center bg-blue-600/20 px-3 py-1 rounded-full text-sm">
+              <CreditCard className="h-3 w-3 mr-1" />
+              Paiement par carte bancaire
+            </div>
             
             {amount && (
               <p className="text-lg">Montant rechargé: <span className="font-bold">{amount}€</span></p>
@@ -79,7 +71,9 @@ const PaymentSuccess: React.FC = () => {
               </div>
             ) : (
               card && (
-                <p className="text-lg">Solde actuel: <span className="font-bold">{card.amount}€</span></p>
+                <div className="bg-green-600/20 p-3 rounded-lg">
+                  <p className="text-lg">Solde actuel: <span className="font-bold">{card.amount}€</span></p>
+                </div>
               )
             )}
             

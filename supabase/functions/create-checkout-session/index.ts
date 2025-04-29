@@ -27,6 +27,8 @@ serve(async (req) => {
       );
     }
 
+    console.log(`Creating checkout session for card ${cardId} with amount ${amount}`);
+
     // Initialize Stripe
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
       apiVersion: '2022-11-15',
@@ -56,6 +58,8 @@ serve(async (req) => {
         amount: amount.toString()
       }
     });
+
+    console.log(`Checkout session created with ID: ${session.id}`);
 
     // Return the session ID
     return new Response(
