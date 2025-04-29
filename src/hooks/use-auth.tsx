@@ -1,3 +1,4 @@
+
 import { useState, useEffect, createContext, useContext } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@supabase/supabase-js';
@@ -11,6 +12,7 @@ type AuthContextType = {
   hasAccess: (requiredRoles: string[]) => boolean;
   role: string | null;
   email: string | null;
+  createUser: (email: string, password: string, role: string) => Promise<{ success: boolean; message?: string }>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +43,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (session?.user) {
         // Get the user's role from profiles
-        // Fix: Use proper Promise chain with error handling with then() and catch()
         supabase
           .from('profiles')
           .select('role')
@@ -116,6 +117,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const createUser = async (email: string, password: string, userRole: string): Promise<{ success: boolean; message?: string }> => {
+    try {
+      // 1. Create the user in auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true
+      });
+
+      if (authError) {
+        console.error('Error creating user:', authError);
+        return { success: false, message: authError.message };
+      }
+
+      // 2. Update the user's role in profiles
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ role: userRole })
+          .eq('id', authData.user.id);
+
+        if (profileError) {
+          console.error('Error updating user role:', profileError);
+          return { success: false, message: 'User created but role could not be set: ' + profileError.message };
+        }
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error in createUser:', error);
+      return { success: false, message: error.message || 'An error occurred while creating the user' };
+    }
+  };
+
   const hasAccess = (requiredRoles: string[]): boolean => {
     if (!role) return false;
     return requiredRoles.includes(role);
@@ -130,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hasAccess,
     role,
     email,
+    createUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
