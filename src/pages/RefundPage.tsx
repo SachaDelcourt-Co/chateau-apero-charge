@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -38,15 +37,15 @@ const RefundPage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
-      // Insert into refunds table
+      // Insert into refunds table - using column names with spaces properly
       const { error } = await supabase
         .from('refunds')
         .insert({
-          id_card: cardId,
-          "first name": firstName,
-          "last name": lastName,
-          email,
-          account
+          'id_card': cardId,
+          'first name': firstName,
+          'last name': lastName,
+          'email': email,
+          'account': account  // Store as string in the database
         });
       
       if (error) throw error;

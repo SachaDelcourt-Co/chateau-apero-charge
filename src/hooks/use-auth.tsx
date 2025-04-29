@@ -1,15 +1,21 @@
+
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from 'react-router-dom';
+
+type Role = 'admin' | 'bar' | 'recharge';
 
 interface AuthContextType {
   user: any;
   email: string | null;
   role: string | null;
   isLoading: boolean;
-  signUp: (email: string, password: string) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  isLoggedIn: boolean;
+  signUp: (email: string, password: string) => Promise<{ success: boolean, message: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean, message: string }>;
   signOut: () => Promise<void>;
+  hasAccess: (requiredRoles: Role[]) => boolean;
+  createUser: (email: string, password: string, role: Role) => Promise<{ success: boolean, message: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,11 +37,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const session = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
         console.error('Error getting session:', error);
@@ -46,6 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (session) {
         setUser(session.user);
         setEmail(session.user.email);
+        setIsLoggedIn(true);
         fetchUserProfile(session.user.id);
       } else {
         setIsLoading(false);
@@ -55,11 +63,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (session) {
           setUser(session.user);
           setEmail(session.user.email);
+          setIsLoggedIn(true);
           fetchUserProfile(session.user.id);
         } else {
           setUser(null);
           setEmail(null);
           setRole(null);
+          setIsLoggedIn(false);
           setIsLoading(false);
         }
       });
@@ -102,9 +112,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // After successful signup, navigate to a different page or show a success message
       navigate('/login');
-    } catch (error) {
+      return { success: true, message: "Inscription réussie" };
+    } catch (error: any) {
       console.error('Error signing up:', error);
-      throw error;
+      return { success: false, message: error.message || "Erreur lors de l'inscription" };
     } finally {
       setIsLoading(false);
     }
@@ -122,12 +133,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       setUser(data.user);
       setEmail(data.user?.email || null);
+      setIsLoggedIn(true);
       await fetchUserProfile(data.user?.id || '');
       
-      // No navigation here; the useEffect on auth state changes will handle updates
-    } catch (error) {
+      return { success: true, message: "Connexion réussie" };
+    } catch (error: any) {
       console.error('Error signing in:', error);
-      throw error;
+      return { success: false, message: error.message || "Erreur lors de la connexion" };
     } finally {
       setIsLoading(false);
     }
@@ -143,10 +155,45 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null);
       setEmail(null);
       setRole(null);
+      setIsLoggedIn(false);
       setIsLoading(false);
     } catch (error) {
       console.error('Error signing out:', error);
       throw error;
+    }
+  }, []);
+
+  const hasAccess = useCallback((requiredRoles: Role[]) => {
+    if (!role) return false;
+    return requiredRoles.includes(role as Role);
+  }, [role]);
+
+  const createUser = useCallback(async (email: string, password: string, userRole: Role) => {
+    try {
+      // Create new user with supabase admin
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { role: userRole }
+      });
+
+      if (error) throw error;
+
+      // Update the profile with the correct role
+      if (data.user) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ role: userRole })
+          .eq('id', data.user.id);
+
+        if (updateError) throw updateError;
+      }
+
+      return { success: true, message: `Utilisateur ${email} créé avec le rôle ${userRole}` };
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      return { success: false, message: error.message || "Erreur lors de la création de l'utilisateur" };
     }
   }, []);
 
@@ -155,9 +202,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     email,
     role,
     isLoading,
+    isLoggedIn,
     signUp,
     signIn,
     signOut,
+    hasAccess,
+    createUser,
   };
 
   return (

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -125,10 +124,10 @@ const UserManagement: React.FC = () => {
     setIsCreatingUser(true);
     
     try {
-      const { success, message } = await createUser(newUserEmail, newUserPassword, newUserRole);
+      const result = await createUser(newUserEmail, newUserPassword, newUserRole);
       
-      if (!success) {
-        throw new Error(message);
+      if (!result.success) {
+        throw new Error(result.message);
       }
       
       toast({

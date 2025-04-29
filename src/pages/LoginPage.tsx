@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,10 +55,10 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
     
     try {
-      const { success, message } = await signIn(email, password);
+      const result = await signIn(email, password);
       
-      if (!success) {
-        throw new Error(message);
+      if (!result.success) {
+        throw new Error(result.message);
       }
       
       toast({
