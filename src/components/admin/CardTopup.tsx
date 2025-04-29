@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CreditCard, CheckCircle } from "lucide-react";
 import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
+import { supabase } from "@/integrations/supabase/client";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface CardTopupProps {
   onSuccess?: () => void;
@@ -18,6 +20,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [currentAmount, setCurrentAmount] = useState<string | null>(null);
+  const [paidByCard, setPaidByCard] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,6 +54,24 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         const success = await updateTableCardAmount(cardId, newAmount);
         
         if (success) {
+          // Ajouter l'enregistrement dans la table paiements
+          const { error } = await supabase
+            .from('paiements')
+            .insert({
+              id_card: cardId,
+              amount: parseFloat(amount),
+              paid_by_card: paidByCard
+            });
+          
+          if (error) {
+            console.error('Error logging payment:', error);
+            toast({
+              title: "Attention",
+              description: "La carte a été rechargée mais l'historique n'a pas pu être enregistré",
+              variant: "destructive"
+            });
+          }
+          
           setSuccess(true);
           toast({
             title: "Carte rechargée",
@@ -90,6 +111,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
   const handleReset = () => {
     setCardId('');
     setAmount('');
+    setPaidByCard(false);
     setSuccess(false);
     setCurrentAmount(null);
   };
@@ -107,7 +129,8 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               <span className="font-medium">Numéro de carte:</span> {cardId}<br />
               <span className="font-medium">Ancien solde:</span> {currentAmount}€<br />
               <span className="font-medium">Montant ajouté:</span> {amount}€<br />
-              <span className="font-medium">Nouveau solde:</span> {parseFloat(currentAmount || '0') + parseFloat(amount)}€
+              <span className="font-medium">Nouveau solde:</span> {parseFloat(currentAmount || '0') + parseFloat(amount)}€<br />
+              <span className="font-medium">Payé par carte:</span> {paidByCard ? 'Oui' : 'Non'}
             </p>
             <Button onClick={handleReset}>Recharger une autre carte</Button>
           </div>
@@ -140,6 +163,15 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                 placeholder="Montant à recharger"
                 disabled={isLoading}
               />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="paid-by-card" 
+                checked={paidByCard}
+                onCheckedChange={(checked) => setPaidByCard(checked === true)}
+              />
+              <Label htmlFor="paid-by-card">Payé par carte</Label>
             </div>
             
             <Button 
