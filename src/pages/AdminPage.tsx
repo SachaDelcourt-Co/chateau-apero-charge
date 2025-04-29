@@ -7,33 +7,31 @@ import ChateauLogo from '@/components/ChateauLogo';
 import CardTopup from '@/components/admin/CardTopup';
 import Dashboard from '@/components/admin/Dashboard';
 import { LogOut } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signOut } = useAuth();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [activeTab, setActiveTab] = useState("dashboard");
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    
-    if (error) {
+    try {
+      await signOut();
+      
+      toast({
+        title: "Déconnexion réussie",
+        description: "Vous avez été déconnecté avec succès"
+      });
+    } catch (error) {
       toast({
         title: "Erreur",
         description: "Une erreur est survenue lors de la déconnexion",
         variant: "destructive"
       });
-      return;
     }
-    
-    toast({
-      title: "Déconnexion réussie",
-      description: "Vous avez été déconnecté avec succès"
-    });
-    
-    navigate('/login');
   };
 
   // Function to refresh the dashboard when a card is topped up

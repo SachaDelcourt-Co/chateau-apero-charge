@@ -13,6 +13,9 @@ import AdminPage from "./pages/AdminPage";
 import LoginPage from "./pages/LoginPage";
 import BarPage from "./pages/BarPage";
 import RechargePage from "./pages/RechargePage";
+import Unauthorized from "./pages/Unauthorized";
+import { AuthProvider } from "@/hooks/use-auth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 // Sauvegardons l'image du logo
 import "./assets/logo.png";
@@ -26,17 +29,41 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/payment/:id" element={<Payment />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
-            <Route path="/s/:id" element={<ScanRedirect />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/bar" element={<BarPage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/recharge" element={<RechargePage />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AuthProvider>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/payment/:id" element={<Payment />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
+              <Route path="/s/:id" element={<ScanRedirect />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route 
+                path="/bar" 
+                element={
+                  <ProtectedRoute requiredRoles={['bar', 'admin']}>
+                    <BarPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedRoute requiredRoles={['admin']}>
+                    <AdminPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/recharge" 
+                element={
+                  <ProtectedRoute requiredRoles={['recharge', 'admin']}>
+                    <RechargePage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
