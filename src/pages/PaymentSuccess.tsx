@@ -5,7 +5,8 @@ import ChateauBackground from '@/components/ChateauBackground';
 import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
-import { CheckCircle, CreditCard } from "lucide-react";
+import { CheckCircle, CreditCard, Loader2 } from "lucide-react";
+import { getTableCardById, TableCard } from '@/lib/supabase';
 
 const PaymentSuccess: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +14,8 @@ const PaymentSuccess: React.FC = () => {
   const [amount, setAmount] = useState<string | null>(null);
   const [cardId, setCardId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<string>("cash");
+  const [card, setCard] = useState<TableCard | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // Get parameters from URL if present
@@ -27,6 +30,8 @@ const PaymentSuccess: React.FC = () => {
     
     if (cardIdParam) {
       setCardId(cardIdParam);
+      // Fetch the current card data to show the updated balance
+      fetchCardData(cardIdParam);
     }
     
     // If we have a session_id, it means the payment was made with Stripe
@@ -34,6 +39,18 @@ const PaymentSuccess: React.FC = () => {
       setPaymentMethod("stripe");
     }
   }, [location]);
+
+  const fetchCardData = async (id: string) => {
+    setLoading(true);
+    try {
+      const cardData = await getTableCardById(id);
+      setCard(cardData);
+    } catch (error) {
+      console.error('Error fetching card details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ChateauBackground>
@@ -52,7 +69,18 @@ const PaymentSuccess: React.FC = () => {
             )}
             
             {amount && (
-              <p className="text-lg font-bold">Montant: {amount}€</p>
+              <p className="text-lg">Montant rechargé: <span className="font-bold">{amount}€</span></p>
+            )}
+            
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <span>Chargement des détails...</span>
+              </div>
+            ) : (
+              card && (
+                <p className="text-lg">Solde actuel: <span className="font-bold">{card.amount}€</span></p>
+              )
             )}
             
             {cardId && (
