@@ -57,34 +57,42 @@ const UserManagement: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // D'abord récupérer tous les utilisateurs de la table auth
-      const { data: authUsers, error: authError } = await supabase
+      // First get all profiles with their roles
+      const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, role, created_at');
       
-      if (authError) {
-        throw authError;
+      if (profilesError) {
+        throw profilesError;
       }
       
-      // Ensuite récupérer les emails des utilisateurs via l'API auth
-      const usersWithEmails = await Promise.all(authUsers.map(async (user) => {
-        // Utiliser le client supabase pour récupérer les emails
-        const { data, error } = await supabase
-          .auth
-          .admin
-          .getUserById(user.id);
+      // Then get the user emails from auth
+      const usersWithEmails = await Promise.all(profiles.map(async (profile) => {
+        try {
+          // Use admin API to get user details
+          const { data, error } = await supabase
+            .auth
+            .admin
+            .getUserById(profile.id);
+            
+          let email = '';
+          if (!error && data) {
+            email = data.user.email || '';
+          } else {
+            console.error('Erreur lors de la récupération de l\'email:', error);
+          }
           
-        let email = '';
-        if (!error && data) {
-          email = data.user.email || '';
-        } else {
-          console.error('Erreur lors de la récupération de l\'email:', error);
+          return {
+            ...profile,
+            email
+          };
+        } catch (error) {
+          console.error('Error fetching user email:', error);
+          return {
+            ...profile,
+            email: 'Error fetching email'
+          };
         }
-        
-        return {
-          ...user,
-          email
-        };
       }));
       
       setUsers(usersWithEmails as UserProfile[]);
