@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, requiredRoles }: ProtectedRouteProps) => {
-  const { user, isLoading, hasAccess } = useAuth();
+  const { user, isLoading, hasAccess, role } = useAuth();
 
   if (isLoading) {
     // Afficher un écran de chargement pendant que l'authentification est vérifiée

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import ChateauLogo from '@/components/ChateauLogo';
 import CardTopup from '@/components/admin/CardTopup';
 import Dashboard from '@/components/admin/Dashboard';
+import UserManagement from '@/components/admin/UserManagement';
 import { LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -13,7 +14,7 @@ import { useAuth } from '@/hooks/use-auth';
 const AdminPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signOut } = useAuth();
+  const { signOut, email } = useAuth();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [activeTab, setActiveTab] = useState("dashboard");
 
@@ -44,7 +45,14 @@ const AdminPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="w-full max-w-6xl mx-auto p-4">
         <div className="flex justify-between items-center mb-6">
-          <ChateauLogo />
+          <div className="flex items-center space-x-4">
+            <ChateauLogo />
+            {email && (
+              <div className="text-sm text-gray-600">
+                Connecté en tant que: <span className="font-medium">{email}</span>
+              </div>
+            )}
+          </div>
           <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-2" />
             Déconnexion
@@ -59,9 +67,10 @@ const AdminPage: React.FC = () => {
             onValueChange={setActiveTab} 
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsList className="grid w-full grid-cols-3 mb-6">
               <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
               <TabsTrigger value="topup">Recharge de carte</TabsTrigger>
+              <TabsTrigger value="users">Utilisateurs</TabsTrigger>
             </TabsList>
             
             <TabsContent value="dashboard" className="mt-4">
@@ -70,6 +79,10 @@ const AdminPage: React.FC = () => {
             
             <TabsContent value="topup" className="mt-4">
               <CardTopup onSuccess={refreshDashboard} />
+            </TabsContent>
+            
+            <TabsContent value="users" className="mt-4">
+              <UserManagement />
             </TabsContent>
           </Tabs>
         </div>

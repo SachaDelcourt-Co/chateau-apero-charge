@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -7,41 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, LogIn } from "lucide-react";
-import { supabase } from '@/lib/supabase';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from '@/hooks/use-auth';
+
+type Role = 'admin' | 'bar' | 'recharge';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('admin');
+  const [activeTab, setActiveTab] = useState<Role>('admin');
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { signIn, user } = useAuth();
 
-  // Check if already logged in
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Get user role from profiles table
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profile) {
-          redirectBasedOnRole(profile.role);
-        } else {
-          // Default to admin if no profile found
-          navigate('/admin');
-        }
-      }
-    };
-    
-    checkSession();
-  }, [navigate]);
+  // Si l'utilisateur est déjà connecté, redirigez-le
+  React.useEffect(() => {
+    if (user) {
+      redirectBasedOnRole(activeTab);
+    }
+  }, [user, activeTab]);
 
   const redirectBasedOnRole = (role: string) => {
     switch(role) {
@@ -74,45 +60,18 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ 
-        email, 
-        password 
+      const { success, message } = await signIn(email, password);
+      
+      if (!success) {
+        throw new Error(message);
+      }
+      
+      toast({
+        title: "Connexion réussie",
+        description: "Vous êtes maintenant connecté"
       });
-      
-      if (error) {
-        throw error;
-      }
-      
-      if (data?.user) {
-        // Get user role from profiles
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
 
-        if (profileError) {
-          throw profileError;
-        }
-
-        toast({
-          title: "Connexion réussie",
-          description: "Vous êtes maintenant connecté"
-        });
-
-        // Check if the user has the role they're trying to log in as
-        const userRole = profile?.role || 'bar';
-        
-        if (activeTab === 'admin' && userRole !== 'admin') {
-          throw new Error("Vous n'avez pas les droits d'administrateur");
-        } else if (activeTab === 'bar' && userRole !== 'bar' && userRole !== 'admin') {
-          throw new Error("Vous n'avez pas les droits pour accéder au bar");
-        } else if (activeTab === 'recharge' && userRole !== 'recharge' && userRole !== 'admin') {
-          throw new Error("Vous n'avez pas les droits pour accéder à la recharge");
-        }
-
-        redirectBasedOnRole(activeTab);
-      }
+      redirectBasedOnRole(activeTab);
     } catch (error: any) {
       toast({
         title: "Erreur de connexion",
@@ -139,7 +98,7 @@ const LoginPage: React.FC = () => {
             </CardDescription>
           </CardHeader>
           
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Role)} className="w-full">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="admin">Admin</TabsTrigger>
               <TabsTrigger value="bar">Bar</TabsTrigger>

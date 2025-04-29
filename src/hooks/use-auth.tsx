@@ -11,12 +11,14 @@ interface AuthState {
   session: Session | null;
   role: Role | null;
   isLoading: boolean;
+  email: string | null;
 }
 
 interface AuthContextType extends AuthState {
-  signIn: (email: string, password: string, requestedRole: Role) => Promise<{ success: boolean; message?: string }>;
+  signIn: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   signOut: () => Promise<void>;
   hasAccess: (requiredRoles: Role[]) => boolean;
+  createUser: (email: string, password: string, role: Role) => Promise<{ success: boolean; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     session: null,
     role: null,
     isLoading: true,
+    email: null,
   });
   const navigate = useNavigate();
 
@@ -41,18 +44,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setTimeout(async () => {
             const { data: profile } = await supabase
               .from('profiles')
-              .select('role')
+              .select('role, email')
               .eq('id', session.user.id)
               .single();
               
             setAuthState(prev => ({ 
               ...prev, 
               role: profile?.role as Role || null,
+              email: profile?.email || null,
               isLoading: false
             }));
           }, 0);
         } else {
-          setAuthState(prev => ({ ...prev, role: null, isLoading: false }));
+          setAuthState(prev => ({ ...prev, role: null, email: null, isLoading: false }));
         }
       }
     );
@@ -65,13 +69,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Get the user's role
         supabase
           .from('profiles')
-          .select('role')
+          .select('role, email')
           .eq('id', session.user.id)
           .single()
           .then(({ data: profile }) => {
             setAuthState(prev => ({ 
               ...prev, 
               role: profile?.role as Role || null,
+              email: profile?.email || null,
               isLoading: false
             }));
           });
@@ -85,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
   }, [navigate]);
 
-  const signIn = async (email: string, password: string, requestedRole: Role) => {
+  const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
@@ -97,7 +102,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Get the user's role
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('role')
+          .select('role, email')
           .eq('id', data.user.id)
           .single();
           
@@ -107,27 +112,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
         
         const userRole = profile?.role as Role;
-        
-        // Check if user has the requested role
-        if (requestedRole === 'admin' && userRole !== 'admin') {
-          await supabase.auth.signOut();
-          return { success: false, message: "Vous n'avez pas les droits d'administrateur" };
-        }
-        
-        if (requestedRole === 'bar' && userRole !== 'bar' && userRole !== 'admin') {
-          await supabase.auth.signOut();
-          return { success: false, message: "Vous n'avez pas les droits pour accéder au bar" };
-        }
-        
-        if (requestedRole === 'recharge' && userRole !== 'recharge' && userRole !== 'admin') {
-          await supabase.auth.signOut();
-          return { success: false, message: "Vous n'avez pas les droits pour accéder à la recharge" };
-        }
-        
         return { success: true };
       }
       
       return { success: false, message: 'Une erreur est survenue lors de la connexion' };
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Une erreur est survenue' };
+    }
+  };
+
+  const createUser = async (email: string, password: string, role: Role) => {
+    try {
+      // Only admin can create users
+      if (authState.role !== 'admin') {
+        return { success: false, message: "Vous n'avez pas les droits pour créer des utilisateurs" };
+      }
+
+      // Create the user
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
+
+      if (error) {
+        return { success: false, message: error.message };
+      }
+
+      if (data?.user) {
+        // Update the user's role in the profiles table
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ role, email })
+          .eq('id', data.user.id);
+
+        if (updateError) {
+          return { success: false, message: `Utilisateur créé mais erreur lors de la mise à jour du rôle: ${updateError.message}` };
+        }
+
+        return { success: true };
+      }
+
+      return { success: false, message: 'Une erreur est survenue lors de la création de l\'utilisateur' };
     } catch (error: any) {
       return { success: false, message: error.message || 'Une erreur est survenue' };
     }
@@ -155,6 +181,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         signIn,
         signOut,
         hasAccess,
+        createUser,
       }}
     >
       {children}
