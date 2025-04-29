@@ -79,7 +79,7 @@ const UserManagement: React.FC = () => {
           if (!error && data) {
             email = data.user.email || '';
           } else {
-            console.error('Erreur lors de la récupération de l\'email:', error);
+            console.error('Error retrieving email:', error);
           }
           
           return {
@@ -99,8 +99,8 @@ const UserManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching users:', error);
       toast({
-        title: "Erreur",
-        description: "Impossible de récupérer la liste des utilisateurs",
+        title: "Error",
+        description: "Unable to retrieve user list",
         variant: "destructive"
       });
     } finally {
@@ -115,8 +115,8 @@ const UserManagement: React.FC = () => {
   const handleCreateUser = async () => {
     if (!newUserEmail || !newUserPassword) {
       toast({
-        title: "Erreur",
-        description: "Veuillez remplir tous les champs",
+        title: "Error",
+        description: "Please fill in all fields",
         variant: "destructive"
       });
       return;
@@ -132,8 +132,8 @@ const UserManagement: React.FC = () => {
       }
       
       toast({
-        title: "Succès",
-        description: `L'utilisateur ${newUserEmail} a été créé avec le rôle ${newUserRole}`
+        title: "Success",
+        description: `User ${newUserEmail} created with role ${newUserRole}`
       });
       
       // Reset form and close dialog
@@ -147,8 +147,8 @@ const UserManagement: React.FC = () => {
       
     } catch (error: any) {
       toast({
-        title: "Erreur",
-        description: error.message || "Impossible de créer l'utilisateur",
+        title: "Error",
+        description: error.message || "Failed to create user",
         variant: "destructive"
       });
     } finally {
@@ -156,13 +156,13 @@ const UserManagement: React.FC = () => {
     }
   };
   
-  // Si l'utilisateur n'a pas les droits admin, ne pas afficher cette page
+  // If the user doesn't have admin rights, don't display this page
   if (!hasAccess(['admin'])) {
     return (
       <Card>
         <CardContent className="p-6">
           <div className="text-center text-gray-600">
-            Vous n'avez pas les droits nécessaires pour accéder à cette section.
+            You don't have the necessary permissions to access this section.
           </div>
         </CardContent>
       </Card>
@@ -172,19 +172,19 @@ const UserManagement: React.FC = () => {
   return (
     <div className="space-y-5">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Gestion des utilisateurs</h2>
+        <h2 className="text-xl font-semibold">User Management</h2>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="h-4 w-4 mr-2" />
-              Nouvel utilisateur
+              New User
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
+              <DialogTitle>Create a new user</DialogTitle>
               <DialogDescription>
-                Ajoutez un nouvel utilisateur au système.
+                Add a new user to the system.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -200,7 +200,7 @@ const UserManagement: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
@@ -210,17 +210,17 @@ const UserManagement: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Rôle</Label>
+                <Label htmlFor="role">Role</Label>
                 <Select
                   value={newUserRole}
                   onValueChange={(value) => setNewUserRole(value as Role)}
                   disabled={isCreatingUser}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionnez un rôle" />
+                    <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Administrateur</SelectItem>
+                    <SelectItem value="admin">Administrator</SelectItem>
                     <SelectItem value="bar">Bar</SelectItem>
                     <SelectItem value="recharge">Recharge</SelectItem>
                   </SelectContent>
@@ -235,10 +235,10 @@ const UserManagement: React.FC = () => {
                 {isCreatingUser ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Création...
+                    Creating...
                   </>
                 ) : (
-                  "Créer l'utilisateur"
+                  "Create User"
                 )}
               </Button>
             </DialogFooter>
@@ -257,21 +257,21 @@ const UserManagement: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
-                  <TableHead>Rôle</TableHead>
-                  <TableHead>Date de création</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Creation Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-gray-500 py-6">
-                      Aucun utilisateur trouvé
+                      No users found
                     </TableCell>
                   </TableRow>
                 ) : (
                   users.map((user) => (
                     <TableRow key={user.id}>
-                      <TableCell>{user.email || 'Non défini'}</TableCell>
+                      <TableCell>{user.email || 'Undefined'}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs ${
                           user.role === 'admin' ? 'bg-blue-100 text-blue-800' :
@@ -283,7 +283,7 @@ const UserManagement: React.FC = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Non défini'}
+                        {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Undefined'}
                       </TableCell>
                     </TableRow>
                   ))

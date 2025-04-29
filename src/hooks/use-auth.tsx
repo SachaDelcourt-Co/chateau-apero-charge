@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 .single();
                 
               if (profileError) {
-                console.error('Erreur lors de la récupération du profil:', profileError);
+                console.error('Error retrieving profile:', profileError);
                 setAuthState(prev => ({ ...prev, isLoading: false }));
                 return;
               }
@@ -62,7 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 isLoading: false
               }));
             } catch (err) {
-              console.error('Exception lors de la récupération du profil:', err);
+              console.error('Exception while retrieving profile:', err);
               setAuthState(prev => ({ ...prev, isLoading: false }));
             }
           }, 0);
@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .single()
           .then(({ data: profile, error }) => {
             if (error) {
-              console.error('Erreur lors de la récupération du profil:', error);
+              console.error('Error retrieving profile:', error);
               setAuthState(prev => ({ ...prev, isLoading: false }));
               return;
             }
@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }));
           })
           .catch(err => {
-            console.error('Exception lors de la récupération du profil:', err);
+            console.error('Exception while retrieving profile:', err);
             setAuthState(prev => ({ ...prev, isLoading: false }));
           });
       } else {
@@ -129,15 +129,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           
         if (profileError) {
           await supabase.auth.signOut();
-          return { success: false, message: 'Erreur lors de la récupération du profil utilisateur' };
+          return { success: false, message: 'Error retrieving user profile' };
         }
         
         return { success: true };
       }
       
-      return { success: false, message: 'Une erreur est survenue lors de la connexion' };
+      return { success: false, message: 'An error occurred during login' };
     } catch (error: any) {
-      return { success: false, message: error.message || 'Une erreur est survenue' };
+      return { success: false, message: error.message || 'An error occurred' };
     }
   };
 
@@ -145,7 +145,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // Only admin can create users
       if (authState.role !== 'admin') {
-        return { success: false, message: "Vous n'avez pas les droits pour créer des utilisateurs" };
+        return { success: false, message: "You don't have permission to create users" };
       }
 
       // Create the user
@@ -167,15 +167,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           .eq('id', data.user.id);
 
         if (updateError) {
-          return { success: false, message: `Utilisateur créé mais erreur lors de la mise à jour du rôle: ${updateError.message}` };
+          return { success: false, message: `User created but error updating role: ${updateError.message}` };
         }
 
         return { success: true };
       }
 
-      return { success: false, message: 'Une erreur est survenue lors de la création de l\'utilisateur' };
+      return { success: false, message: 'An error occurred while creating the user' };
     } catch (error: any) {
-      return { success: false, message: error.message || 'Une erreur est survenue' };
+      return { success: false, message: error.message || 'An error occurred' };
     }
   };
 
