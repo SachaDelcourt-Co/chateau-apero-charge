@@ -44,7 +44,7 @@ const PaymentSuccess: React.FC = () => {
     try {
       // Add a small delay to ensure the webhook has time to process the update
       if (sessionId) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
       const cardData = await getTableCardById(id);
@@ -62,7 +62,7 @@ const PaymentSuccess: React.FC = () => {
     
     const currentAmount = parseFloat(card.amount || '0');
     const rechargeAmount = parseFloat(amount);
-    return (currentAmount).toFixed(2);
+    return (currentAmount + rechargeAmount).toFixed(2);  // Add recharge amount to show expected balance
   };
 
   return (
