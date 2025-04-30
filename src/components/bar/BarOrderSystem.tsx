@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
@@ -6,35 +5,42 @@ import { BarOrderSummary } from './BarOrderSummary';
 import { BarPaymentForm } from './BarPaymentForm';
 import { BarProduct, OrderItem, BarOrder, getBarProducts } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export const BarOrderSystem: React.FC = () => {
   const [products, setProducts] = useState<BarProduct[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [paymentStep, setPaymentStep] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [defaultCategory, setDefaultCategory] = useState<string>('');
   const isMobile = useIsMobile();
+
+  // Définir l'ordre des catégories
+  const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
 
   // Load products on component mount
   useEffect(() => {
     const loadProducts = async () => {
       setIsLoading(true);
       const productData = await getBarProducts();
-      setProducts(productData);
       
-      // Extract unique categories
-      const uniqueCategories = Array.from(
-        new Set(productData.map(p => p.category).filter(c => c !== null) as string[])
-      );
-      setCategories(uniqueCategories);
-      if (uniqueCategories.length > 0) {
-        setDefaultCategory(uniqueCategories[0]);
-      }
+      // Trier les produits selon l'ordre des catégories défini
+      const sortedProducts = [...productData].sort((a, b) => {
+        const catA = a.category?.toLowerCase() || '';
+        const catB = b.category?.toLowerCase() || '';
+        
+        const indexA = categoryOrder.indexOf(catA);
+        const indexB = categoryOrder.indexOf(catB);
+        
+        // Si la catégorie n'est pas dans notre liste, la mettre à la fin
+        const orderA = indexA >= 0 ? indexA : 999;
+        const orderB = indexB >= 0 ? indexB : 999;
+        
+        return orderA - orderB;
+      });
       
+      setProducts(sortedProducts);
       setIsLoading(false);
     };
     
@@ -129,7 +135,6 @@ export const BarOrderSystem: React.FC = () => {
   };
 
   const handleOrderComplete = () => {
-    // Reset the order
     setOrderItems([]);
     setPaymentStep(false);
     toast({
@@ -165,24 +170,12 @@ export const BarOrderSystem: React.FC = () => {
               <CardContent className={`${isMobile ? 'p-3' : 'p-6'}`}>
                 <h3 className="text-xl font-semibold mb-3 md:mb-4">Sélection des produits</h3>
                 
-                <Tabs defaultValue={defaultCategory}>
-                  <TabsList className="mb-3 flex flex-wrap">
-                    {categories.map(category => (
-                      <TabsTrigger key={category} value={category} className="text-xs sm:text-sm md:text-base py-1.5 px-2 sm:py-2 sm:px-3">
-                        {category}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  
-                  {categories.map(category => (
-                    <TabsContent key={category} value={category} className="mt-2 md:mt-3">
-                      <BarProductList 
-                        products={products.filter(p => p.category === category)} 
-                        onAddProduct={handleAddProduct} 
-                      />
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                <ScrollArea className="h-[65vh] md:h-[70vh] pr-4">
+                  <BarProductList 
+                    products={products} 
+                    onAddProduct={handleAddProduct} 
+                  />
+                </ScrollArea>
               </CardContent>
             </Card>
           </div>

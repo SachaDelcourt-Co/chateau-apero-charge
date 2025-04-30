@@ -2,8 +2,9 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
-import { Plus, Euro } from 'lucide-react';
+import { Plus, Euro, Beer, Wine, Cocktail, CupSoda } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Separator } from '@/components/ui/separator';
 
 interface BarProductListProps {
   products: BarProduct[];
@@ -82,6 +83,29 @@ export const BarProductList: React.FC<BarProductListProps> = ({
     return "text-white";
   };
 
+  // Get appropriate icon based on product category
+  const getCategoryIcon = (product: BarProduct) => {
+    const category = product.category?.toLowerCase() || "";
+    const props = { className: "h-3 w-3 sm:h-4 sm:w-4 mr-1" };
+    
+    if (product.is_return || product.is_deposit) {
+      return null; // No icon for returns/deposits
+    }
+    
+    switch (category) {
+      case 'bière':
+        return <Beer {...props} />;
+      case 'vin':
+        return <Wine {...props} />;
+      case 'cocktail':
+        return <Cocktail {...props} />;
+      case 'soft':
+        return <CupSoda {...props} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 sm:gap-3">
       {products.map(product => (
@@ -94,6 +118,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
             {product.name}
           </span>
           <div className="flex items-center mt-1">
+            {getCategoryIcon(product)}
             <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
             <span>{product.price.toFixed(2)}</span>
           </div>
