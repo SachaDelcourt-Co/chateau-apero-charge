@@ -165,13 +165,21 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               />
             </div>
             
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="paid-by-card" 
-                checked={paidByCard}
-                onCheckedChange={(checked) => setPaidByCard(checked === true)}
-              />
-              <Label htmlFor="paid-by-card">Payé par carte</Label>
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-4">
+              <div className="flex items-center">
+                <Checkbox 
+                  id="paid-by-card" 
+                  checked={paidByCard}
+                  onCheckedChange={(checked) => setPaidByCard(checked === true)}
+                  className="h-6 w-6 border-2 border-blue-500"
+                />
+                <Label 
+                  htmlFor="paid-by-card" 
+                  className="ml-3 text-base sm:text-lg font-medium text-blue-700 cursor-pointer select-none flex-1"
+                >
+                  Payé par carte
+                </Label>
+              </div>
             </div>
             
             <Button 
