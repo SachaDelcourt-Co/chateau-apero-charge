@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
 import { Plus, Euro, Beer, Wine, GlassWater, CupSoda } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { Separator } from '@/components/ui/separator';
 
 interface BarProductListProps {
   products: BarProduct[];
@@ -86,7 +85,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
   // Get appropriate icon based on product category
   const getCategoryIcon = (product: BarProduct) => {
     const category = product.category?.toLowerCase() || "";
-    const props = { className: "h-3 w-3 sm:h-4 sm:w-4 mr-1" };
+    const props = { className: "h-3 w-3 mr-1" };
     
     if (product.is_return || product.is_deposit) {
       return null; // No icon for returns/deposits
@@ -107,22 +106,21 @@ export const BarProductList: React.FC<BarProductListProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 sm:gap-3">
+    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5 sm:gap-2">
       {products.map(product => (
         <Button
           key={product.id}
-          className={`h-auto py-2 px-1.5 sm:py-3 sm:px-2 md:p-4 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
+          className={`h-auto py-1.5 px-1 sm:py-2 sm:px-1.5 md:py-2 md:px-2 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
           onClick={() => onAddProduct(product)}
         >
-          <span className="text-sm sm:text-base md:text-lg font-medium text-center line-clamp-2 min-h-[2.5rem]">
+          <span className="text-xs sm:text-sm md:text-base font-medium text-center line-clamp-1">
             {product.name}
           </span>
-          <div className="flex items-center mt-1">
+          <div className="flex items-center mt-0.5">
             {getCategoryIcon(product)}
-            <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-            <span>{product.price.toFixed(2)}</span>
+            <Euro className="h-3 w-3 mr-1" />
+            <span className="text-xs sm:text-sm">{product.price.toFixed(2)}</span>
           </div>
-          <Plus className="mt-1 sm:mt-2 h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5" />
         </Button>
       ))}
     </div>

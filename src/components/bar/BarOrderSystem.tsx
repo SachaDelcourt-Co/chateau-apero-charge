@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
-import { BarOrderSummary } from './BarOrderSummary';
-import { BarPaymentForm } from './BarPaymentForm';
-import { BarProduct, OrderItem, BarOrder, getBarProducts } from '@/lib/supabase';
+import { Input } from '@/components/ui/input';
+import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -13,7 +12,9 @@ export const BarOrderSystem: React.FC = () => {
   const [products, setProducts] = useState<BarProduct[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [paymentStep, setPaymentStep] = useState(false);
+  const [cardId, setCardId] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   // Définir l'ordre des catégories
@@ -111,14 +112,26 @@ export const BarOrderSystem: React.FC = () => {
 
   const handleClearOrder = () => {
     setOrderItems([]);
-    setPaymentStep(false);
+    setCardId('');
+    setErrorMessage(null);
     toast({
       title: "Commande effacée",
       description: "La commande a été effacée"
     });
   };
 
-  const handleProceedToPayment = () => {
+  const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setCardId(value);
+    setErrorMessage(null);
+    
+    // Process payment automatically when 8 characters are entered
+    if (value.length === 8) {
+      processPayment(value);
+    }
+  };
+
+  const processPayment = async (id: string) => {
     if (orderItems.length === 0) {
       toast({
         title: "Commande vide",
@@ -127,20 +140,57 @@ export const BarOrderSystem: React.FC = () => {
       });
       return;
     }
-    setPaymentStep(true);
-  };
 
-  const handleBackToOrder = () => {
-    setPaymentStep(false);
-  };
+    setIsProcessing(true);
+    setErrorMessage(null);
 
-  const handleOrderComplete = () => {
-    setOrderItems([]);
-    setPaymentStep(false);
-    toast({
-      title: "Commande terminée",
-      description: "La commande a été traitée avec succès"
-    });
+    try {
+      // Check if card exists and has sufficient balance
+      const card = await getTableCardById(id.trim());
+      
+      if (!card) {
+        setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        setIsProcessing(false);
+        return;
+      }
+
+      const cardAmountFloat = parseFloat(card.amount || '0');
+      const total = calculateTotal();
+      
+      if (cardAmountFloat < total) {
+        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
+        setIsProcessing(false);
+        return;
+      }
+
+      // Process the order
+      const orderData: BarOrder = {
+        card_id: id.trim(),
+        total_amount: total,
+        items: orderItems
+      };
+
+      const orderResult = await createBarOrder(orderData);
+
+      if (orderResult.success) {
+        const newBalance = (cardAmountFloat - total).toFixed(2);
+        
+        setOrderItems([]);
+        setCardId('');
+        
+        toast({
+          title: "Paiement réussi",
+          description: `La commande a été traitée avec succès. Nouveau solde: ${newBalance}€`
+        });
+      } else {
+        setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   if (isLoading) {
@@ -154,53 +204,126 @@ export const BarOrderSystem: React.FC = () => {
     );
   }
 
-  const orderData: BarOrder = {
-    card_id: "", // Will be filled in payment step
-    total_amount: calculateTotal(),
-    items: orderItems
-  };
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
-      {!paymentStep ? (
-        <>
-          {/* Product selection - 2/3 width on desktop */}
-          <div className="md:col-span-2">
-            <Card className="bg-white/90 shadow-lg h-full">
-              <CardContent className={`${isMobile ? 'p-3' : 'p-6'}`}>
-                <h3 className="text-xl font-semibold mb-3 md:mb-4">Sélection des produits</h3>
-                
-                <ScrollArea className="h-[65vh] md:h-[70vh] pr-4">
-                  <BarProductList 
-                    products={products} 
-                    onAddProduct={handleAddProduct} 
+      {/* Product selection - Left column on desktop, top on mobile */}
+      <div className="md:col-span-2">
+        <Card className="bg-white/90 shadow-lg">
+          <CardContent className={`${isMobile ? 'p-3' : 'p-6'}`}>
+            <h3 className="text-xl font-semibold mb-2 md:mb-3">Sélection des produits</h3>
+            
+            <ScrollArea className="h-[40vh] md:h-[60vh] pr-4">
+              <BarProductList 
+                products={products} 
+                onAddProduct={handleAddProduct} 
+              />
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+      
+      {/* Order summary & Payment - Right column on desktop, bottom on mobile */}
+      <div className="md:col-span-1">
+        <Card className="bg-white/90 shadow-lg h-full">
+          <CardContent className="p-3 sm:p-6 flex flex-col h-full">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-xl font-semibold">Récapitulatif</h3>
+              
+              {orderItems.length > 0 && (
+                <button 
+                  className="text-sm text-red-600 hover:text-red-800" 
+                  onClick={handleClearOrder}
+                >
+                  Effacer tout
+                </button>
+              )}
+            </div>
+            
+            {orderItems.length === 0 ? (
+              <div className="text-center text-gray-500 py-3">
+                Votre commande est vide
+              </div>
+            ) : (
+              <ScrollArea className="flex-grow mb-4" style={{ maxHeight: isMobile ? "30vh" : "40vh" }}>
+                <ul className="space-y-2">
+                  {orderItems.map((item, index) => (
+                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b pb-2">
+                      <div>
+                        <div className="flex items-center">
+                          <span className={`font-medium ${item.is_return ? 'text-green-600' : ''}`}>
+                            {item.product_name}
+                          </span>
+                          {item.quantity > 1 && (
+                            <span className="ml-2 text-sm bg-gray-200 px-2 py-0.5 rounded-full">
+                              x{item.quantity}
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="text-xs sm:text-sm text-gray-600">
+                          {item.is_return 
+                            ? `-${(item.price * item.quantity).toFixed(2)}€`
+                            : `${(item.price * item.quantity).toFixed(2)}€`}
+                        </div>
+                      </div>
+                      
+                      <button 
+                        className="text-sm text-gray-500 hover:text-red-600 px-2 py-1" 
+                        onClick={() => handleRemoveItem(index)}
+                      >
+                        -
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            )}
+            
+            <div className="border-t pt-3">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-base font-semibold">Total:</span>
+                <span className="text-lg font-bold">{calculateTotal().toFixed(2)}€</span>
+              </div>
+              
+              <div>
+                <label htmlFor="card-id" className="block text-sm font-medium mb-1">
+                  ID de la carte (8 caractères)
+                </label>
+                <div className="relative">
+                  <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input 
+                    id="card-id"
+                    value={cardId}
+                    onChange={handleCardIdChange}
+                    placeholder="00LrJ9bQ"
+                    className="pl-9"
+                    maxLength={8}
+                    disabled={isProcessing || orderItems.length === 0}
                   />
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-          
-          {/* Order summary - 1/3 width on desktop */}
-          <div className="md:col-span-1">
-            <BarOrderSummary 
-              orderItems={orderItems} 
-              total={calculateTotal()} 
-              onRemoveItem={handleRemoveItem}
-              onClearOrder={handleClearOrder}
-              onProceedToPayment={handleProceedToPayment}
-            />
-          </div>
-        </>
-      ) : (
-        /* Payment step - full width */
-        <div className="col-span-full">
-          <BarPaymentForm 
-            order={orderData}
-            onBack={handleBackToOrder}
-            onComplete={handleOrderComplete}
-          />
-        </div>
-      )}
+                </div>
+                
+                {isProcessing && (
+                  <div className="mt-2 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    <span className="text-sm">Traitement en cours...</span>
+                  </div>
+                )}
+                
+                {errorMessage && (
+                  <div className="mt-2 bg-red-100 text-red-800 p-2 rounded-md flex items-start text-sm">
+                    <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+                
+                <p className="text-xs text-gray-500 mt-1">
+                  Entrez les 8 caractères de l'ID pour traiter le paiement automatiquement
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
