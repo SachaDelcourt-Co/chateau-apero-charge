@@ -99,7 +99,7 @@ const RefundPage: React.FC = () => {
           
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
             <p className="font-medium">Information importante</p>
-            <p>Des frais de traitement de 1,5€ seront déduits du montant de votre remboursement.</p>
+            <p>Des frais de traitement de 2€ seront déduits du montant de votre remboursement.</p>
           </div>
           
           <form onSubmit={handleSubmit} className="space-y-4">
