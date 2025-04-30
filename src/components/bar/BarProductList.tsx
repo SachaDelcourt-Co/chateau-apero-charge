@@ -85,7 +85,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
   // Get appropriate icon based on product category
   const getCategoryIcon = (product: BarProduct) => {
     const category = product.category?.toLowerCase() || "";
-    const props = { className: "h-3 w-3 mr-1" };
+    const props = { className: "h-4 w-4 mr-1.5" };
     
     if (product.is_return || product.is_deposit) {
       return null; // No icon for returns/deposits
@@ -97,7 +97,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
       case 'vin':
         return <Wine {...props} />;
       case 'cocktail':
-        return <GlassWater {...props} />; // Replaced Cocktail with GlassWater
+        return <GlassWater {...props} />; 
       case 'soft':
         return <CupSoda {...props} />;
       default:
@@ -106,20 +106,20 @@ export const BarProductList: React.FC<BarProductListProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5 sm:gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       {products.map(product => (
         <Button
           key={product.id}
-          className={`h-auto py-1.5 px-1 sm:py-2 sm:px-1.5 md:py-2 md:px-2 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
+          className={`h-auto min-h-[80px] py-3 px-2 flex flex-col items-center justify-center ${getButtonColor(product)} ${getTextColor(product)}`}
           onClick={() => onAddProduct(product)}
         >
-          <span className="text-xs sm:text-sm md:text-base font-medium text-center line-clamp-1">
+          <span className="text-sm sm:text-base md:text-lg font-medium text-center line-clamp-2 mb-1">
             {product.name}
           </span>
-          <div className="flex items-center mt-0.5">
+          <div className="flex items-center mt-1">
             {getCategoryIcon(product)}
-            <Euro className="h-3 w-3 mr-1" />
-            <span className="text-xs sm:text-sm">{product.price.toFixed(2)}</span>
+            <Euro className="h-4 w-4 mr-1" />
+            <span className="text-sm sm:text-base font-bold">{product.price.toFixed(2)}</span>
           </div>
         </Button>
       ))}

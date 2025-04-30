@@ -32,9 +32,9 @@ const BarPage: React.FC = () => {
   
   return (
     <ChateauBackground className="p-2 md:p-4 min-h-screen">
-      <div className="container mx-auto max-w-5xl">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className={`text-2xl ${isMobile ? "" : "md:text-4xl"} font-dancing text-white`}>
+      <div className="container mx-auto max-w-6xl">
+        <div className="flex justify-between items-center mb-3">
+          <h1 className={`text-2xl ${isMobile ? "" : "md:text-3xl"} font-dancing text-white`}>
             Les apéros du château
           </h1>
           <div className="flex items-center space-x-2">
@@ -54,7 +54,7 @@ const BarPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <h2 className="text-lg md:text-2xl text-white text-center mb-3 md:mb-6">
+        <h2 className="text-lg md:text-xl text-white text-center mb-2">
           Système de Bar
         </h2>
         
