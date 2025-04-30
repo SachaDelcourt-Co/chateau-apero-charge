@@ -2,7 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
-import { Plus, Euro, Beer, Wine, Cocktail, CupSoda } from 'lucide-react';
+import { Plus, Euro, Beer, Wine, GlassWater, CupSoda } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Separator } from '@/components/ui/separator';
 
@@ -98,7 +98,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
       case 'vin':
         return <Wine {...props} />;
       case 'cocktail':
-        return <Cocktail {...props} />;
+        return <GlassWater {...props} />; // Replaced Cocktail with GlassWater
       case 'soft':
         return <CupSoda {...props} />;
       default:
