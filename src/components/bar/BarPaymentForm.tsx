@@ -38,34 +38,35 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: handleCardScan
+    onScan: handleCardScan,
+    // Add a unique component ID
+    componentId: 'bar-payment-form'
   });
   
   // Start NFC scanning when component mounts - with proper dependency management
   useEffect(() => {
     let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     
-    // Only start scanning if component is mounted, NFC is supported, and not already scanning
-    if (mounted && isSupported && !isScanning && !paymentSuccess) {
-      // Small delay to ensure component is fully mounted
-      const timer = setTimeout(() => {
-        if (mounted) {
+    // Only attempt to start scanning if specific conditions are met
+    // We prioritize this component for scanning since it's the payment form
+    if (mounted && isSupported && !isScanning && !paymentSuccess && !isProcessing) {
+      // Slightly longer delay to ensure main component is fully mounted
+      timer = setTimeout(() => {
+        if (mounted && !isScanning && !paymentSuccess) {
+          console.log('Payment form starting NFC scan');
           startScan().catch(err => console.error('Failed to start NFC scan:', err));
         }
-      }, 500);
-      
-      return () => {
-        mounted = false;
-        clearTimeout(timer);
-      };
+      }, 1500);
     }
     
     // Cleanup function to stop scanning when the component unmounts
     return () => {
       mounted = false;
+      if (timer) clearTimeout(timer);
       stopScan();
     };
-  }, [isSupported, isScanning, startScan, stopScan, paymentSuccess]);
+  }, [isSupported, isScanning, startScan, stopScan, paymentSuccess, isProcessing]);
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);

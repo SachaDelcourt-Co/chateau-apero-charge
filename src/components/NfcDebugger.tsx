@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Scan, Bug, AlertCircle, X } from 'lucide-react';
@@ -6,17 +6,68 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
+import { useNfc } from '@/hooks/use-nfc';
 
 export function NfcDebugger() {
   const [isOpen, setIsOpen] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
   const [lastRecords, setLastRecords] = useState<any[]>([]);
   const [lastSerialNumber, setLastSerialNumber] = useState<string | null>(null);
   
+  // Use the global NFC hook to avoid conflicts with other components
+  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+    componentId: 'nfc-debugger',
+    onScan: (id) => {
+      console.log('NFC Debugger received ID:', id);
+      // We don't need to do anything with the ID in the debugger
+    }
+  });
+  
+  // Custom handler for NFC reading events when this component scans
+  const handleNfcReading = (event: any) => {
+    console.log('NFC Debugger reading event:', event);
+    
+    // Extract and set serial number
+    if (event.serialNumber) {
+      setLastSerialNumber(event.serialNumber);
+    }
+    
+    // Process NDEF records
+    if (event.message && event.message.records) {
+      const recordsData = event.message.records.map((record: any) => {
+        try {
+          let decodedData = "Cannot decode";
+          if (record.data) {
+            try {
+              const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+              decodedData = textDecoder.decode(record.data);
+            } catch (e) {
+              decodedData = "Decode error: " + (e as Error).message;
+            }
+          }
+          
+          return {
+            recordType: record.recordType,
+            mediaType: record.mediaType,
+            id: record.id,
+            encoding: record.encoding,
+            lang: record.lang,
+            decodedData
+          };
+        } catch (error) {
+          return { error: (error as Error).message, record };
+        }
+      });
+      
+      setLastRecords(recordsData);
+    }
+  };
+  
   // Override console.log to capture NFC-related logs
   const originalConsoleLog = console.log;
-  React.useEffect(() => {
+  useEffect(() => {
+    if (!isOpen) return;
+    
     console.log = (...args: any[]) => {
       originalConsoleLog(...args);
       const message = args.map(arg => 
@@ -31,94 +82,73 @@ export function NfcDebugger() {
     return () => {
       console.log = originalConsoleLog;
     };
-  }, []);
+  }, [isOpen]);
   
-  const startNfcScan = async () => {
-    if (!('NDEFReader' in window)) {
-      toast({
-        title: "NFC non supporté",
-        description: "Votre navigateur ne supporte pas la lecture NFC",
-        variant: "destructive"
-      });
-      return;
-    }
+  // Add custom event handler when scanning is active
+  useEffect(() => {
+    if (!isScanning || !isOpen) return;
     
-    try {
-      setIsScanning(true);
-      setLastRecords([]);
-      setLastSerialNumber(null);
-      
-      // @ts-ignore - TypeScript might not have NDEFReader in its types yet
-      const reader = new NDEFReader();
-      
-      await reader.scan();
-      
+    // @ts-ignore - Access global NDEFReader instance
+    const addHandlers = () => {
+      // Add our custom event handler to capture readings
+      document.addEventListener('reading', handleNfcReading);
+    };
+    
+    // Small delay to ensure the reader is set up
+    const timer = setTimeout(addHandlers, 500);
+    
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('reading', handleNfcReading);
+    };
+  }, [isScanning, isOpen]);
+  
+  const toggleNfcScan = async () => {
+    if (isScanning) {
+      stopScan();
       toast({
-        title: "Scan NFC activé",
-        description: "Approchez une carte NFC pour scanner"
+        title: "Scan NFC arrêté",
+        description: "Le scan NFC a été arrêté"
       });
-      
-      reader.addEventListener("reading", ({ message, serialNumber }: any) => {
-        setLastSerialNumber(serialNumber);
-        
-        if (message && message.records) {
-          const recordsData = message.records.map((record: any) => {
-            try {
-              let decodedData = "Cannot decode";
-              if (record.data) {
-                try {
-                  const textDecoder = new TextDecoder(record.encoding || 'utf-8');
-                  decodedData = textDecoder.decode(record.data);
-                } catch (e) {
-                  decodedData = "Decode error: " + (e as Error).message;
-                }
-              }
-              
-              return {
-                recordType: record.recordType,
-                mediaType: record.mediaType,
-                id: record.id,
-                encoding: record.encoding,
-                lang: record.lang,
-                decodedData
-              };
-            } catch (error) {
-              return { error: (error as Error).message, record };
-            }
-          });
-          
-          setLastRecords(recordsData);
-        }
-      });
-      
-      reader.addEventListener("error", (error: any) => {
-        console.error("NFC reading error:", error);
+    } else {
+      if (!isSupported) {
         toast({
-          title: "Erreur NFC",
-          description: error.message || "Une erreur est survenue lors de la lecture NFC",
+          title: "NFC non supporté",
+          description: "Votre navigateur ne supporte pas la lecture NFC",
           variant: "destructive"
         });
-        setIsScanning(false);
-      });
+        return;
+      }
       
-    } catch (error) {
-      console.error("Error starting NFC scan:", error);
-      toast({
-        title: "Erreur NFC",
-        description: (error as Error)?.message || "Impossible d'activer le scan NFC",
-        variant: "destructive"
-      });
-      setIsScanning(false);
+      try {
+        // Clear previous records
+        setLastRecords([]);
+        setLastSerialNumber(null);
+        
+        // Start NFC scanning
+        const success = await startScan();
+        
+        if (success) {
+          toast({
+            title: "Scan NFC activé",
+            description: "Approchez une carte NFC pour scanner"
+          });
+        } else {
+          toast({
+            title: "NFC utilisé par une autre partie de l'application",
+            description: "Impossible de démarrer le scan NFC pour le débogueur",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error("Error starting NFC scan:", error);
+        toast({
+          title: "Erreur NFC",
+          description: (error as Error)?.message || "Impossible d'activer le scan NFC",
+          variant: "destructive"
+        });
+      }
     }
-  };
-  
-  const stopNfcScan = () => {
-    setIsScanning(false);
-    // In a real implementation, we would abort the controller
-    toast({
-      title: "Scan NFC arrêté",
-      description: "Le scan NFC a été arrêté"
-    });
   };
   
   const clearLogs = () => {
@@ -155,7 +185,7 @@ export function NfcDebugger() {
       <CardContent className="flex flex-col flex-grow p-3 overflow-hidden">
         <div className="flex space-x-2 mb-3">
           <Button 
-            onClick={isScanning ? stopNfcScan : startNfcScan}
+            onClick={toggleNfcScan}
             variant={isScanning ? "destructive" : "default"}
             size="sm"
             className="flex-grow"

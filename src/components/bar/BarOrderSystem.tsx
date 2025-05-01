@@ -30,7 +30,9 @@ export const BarOrderSystem: React.FC = () => {
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: handleCardScan
+    onScan: handleCardScan,
+    // Add a unique component ID
+    componentId: 'bar-order-system'
   });
 
   // Définir l'ordre des catégories
@@ -66,18 +68,23 @@ export const BarOrderSystem: React.FC = () => {
   
   // Start NFC scanning in a separate effect to avoid dependency issues
   useEffect(() => {
-    // Only start scanning if supported and not already scanning
-    if (isSupported && !isScanning && !isLoading) {
+    let mounted = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    
+    // Only start scanning if supported, not already scanning, component is mounted and not loading
+    if (mounted && isSupported && !isScanning && !isLoading) {
       // Small delay to ensure component is fully mounted
-      const timer = setTimeout(() => {
-        startScan().catch(console.error);
-      }, 500);
-      
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (mounted && !isScanning) {
+          startScan().catch(console.error);
+        }
+      }, 1000); // Longer delay to ensure other components have time to initialize
     }
     
-    // Cleanup: stop scanning when component unmounts
+    // Cleanup: clear timer and stop scanning when component unmounts
     return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
       stopScan();
     };
   }, [isSupported, isScanning, isLoading, startScan, stopScan]);
