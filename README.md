@@ -1,73 +1,124 @@
-# Welcome to your Lovable project
+# Les Apéros du Château - Cashless Payment System
 
-## Project info
+A comprehensive web application for managing a cashless payment system for "Les Apéros du Château" events. This system allows for managing prepaid cards, processing bar orders, recharging card balances, and handling refund requests.
 
-**URL**: https://lovable.dev/projects/62eed13d-4d72-4a00-86ca-69e1ba0ed8cc
+## 🍸 Project Overview
 
-## How can I edit this code?
+This application provides a complete solution for managing cashless payments at events, with features designed for both customers and staff:
 
-There are several ways of editing your application.
+### Key Features
 
-**Use Lovable**
+- **Card Management**: Check balance with unique 8-character card IDs
+- **Payment & Recharge**: Multiple ways to add funds to cards (Stripe, cash, card)
+- **Bar Order System**: Optimized interface for bartenders to quickly process orders
+- **Refund System**: Process refund requests with proper tracking
+- **Admin Dashboard**: System statistics, transaction data, and management tools
+- **Role-based Access**: Different interfaces for admin, bar staff, and recharge staff
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/62eed13d-4d72-4a00-86ca-69e1ba0ed8cc) and start prompting.
+## 🛠️ Technology Stack
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Frontend**: React with TypeScript, using Vite as the build tool
+- **UI Components**: Shadcn UI (built on Radix UI) with Tailwind CSS
+- **Routing**: React Router for navigation
+- **State Management**: React Hooks and Context API
+- **Backend**: Supabase for database, authentication, and serverless functions
+- **Payment Processing**: Stripe integration
 
-**Use your preferred IDE**
+## 🚀 Getting Started
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Supabase account (for database and authentication)
+- Stripe account (for payment processing)
 
-Follow these steps:
+### Installation
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+# Clone the repository
+git clone [repository-url]
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to the project directory
+cd chateau-apero-charge
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## 🏗️ Project Structure
+├── src/ # Source code
+│ ├── api/ # API integrations
+│ ├── assets/ # Static assets
+│ ├── components/ # Reusable UI components
+│ ├── hooks/ # Custom React hooks
+│ ├── lib/ # Utility functions and helpers
+│ ├── pages/ # Application pages
+│ └── integrations/ # Third-party integrations
+├── supabase/ # Supabase configuration and edge functions
+│ ├── functions/ # Serverless edge functions
+│ │ ├── create-checkout-session/ # Stripe checkout creation
+│ │ └── stripe-webhook/ # Stripe webhook handler
+└── public/ # Public assets
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
 
-**Use GitHub Codespaces**
+## 🔄 User Flows
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Customer Flow
+1. Enter card ID on the home page
+2. View current balance
+3. Recharge card via Stripe payment
+4. Request a refund through the form
 
-## What technologies are used for this project?
+### Bar Staff Flow
+1. Log in with bar role credentials
+2. Access the bar order system
+3. Select products for a customer's order
+4. Enter customer's card ID to process payment
 
-This project is built with:
+### Recharge Staff Flow
+1. Log in with recharge role credentials
+2. Access the recharge page
+3. Enter card ID and amount to add
+4. Record payment method (card/cash)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Admin Flow
+1. Log in with admin credentials
+2. Access all features (bar, recharge, dashboard)
+3. View system statistics and monitor card balances
+4. Manage user accounts
 
-## How can I deploy this project?
+## 📊 Database Structure
 
-Simply open [Lovable](https://lovable.dev/projects/62eed13d-4d72-4a00-86ca-69e1ba0ed8cc) and click on Share -> Publish.
+The application uses Supabase with the following main tables:
 
-## Can I connect a custom domain to my Lovable project?
+- **table_cards**: Card information including ID and balance
+- **bar_products**: Products available for purchase
+- **bar_orders**: Completed orders with total amount
+- **bar_order_items**: Individual items in each order
+- **paiements**: Transaction history for card recharges
+- **refunds**: Refund requests with user details
+- **profiles**: User profiles with role information
 
-Yes it is!
+## 🔒 Authentication & Authorization
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+The system implements role-based access control with different user types:
+- **Admin**: Full access to all features
+- **Bar**: Access to the bar ordering system
+- **Recharge**: Access to manual card recharge functionality
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## 🤝 Contributing
+
+Please read our contribution guidelines before submitting pull requests.
+
+## 📝 License
+
+[License information]
+
+## 🔗 Additional Resources
+
+- [Supabase Documentation](https://supabase.io/docs)
+- [Stripe Documentation](https://stripe.com/docs)
+- [React Documentation](https://reactjs.org/docs)

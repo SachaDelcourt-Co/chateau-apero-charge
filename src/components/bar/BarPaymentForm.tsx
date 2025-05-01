@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarOrder, createBarOrder, getTableCardById } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro } from 'lucide-react';
+import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useNfc } from '@/hooks/use-nfc';
 
 interface BarPaymentFormProps {
   order: BarOrder;
@@ -26,10 +26,31 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const [cardBalance, setCardBalance] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  
+  // Initialize NFC hook with a validation function and scan handler
+  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+    // Validate that ID is 8 characters long
+    validateId: (id) => id.length === 8,
+    // Handle scanned ID
+    onScan: (id) => {
+      setCardId(id);
+      handlePaymentWithId(id);
+    }
+  });
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
     setErrorMessage(null); // Clear any previous errors
+  };
+
+  const handlePaymentWithId = async (id: string) => {
+    // Create a synthetic form event
+    const syntheticEvent = {
+      preventDefault: () => {}
+    } as React.FormEvent;
+    
+    // Call the submit handler with the ID already set
+    await handleSubmit(syntheticEvent);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -172,6 +193,17 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                     />
                   </div>
                 </div>
+                
+                <Button
+                  type="button"
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "outline"}
+                  disabled={isProcessing || !isSupported}
+                  className="w-full"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                </Button>
                 
                 {errorMessage && (
                   <div className="bg-red-100 text-red-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base">

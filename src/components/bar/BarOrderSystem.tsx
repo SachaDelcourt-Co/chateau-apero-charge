@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, CreditCard, AlertCircle } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useNfc } from '@/hooks/use-nfc';
 
 export const BarOrderSystem: React.FC = () => {
   const [products, setProducts] = useState<BarProduct[]>([]);
@@ -16,6 +18,17 @@ export const BarOrderSystem: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
+
+  // Initialize NFC hook with a validation function and scan handler
+  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+    // Validate that ID is 8 characters long
+    validateId: (id) => id.length === 8,
+    // Handle scanned ID
+    onScan: (id) => {
+      setCardId(id);
+      processPayment(id);
+    }
+  });
 
   // Définir l'ordre des catégories
   const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
@@ -289,7 +302,7 @@ export const BarOrderSystem: React.FC = () => {
                 <label htmlFor="card-id" className="block text-sm font-medium mb-1">
                   ID de la carte (8 caractères)
                 </label>
-                <div className="relative">
+                <div className="relative mb-2">
                   <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input 
                     id="card-id"
@@ -301,6 +314,16 @@ export const BarOrderSystem: React.FC = () => {
                     disabled={isProcessing || orderItems.length === 0}
                   />
                 </div>
+                
+                <Button
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "outline"}
+                  disabled={isProcessing || orderItems.length === 0 || !isSupported}
+                  className="w-full mb-2"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                </Button>
                 
                 {isProcessing && (
                   <div className="mt-2 flex items-center justify-center">
@@ -317,7 +340,7 @@ export const BarOrderSystem: React.FC = () => {
                 )}
                 
                 <p className="text-xs text-gray-500 mt-1">
-                  Entrez les 8 caractères de l'ID pour traiter le paiement automatiquement
+                  Entrez les 8 caractères de l'ID ou utilisez le scanner NFC pour traiter le paiement automatiquement
                 </p>
               </div>
             </div>
