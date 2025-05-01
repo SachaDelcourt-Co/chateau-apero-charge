@@ -1,4 +1,3 @@
-
 import React from 'react';
 import ChateauBackground from '@/components/ChateauBackground';
 import { BarOrderSystem } from '@/components/bar/BarOrderSystem';
@@ -7,11 +6,15 @@ import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { NfcDebugger } from '@/components/NfcDebugger';
 
 const BarPage: React.FC = () => {
   const isMobile = useIsMobile();
   const { signOut, email } = useAuth();
   const { toast } = useToast();
+  
+  // Check if we're in development mode
+  const isDevelopment = import.meta.env.MODE === 'development';
   
   const handleLogout = async () => {
     try {
@@ -59,6 +62,9 @@ const BarPage: React.FC = () => {
         </h2>
         
         <BarOrderSystem />
+        
+        {/* Show NFC debugger only in development mode */}
+        {isDevelopment && <NfcDebugger />}
       </div>
     </ChateauBackground>
   );

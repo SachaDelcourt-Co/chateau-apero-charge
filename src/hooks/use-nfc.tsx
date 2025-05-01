@@ -25,6 +25,28 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       }
     };
   }, []);
+
+  // Helper function to extract the ID from text content
+  const extractIdFromText = (text: string): string | null => {
+    // First, try to extract an exact 8-character alphanumeric ID if it exists in the text
+    const idMatch = text.match(/[a-zA-Z0-9]{8}/);
+    if (idMatch) {
+      return idMatch[0];
+    }
+    
+    // If the text itself is exactly 8 characters and alphanumeric, use it
+    if (/^[a-zA-Z0-9]{8}$/.test(text)) {
+      return text;
+    }
+    
+    // If the text is shorter than 8 characters but alphanumeric, it might be padded
+    if (text.length < 8 && /^[a-zA-Z0-9]+$/.test(text)) {
+      // Pad with zeros if needed (common for some card formats)
+      return text.padStart(8, '0');
+    }
+    
+    return null;
+  };
   
   const startScan = useCallback(async () => {
     if (!isSupported) {
@@ -55,32 +77,70 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       
       reader.addEventListener("reading", ({ message, serialNumber }: any) => {
         try {
-          // Try to read from serialNumber first if available
+          // First priority: Try to read from NDEF message records
+          if (message && message.records) {
+            console.log("NFC message records:", message.records);
+            
+            for (const record of message.records) {
+              let extractedId = null;
+              
+              // Try to decode the record based on its type
+              if (record.recordType === "text") {
+                const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+                let text = textDecoder.decode(record.data);
+                
+                // Some text records have language codes or other metadata at the beginning
+                // Remove the first character if it's not alphanumeric
+                if (text.length > 0 && !/[a-zA-Z0-9]/.test(text[0])) {
+                  text = text.substring(1);
+                }
+                
+                console.log("Decoded text from NFC:", text);
+                extractedId = extractIdFromText(text);
+              } 
+              else if (record.recordType === "url") {
+                const textDecoder = new TextDecoder();
+                const url = textDecoder.decode(record.data);
+                console.log("Decoded URL from NFC:", url);
+                
+                // Try to extract ID from URL (it might be in the path or as a parameter)
+                const urlMatch = url.match(/[a-zA-Z0-9]{8}/);
+                if (urlMatch) {
+                  extractedId = urlMatch[0];
+                }
+              }
+              else if (record.recordType === "unknown" || record.recordType === "") {
+                // For unknown types, try to decode as plain text
+                const textDecoder = new TextDecoder();
+                const data = textDecoder.decode(record.data);
+                console.log("Decoded unknown data from NFC:", data);
+                extractedId = extractIdFromText(data);
+              }
+              
+              // If we found a valid ID, use it
+              if (extractedId && (!validateId || validateId(extractedId))) {
+                console.log("Valid ID extracted from NFC payload:", extractedId);
+                setLastScannedId(extractedId);
+                if (onScan) onScan(extractedId);
+                return;
+              }
+            }
+          }
+          
+          // Second priority: Try with serialNumber as fallback
           if (serialNumber) {
+            console.log("NFC serial number:", serialNumber);
+            // Try to extract ID from serial number
             const id = serialNumber.substring(0, 8);
             if (!validateId || validateId(id)) {
+              console.log("Using serial number as ID:", id);
               setLastScannedId(id);
               if (onScan) onScan(id);
               return;
             }
           }
           
-          // Try to read from NDEF records if serialNumber didn't work
-          if (message && message.records) {
-            for (const record of message.records) {
-              if (record.recordType === "text") {
-                const textDecoder = new TextDecoder();
-                const text = textDecoder.decode(record.data);
-                
-                if (!validateId || validateId(text)) {
-                  setLastScannedId(text);
-                  if (onScan) onScan(text);
-                  return;
-                }
-              }
-            }
-          }
-          
+          // If we made it here, we couldn't find a valid ID
           throw new Error("Format de carte non valide");
         } catch (error) {
           console.error("Error reading NFC card:", error);
