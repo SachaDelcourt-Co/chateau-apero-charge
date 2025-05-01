@@ -15,34 +15,46 @@ export function NfcDebugger() {
   const [lastSerialNumber, setLastSerialNumber] = useState<string | null>(null);
   
   // Use the global NFC hook to avoid conflicts with other components
-  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+  const { isScanning, startScan, stopScan, isSupported, lastScannedId } = useNfc({
     componentId: 'nfc-debugger',
     onScan: (id) => {
       console.log('NFC Debugger received ID:', id);
+      addLog(`Card ID scanned: ${id}`);
       // We don't need to do anything with the ID in the debugger
     }
   });
   
+  const addLog = (message: string) => {
+    const timestamp = new Date().toISOString().split('T')[1].slice(0, 8);
+    setLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+  
   // Custom handler for NFC reading events when this component scans
   const handleNfcReading = (event: any) => {
     console.log('NFC Debugger reading event:', event);
+    addLog('NFC reading event detected');
     
     // Extract and set serial number
     if (event.serialNumber) {
       setLastSerialNumber(event.serialNumber);
+      addLog(`Serial number: ${event.serialNumber}`);
     }
     
     // Process NDEF records
     if (event.message && event.message.records) {
-      const recordsData = event.message.records.map((record: any) => {
+      addLog(`Found ${event.message.records.length} record(s)`);
+      
+      const recordsData = event.message.records.map((record: any, index: number) => {
         try {
           let decodedData = "Cannot decode";
           if (record.data) {
             try {
               const textDecoder = new TextDecoder(record.encoding || 'utf-8');
               decodedData = textDecoder.decode(record.data);
+              addLog(`Record ${index} decoded data: ${decodedData}`);
             } catch (e) {
               decodedData = "Decode error: " + (e as Error).message;
+              addLog(`Record ${index} decode error: ${(e as Error).message}`);
             }
           }
           
@@ -55,6 +67,7 @@ export function NfcDebugger() {
             decodedData
           };
         } catch (error) {
+          addLog(`Error processing record ${index}: ${(error as Error).message}`);
           return { error: (error as Error).message, record };
         }
       });
@@ -92,6 +105,7 @@ export function NfcDebugger() {
     const addHandlers = () => {
       // Add our custom event handler to capture readings
       document.addEventListener('reading', handleNfcReading);
+      addLog('Registered NFC reading event handler');
     };
     
     // Small delay to ensure the reader is set up
@@ -103,15 +117,24 @@ export function NfcDebugger() {
     };
   }, [isScanning, isOpen]);
   
+  // Display UI status updates when the lastScannedId changes
+  useEffect(() => {
+    if (lastScannedId && isOpen) {
+      addLog(`Last scanned ID from hook: ${lastScannedId}`);
+    }
+  }, [lastScannedId, isOpen]);
+  
   const toggleNfcScan = async () => {
     if (isScanning) {
       stopScan();
+      addLog('NFC scan stopped manually');
       toast({
         title: "Scan NFC arrêté",
         description: "Le scan NFC a été arrêté"
       });
     } else {
       if (!isSupported) {
+        addLog('NFC not supported by this browser/device');
         toast({
           title: "NFC non supporté",
           description: "Votre navigateur ne supporte pas la lecture NFC",
@@ -124,16 +147,19 @@ export function NfcDebugger() {
         // Clear previous records
         setLastRecords([]);
         setLastSerialNumber(null);
+        addLog('Attempting to start NFC scan...');
         
         // Start NFC scanning
         const success = await startScan();
         
         if (success) {
+          addLog('NFC scan started successfully');
           toast({
             title: "Scan NFC activé",
             description: "Approchez une carte NFC pour scanner"
           });
         } else {
+          addLog('Failed to start NFC scan - in use by another component');
           toast({
             title: "NFC utilisé par une autre partie de l'application",
             description: "Impossible de démarrer le scan NFC pour le débogueur",
@@ -142,6 +168,7 @@ export function NfcDebugger() {
         }
       } catch (error) {
         console.error("Error starting NFC scan:", error);
+        addLog(`Error starting NFC scan: ${(error as Error)?.message}`);
         toast({
           title: "Erreur NFC",
           description: (error as Error)?.message || "Impossible d'activer le scan NFC",

@@ -29,9 +29,16 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   
   // Handler for when a card is scanned
   const handleCardScan = useCallback((id: string) => {
+    console.log('Card scanned in BarPaymentForm:', id);
+    
+    // Update the UI state
     setCardId(id);
-    handlePaymentWithId(id);
-  }, []);
+    
+    // Don't process immediately if already processing
+    if (!isProcessing) {
+      handlePaymentWithId(id);
+    }
+  }, [isProcessing]);
   
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
@@ -76,6 +83,8 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const handlePaymentWithId = async (id: string) => {
     // Prevent multiple submissions
     if (isProcessing) return;
+    
+    console.log('Processing payment with id:', id);
     
     // Create a synthetic form event
     const syntheticEvent = {

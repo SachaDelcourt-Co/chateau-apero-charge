@@ -43,25 +43,39 @@ export const useNfc = (options: UseNfcOptions = {}) => {
       let id = '';
       
       // Extract the payload from the NFC tag
-      for (const record of event.message.records) {
-        if (record.recordType === 'text') {
-          const textDecoder = new TextDecoder(record.encoding || 'utf-8');
-          id = textDecoder.decode(record.data);
-        } else {
-          // Try to decode the data as a string
-          id = decoder.decode(record.data);
-        }
-        
-        // Normalize and validate the ID
-        id = id.trim();
-        
-        // Check if this ID is valid and call the onScan callback
-        if (id && (!validateIdRef.current || validateIdRef.current(id))) {
-          setLastScannedId(id);
-          if (onScanRef.current) {
-            onScanRef.current(id);
+      if (event.message && event.message.records) {
+        for (const record of event.message.records) {
+          try {
+            if (record.recordType === 'text') {
+              const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+              id = textDecoder.decode(record.data);
+            } else {
+              // Try to decode the data as a string
+              id = decoder.decode(record.data);
+            }
+            
+            // Normalize and validate the ID
+            id = id.trim();
+            
+            // Check if this ID is valid
+            if (id && (!validateIdRef.current || validateIdRef.current(id))) {
+              console.log(`NFC card scanned with ID: ${id} by component ${componentIdRef.current}`);
+              setLastScannedId(id);
+              
+              // Ensure we call the onScan handler
+              if (onScanRef.current) {
+                // Use setTimeout to ensure this runs outside the current execution context
+                setTimeout(() => {
+                  if (onScanRef.current) {
+                    onScanRef.current(id);
+                  }
+                }, 0);
+              }
+              break;
+            }
+          } catch (decodeError) {
+            console.error('Error decoding NFC record:', decodeError);
           }
-          break;
         }
       }
     } catch (error) {
@@ -122,6 +136,7 @@ export const useNfc = (options: UseNfcOptions = {}) => {
       reader.addEventListener('reading', handleNfcReading);
       reader.addEventListener('error', handleNfcError);
       
+      console.log(`NFC scan started by component ${componentIdRef.current}`);
       return true;
     } catch (error) {
       console.error('Error starting NFC scan:', error);

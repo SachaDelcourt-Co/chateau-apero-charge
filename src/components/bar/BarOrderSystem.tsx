@@ -21,9 +21,20 @@ export const BarOrderSystem: React.FC = () => {
 
   // Process payment when a card ID is received
   const handleCardScan = useCallback((id: string) => {
+    console.log('Card scanned in BarOrderSystem:', id);
+    // Update the UI with the card ID
     setCardId(id);
-    processPayment(id);
-  }, []);
+    
+    // Only process payment if we have order items
+    if (orderItems.length > 0) {
+      processPayment(id);
+    } else {
+      toast({
+        title: "Carte détectée",
+        description: `Carte ${id} détectée. Ajoutez des produits pour compléter la commande.`,
+      });
+    }
+  }, [orderItems]);
 
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
@@ -76,7 +87,8 @@ export const BarOrderSystem: React.FC = () => {
       // Small delay to ensure component is fully mounted
       timer = setTimeout(() => {
         if (mounted && !isScanning) {
-          startScan().catch(console.error);
+          console.log('Starting NFC scan in BarOrderSystem');
+          startScan().catch(error => console.error('Failed to start NFC scan:', error));
         }
       }, 1000); // Longer delay to ensure other components have time to initialize
     }
