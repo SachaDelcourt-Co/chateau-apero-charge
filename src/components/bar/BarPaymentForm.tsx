@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,28 +27,45 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
+  // Handler for when a card is scanned
+  const handleCardScan = useCallback((id: string) => {
+    setCardId(id);
+    handlePaymentWithId(id);
+  }, []);
+  
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: (id) => {
-      setCardId(id);
-      handlePaymentWithId(id);
-    }
+    onScan: handleCardScan
   });
   
-  // Start NFC scanning when component mounts
+  // Start NFC scanning when component mounts - with proper dependency management
   useEffect(() => {
-    if (isSupported) {
-      startScan();
+    let mounted = true;
+    
+    // Only start scanning if component is mounted, NFC is supported, and not already scanning
+    if (mounted && isSupported && !isScanning && !paymentSuccess) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        if (mounted) {
+          startScan().catch(err => console.error('Failed to start NFC scan:', err));
+        }
+      }, 500);
+      
+      return () => {
+        mounted = false;
+        clearTimeout(timer);
+      };
     }
     
-    // Cleanup: stop scanning when component unmounts
+    // Cleanup function to stop scanning when the component unmounts
     return () => {
+      mounted = false;
       stopScan();
     };
-  }, [isSupported, startScan, stopScan]);
+  }, [isSupported, isScanning, startScan, stopScan, paymentSuccess]);
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
@@ -56,6 +73,9 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   };
 
   const handlePaymentWithId = async (id: string) => {
+    // Prevent multiple submissions
+    if (isProcessing) return;
+    
     // Create a synthetic form event
     const syntheticEvent = {
       preventDefault: () => {}
@@ -67,6 +87,10 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isProcessing) return;
+    
     setIsProcessing(true);
     setErrorMessage(null);
 
@@ -101,6 +125,9 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       if (orderResult.success) {
         setPaymentSuccess(true);
+        // Stop scanning when payment is successful
+        stopScan();
+        
         toast({
           title: "Paiement réussi",
           description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - order.total_amount).toFixed(2)}€`

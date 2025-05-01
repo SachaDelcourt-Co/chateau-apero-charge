@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
@@ -19,21 +19,24 @@ export const BarOrderSystem: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
+  // Process payment when a card ID is received
+  const handleCardScan = useCallback((id: string) => {
+    setCardId(id);
+    processPayment(id);
+  }, []);
+
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: (id) => {
-      setCardId(id);
-      processPayment(id);
-    }
+    onScan: handleCardScan
   });
 
   // Définir l'ordre des catégories
   const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
 
-  // Load products on component mount and start NFC scanning
+  // Load products on component mount
   useEffect(() => {
     const loadProducts = async () => {
       setIsLoading(true);
@@ -59,17 +62,25 @@ export const BarOrderSystem: React.FC = () => {
     };
     
     loadProducts();
-    
-    // Start NFC scanning automatically when component mounts
-    if (isSupported) {
-      startScan();
+  }, []);
+  
+  // Start NFC scanning in a separate effect to avoid dependency issues
+  useEffect(() => {
+    // Only start scanning if supported and not already scanning
+    if (isSupported && !isScanning && !isLoading) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        startScan().catch(console.error);
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
     
     // Cleanup: stop scanning when component unmounts
     return () => {
       stopScan();
     };
-  }, [isSupported, startScan, stopScan]);
+  }, [isSupported, isScanning, isLoading, startScan, stopScan]);
 
   // Handle adding a product to the order
   const handleAddProduct = (product: BarProduct) => {
@@ -155,6 +166,9 @@ export const BarOrderSystem: React.FC = () => {
   };
 
   const processPayment = async (id: string) => {
+    // Prevent processing if already in progress
+    if (isProcessing) return;
+    
     if (orderItems.length === 0) {
       toast({
         title: "Commande vide",
