@@ -11,6 +11,7 @@ This application provides a complete solution for managing cashless payments at 
 - **Card Management**: Check balance with unique 8-character card IDs
 - **Payment & Recharge**: Multiple ways to add funds to cards (Stripe, cash, card)
 - **Bar Order System**: Optimized interface for bartenders to quickly process orders
+- **NFC Integration**: Automatic NFC card scanning for quick payment processing
 - **Refund System**: Process refund requests with proper tracking
 - **Admin Dashboard**: System statistics, transaction data, and management tools
 - **Role-based Access**: Different interfaces for admin, bar staff, and recharge staff
@@ -23,6 +24,7 @@ This application provides a complete solution for managing cashless payments at 
 - **State Management**: React Hooks and Context API
 - **Backend**: Supabase for database, authentication, and serverless functions
 - **Payment Processing**: Stripe integration
+- **Card Integration**: Web NFC API for contactless card reading
 
 ## 🚀 Getting Started
 
@@ -31,6 +33,10 @@ This application provides a complete solution for managing cashless payments at 
 - Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 - Supabase account (for database and authentication)
 - Stripe account (for payment processing)
+- For NFC functionality: 
+  - Android device with Chrome browser (version 89+)
+  - NFC-enabled hardware
+  - NFC cards with 8-character IDs
 
 ### Installation
 
@@ -54,6 +60,7 @@ npm run dev
 │ ├── assets/ # Static assets
 │ ├── components/ # Reusable UI components
 │ ├── hooks/ # Custom React hooks
+│ │   └── use-nfc.tsx # NFC card scanning hook
 │ ├── lib/ # Utility functions and helpers
 │ ├── pages/ # Application pages
 │ └── integrations/ # Third-party integrations
@@ -76,7 +83,8 @@ npm run dev
 1. Log in with bar role credentials
 2. Access the bar order system
 3. Select products for a customer's order
-4. Enter customer's card ID to process payment
+4. Simply hold customer's NFC card near the phone to process payment
+   (or manually enter the card ID)
 
 ### Recharge Staff Flow
 1. Log in with recharge role credentials
@@ -89,6 +97,15 @@ npm run dev
 2. Access all features (bar, recharge, dashboard)
 3. View system statistics and monitor card balances
 4. Manage user accounts
+
+## 📱 NFC Features
+
+The application uses the Web NFC API to scan NFC cards for payment:
+
+- **Always-on Scanning**: The Bar page continuously scans for NFC cards
+- **Auto-Payment Processing**: When a card is detected, payment is processed automatically
+- **Compatibility**: Works on Android devices with Chrome 89+ and NFC hardware
+- **Development Tools**: Debug mode available in development environment
 
 ## 📊 Database Structure
 

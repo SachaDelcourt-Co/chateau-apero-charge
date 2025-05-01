@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNfc } from '@/hooks/use-nfc';
@@ -33,7 +33,7 @@ export const BarOrderSystem: React.FC = () => {
   // Définir l'ordre des catégories
   const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
 
-  // Load products on component mount
+  // Load products on component mount and start NFC scanning
   useEffect(() => {
     const loadProducts = async () => {
       setIsLoading(true);
@@ -59,7 +59,17 @@ export const BarOrderSystem: React.FC = () => {
     };
     
     loadProducts();
-  }, []);
+    
+    // Start NFC scanning automatically when component mounts
+    if (isSupported) {
+      startScan();
+    }
+    
+    // Cleanup: stop scanning when component unmounts
+    return () => {
+      stopScan();
+    };
+  }, [isSupported, startScan, stopScan]);
 
   // Handle adding a product to the order
   const handleAddProduct = (product: BarProduct) => {
@@ -169,6 +179,9 @@ export const BarOrderSystem: React.FC = () => {
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       const total = calculateTotal();
+      
+      console.log("Processing payment with total:", total);
+      console.log("Order items:", orderItems);
       
       if (cardAmountFloat < total) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
@@ -315,15 +328,12 @@ export const BarOrderSystem: React.FC = () => {
                   />
                 </div>
                 
-                <Button
-                  onClick={isScanning ? stopScan : startScan}
-                  variant={isScanning ? "destructive" : "outline"}
-                  disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className="w-full mb-2"
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
-                </Button>
+                {isScanning && (
+                  <div className="bg-green-100 text-green-800 p-2 rounded-md flex items-start text-sm mb-2">
+                    <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
+                    <span>Scan NFC actif - Approchez une carte pour payer</span>
+                  </div>
+                )}
                 
                 {isProcessing && (
                   <div className="mt-2 flex items-center justify-center">
@@ -340,7 +350,7 @@ export const BarOrderSystem: React.FC = () => {
                 )}
                 
                 <p className="text-xs text-gray-500 mt-1">
-                  Entrez les 8 caractères de l'ID ou utilisez le scanner NFC pour traiter le paiement automatiquement
+                  Entrez les 8 caractères de l'ID ou approchez une carte NFC pour payer automatiquement
                 </p>
               </div>
             </div>
