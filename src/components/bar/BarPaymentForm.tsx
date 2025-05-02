@@ -36,10 +36,25 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
-    // Handle scanned ID
+    // Handle scanned ID with a forced refresh before payment
     onScan: (id) => {
+      console.log("[NFC Scan] Card scanned with ID:", id);
+      // Set card ID immediately for UI feedback
       setCardId(id);
-      handlePaymentWithId(id);
+      
+      // Force a refresh of the total amount
+      const refreshedTotal = getCurrentTotal();
+      console.log("[NFC Scan] Force refreshed total:", refreshedTotal);
+      
+      // Short delay to ensure all state updates are processed
+      setTimeout(() => {
+        // Get the latest total again after refresh
+        const finalTotal = getCurrentTotal();
+        console.log("[NFC Scan] Final total amount for payment:", finalTotal);
+        
+        // Process payment with the final current total
+        handlePaymentWithId(id);
+      }, 100);
     },
     // Provide a callback to get the latest total at scan time
     getTotalAmount: getCurrentTotal
@@ -70,7 +85,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     
-    // Always use the current total from the order prop instead of the stored state
+    // Do one final refresh to get the most current total
     const currentTotal = getCurrentTotal();
     console.log("Processing payment with total:", currentTotal);
 
@@ -95,11 +110,12 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       setCardBalance(card.amount);
 
-      // Process the order with the current total amount
+      // Process the order with the current total amount - get it one more time for absolute certainty
+      const finalTotal = getCurrentTotal();
       const orderData: BarOrder = {
         ...order,
         card_id: cardId.trim(),
-        total_amount: currentTotal, // Use the current total amount
+        total_amount: finalTotal, // Use the final total amount
         items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
       };
 

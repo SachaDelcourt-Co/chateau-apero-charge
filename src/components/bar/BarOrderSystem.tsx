@@ -24,30 +24,47 @@ export const BarOrderSystem: React.FC = () => {
   // Update currentTotal whenever orderItems change
   useEffect(() => {
     const total = calculateTotal();
-    console.log("Order items changed, recalculated total:", total);
+    console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
     setCurrentTotal(total);
   }, [orderItems]);
 
   // Calculate the total order amount
   const calculateTotal = (): number => {
-    return orderItems.reduce((total, item) => {
+    const total = orderItems.reduce((total, item) => {
       // Calculate per item considering quantity
       const itemTotal = item.price * item.quantity;
       // Subtract for returns (caution return), add for everything else
       return total + (item.is_return ? -itemTotal : itemTotal);
     }, 0);
+    
+    console.log("[Total Debug] calculateTotal called, result:", total);
+    return total;
   };
 
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
-    // Handle scanned ID
+    // Handle scanned ID with a forced refresh before payment processing
     onScan: (id) => {
+      console.log("[NFC Scan] Card scanned with ID:", id);
+      // Set card ID immediately for UI feedback
       setCardId(id);
-      // Call processPayment with the latest calculated total (not the cached total)
-      const latestTotal = calculateTotal();
-      processPayment(id, latestTotal);
+      
+      // Force refresh calculation of the total
+      const refreshedTotal = calculateTotal();
+      console.log("[NFC Scan] Force refreshed total:", refreshedTotal);
+      setCurrentTotal(refreshedTotal);
+      
+      // Use setTimeout to ensure the refresh has been processed
+      setTimeout(() => {
+        // Get the latest total again after refresh
+        const finalTotal = calculateTotal();
+        console.log("[NFC Scan] Final total amount for payment:", finalTotal);
+        
+        // Process payment with the final calculated total
+        processPayment(id, finalTotal);
+      }, 100); // Short delay to ensure state updates are processed
     },
     // Provide a callback to get the latest total at scan time
     getTotalAmount: calculateTotal
@@ -173,7 +190,12 @@ export const BarOrderSystem: React.FC = () => {
     setIsProcessing(true);
     setErrorMessage(null);
     
-    console.log("Processing payment with total:", total, "Order items:", orderItems);
+    // Do one final calculation to ensure we have the absolute latest total
+    const finalTotal = calculateTotal();
+    console.log("Processing payment with total:", total, "Final calculated total:", finalTotal);
+    
+    // Always use the latest calculated total, not the one passed in
+    total = finalTotal;
 
     try {
       // Check if card exists and has sufficient balance
@@ -193,10 +215,10 @@ export const BarOrderSystem: React.FC = () => {
         return;
       }
 
-      // Process the order with the explicitly provided total
+      // Process the order with the final calculated total
       const orderData: BarOrder = {
         card_id: id.trim(),
-        total_amount: total, // Use the provided total, not a recalculated value
+        total_amount: total, // Use the latest calculated total
         items: JSON.parse(JSON.stringify(orderItems)) // Deep copy to avoid reference issues
       };
 
@@ -224,6 +246,23 @@ export const BarOrderSystem: React.FC = () => {
       setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // Handler for NFC scanning button
+  const handleNfcToggle = () => {
+    if (isScanning) {
+      stopScan();
+      toast({
+        title: "Scan NFC désactivé",
+        description: "Le scanner NFC a été désactivé"
+      });
+    } else {
+      const result = startScan();
+      if (result) {
+        // Toast already shown by the hook
+        console.log("[NFC Debug] NFC scanning started, current total:", calculateTotal());
+      }
     }
   };
 
@@ -337,14 +376,7 @@ export const BarOrderSystem: React.FC = () => {
                 </div>
                 
                 <Button
-                  onClick={() => {
-                    if (isScanning) {
-                      stopScan();
-                    } else {
-                      // We don't recalculate the total here anymore - we use the current state value
-                      startScan();
-                    }
-                  }}
+                  onClick={handleNfcToggle}
                   variant={isScanning ? "destructive" : "outline"}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
                   className="w-full mb-2"
