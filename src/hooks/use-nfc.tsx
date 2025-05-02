@@ -171,14 +171,26 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               if (extractedId && (!validateId || validateId(extractedId))) {
                 console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
+                
+                // Get the latest total amount if callback is provided
+                const latestAmount = getTotalAmount ? getTotalAmount() : null;
+                console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+                
+                // Stop scanning after successful card read
+                stopScanInternal();
+                console.log("[NFC Debug] NFC scanning stopped after successful card read");
+                
+                // Notify user that scanning has stopped
+                toast({
+                  title: "Carte détectée",
+                  description: "Le scan NFC a été désactivé après la lecture de la carte."
+                });
+                
+                // Call onScan with the extracted ID if provided
                 if (onScan) {
-                  // Get the latest total amount if callback is provided
-                  const latestAmount = getTotalAmount ? getTotalAmount() : null;
-                  console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
-                  
-                  // Call onScan with the extracted ID
                   onScan(extractedId);
                 }
+                
                 return;
               }
             }
@@ -192,14 +204,26 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
             if (!validateId || validateId(id)) {
               console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
+              
+              // Get the latest total amount if callback is provided
+              const latestAmount = getTotalAmount ? getTotalAmount() : null;
+              console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+              
+              // Stop scanning after successful card read
+              stopScanInternal();
+              console.log("[NFC Debug] NFC scanning stopped after successful card read");
+              
+              // Notify user that scanning has stopped
+              toast({
+                title: "Carte détectée",
+                description: "Le scan NFC a été désactivé après la lecture de la carte."
+              });
+              
+              // Call onScan with the ID if provided
               if (onScan) {
-                // Get the latest total amount if callback is provided
-                const latestAmount = getTotalAmount ? getTotalAmount() : null;
-                console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
-                
-                // Call onScan with the extracted ID
                 onScan(id);
               }
+              
               return;
             }
           }

@@ -93,6 +93,19 @@ export const BarOrderSystem: React.FC = () => {
     }
   }, [orderItems, isScanning, stopScan]);
 
+  // Add an effect to track scanning state changes from the useNfc hook
+  useEffect(() => {
+    console.log("[BarOrderSystem] Scanning state changed:", isScanning);
+    
+    // If scanning stopped (and it wasn't due to order modification)
+    if (!isScanning && !orderModifiedAfterScan) {
+      // Check if we have a card ID, which means a card was scanned
+      if (cardId) {
+        console.log("[BarOrderSystem] Scanning stopped after card scan, cardId:", cardId);
+      }
+    }
+  }, [isScanning, orderModifiedAfterScan, cardId]);
+
   // Définir l'ordre des catégories
   const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
 
@@ -252,11 +265,7 @@ export const BarOrderSystem: React.FC = () => {
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
         
-        // Stop scanning after successful payment
-        if (isScanning) {
-          console.log("[BarOrderSystem] Stopping NFC scan after successful payment");
-          stopScan();
-        }
+        // No need to stop scanning here as it's handled in the useNfc hook when card is scanned
         
         // Clear order state after successful payment
         setOrderItems([]);
