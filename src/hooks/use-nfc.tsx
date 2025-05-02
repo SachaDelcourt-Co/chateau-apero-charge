@@ -39,11 +39,31 @@ export const useNfc = (options: UseNfcOptions = {}) => {
   // Handle NFC reading event
   const handleNfcReading = useCallback((event: any) => {
     try {
+      console.log('Raw NFC event received:', JSON.stringify(event));
+      
+      // First try to get serial number as direct ID if available
+      if (event.serialNumber) {
+        const serialId = event.serialNumber.toString().trim();
+        console.log(`Found serial number: ${serialId}`);
+        
+        if (serialId && (!validateIdRef.current || validateIdRef.current(serialId))) {
+          console.log(`Using serial number as ID: ${serialId}`);
+          setLastScannedId(serialId);
+          
+          // Call onScan handler with the ID
+          if (onScanRef.current) {
+            onScanRef.current(serialId);
+          }
+          return;
+        }
+      }
+      
+      // Fallback: try to decode data from NDEF records
       const decoder = new TextDecoder();
       let id = '';
       
       // Extract the payload from the NFC tag
-      if (event.message && event.message.records) {
+      if (event.message && event.message.records && event.message.records.length > 0) {
         for (const record of event.message.records) {
           try {
             if (record.recordType === 'text') {
@@ -56,25 +76,37 @@ export const useNfc = (options: UseNfcOptions = {}) => {
             
             // Normalize and validate the ID
             id = id.trim();
+            console.log(`Decoded ID from record: ${id}`);
             
             // Check if this ID is valid
             if (id && (!validateIdRef.current || validateIdRef.current(id))) {
-              console.log(`NFC card scanned with ID: ${id} by component ${componentIdRef.current}`);
+              console.log(`Using decoded ID: ${id} by component ${componentIdRef.current}`);
               setLastScannedId(id);
               
               // Ensure we call the onScan handler
               if (onScanRef.current) {
-                // Use setTimeout to ensure this runs outside the current execution context
-                setTimeout(() => {
-                  if (onScanRef.current) {
-                    onScanRef.current(id);
-                  }
-                }, 0);
+                onScanRef.current(id);
               }
               break;
             }
           } catch (decodeError) {
             console.error('Error decoding NFC record:', decodeError);
+          }
+        }
+      } else {
+        console.log('No NDEF records found in the card data');
+        
+        // Try to use any available data if we couldn't find standard records
+        if (event.message && typeof event.message === 'object') {
+          // Convert any object data to string as a last resort
+          const fallbackId = JSON.stringify(event.message).substring(0, 8);
+          console.log(`Generated fallback ID: ${fallbackId}`);
+          
+          if (fallbackId && (!validateIdRef.current || validateIdRef.current(fallbackId))) {
+            setLastScannedId(fallbackId);
+            if (onScanRef.current) {
+              onScanRef.current(fallbackId);
+            }
           }
         }
       }
@@ -98,60 +130,7 @@ export const useNfc = (options: UseNfcOptions = {}) => {
     }
   }, []);
 
-  // Start NFC scanning with global manager
-  const startScan = useCallback(async () => {
-    // If NFC is not supported, don't try to start
-    if (!isSupported) {
-      return false;
-    }
-    
-    // If already scanning from this component, do nothing
-    if (isScanning && globalNfcState.activeComponentId === componentIdRef.current) {
-      return true;
-    }
-    
-    // If another component is scanning, don't interrupt
-    if (globalNfcState.isActive && globalNfcState.activeComponentId !== componentIdRef.current) {
-      console.log(`NFC already in use by component ${globalNfcState.activeComponentId}`);
-      return false;
-    }
-    
-    try {
-      // Clean up any existing reader first
-      await stopScan();
-      
-      // @ts-ignore - NDEFReader may not be recognized by TypeScript
-      const reader = new NDEFReader();
-      
-      await reader.scan();
-      
-      // Set global state
-      globalNfcState.isActive = true;
-      globalNfcState.activeComponentId = componentIdRef.current;
-      globalNfcState.reader = reader;
-      
-      setIsScanning(true);
-      
-      // Add event listeners
-      reader.addEventListener('reading', handleNfcReading);
-      reader.addEventListener('error', handleNfcError);
-      
-      console.log(`NFC scan started by component ${componentIdRef.current}`);
-      return true;
-    } catch (error) {
-      console.error('Error starting NFC scan:', error);
-      setIsScanning(false);
-      
-      // Clear global state on error
-      globalNfcState.isActive = false;
-      globalNfcState.activeComponentId = null;
-      globalNfcState.reader = null;
-      
-      return false;
-    }
-  }, [isSupported, isScanning, handleNfcReading, handleNfcError]);
-
-  // Stop NFC scanning
+  // Stop NFC scanning (define this before startScan to avoid the linter error)
   const stopScan = useCallback(() => {
     // Only stop if this component is the active one
     if (globalNfcState.activeComponentId !== componentIdRef.current && globalNfcState.isActive) {
@@ -183,6 +162,87 @@ export const useNfc = (options: UseNfcOptions = {}) => {
     setIsScanning(false);
     return true;
   }, [handleNfcReading, handleNfcError]);
+
+  // Start NFC scanning with global manager
+  const startScan = useCallback(async () => {
+    // If NFC is not supported, don't try to start
+    if (!isSupported) {
+      console.log('NFC not supported in this browser/device');
+      return false;
+    }
+    
+    // If already scanning from this component, do nothing
+    if (isScanning && globalNfcState.activeComponentId === componentIdRef.current) {
+      console.log(`NFC already scanning in component ${componentIdRef.current}`);
+      return true;
+    }
+    
+    // If another component is scanning, don't interrupt
+    if (globalNfcState.isActive && globalNfcState.activeComponentId !== componentIdRef.current) {
+      console.log(`NFC already in use by component ${globalNfcState.activeComponentId}`);
+      return false;
+    }
+    
+    try {
+      // Clean up any existing reader first
+      await stopScan();
+      
+      // @ts-ignore - NDEFReader may not be recognized by TypeScript
+      const reader = new NDEFReader();
+      
+      // First check if we have permission or need to request it
+      try {
+        // @ts-ignore - Permissions API
+        const permissionStatus = await navigator.permissions.query({ name: 'nfc' });
+        console.log(`NFC permission status: ${permissionStatus.state}`);
+        
+        if (permissionStatus.state === 'denied') {
+          console.error('NFC permission denied by user');
+          return false;
+        }
+      } catch (permError) {
+        // Permission query might not be supported, continue anyway
+        console.log('Could not query NFC permissions:', permError);
+      }
+      
+      console.log('Starting NFC scan with options...');
+      
+      // Start scanning with options
+      await reader.scan({
+        // Keep scanning active even after a tag is found
+        signal: (new AbortController()).signal
+      });
+      
+      // Set global state
+      globalNfcState.isActive = true;
+      globalNfcState.activeComponentId = componentIdRef.current;
+      globalNfcState.reader = reader;
+      
+      setIsScanning(true);
+      
+      // Add event listeners
+      reader.addEventListener('reading', handleNfcReading);
+      reader.addEventListener('error', handleNfcError);
+      
+      // Add reading event listener at window level too (helpful for debugging)
+      window.addEventListener('reading', (e) => {
+        console.log('Window-level NFC reading event:', e);
+      });
+      
+      console.log(`NFC scan started by component ${componentIdRef.current}`);
+      return true;
+    } catch (error) {
+      console.error('Error starting NFC scan:', error);
+      setIsScanning(false);
+      
+      // Clear global state on error
+      globalNfcState.isActive = false;
+      globalNfcState.activeComponentId = null;
+      globalNfcState.reader = null;
+      
+      return false;
+    }
+  }, [isSupported, isScanning, handleNfcReading, handleNfcError, stopScan]);
 
   // Cleanup on unmount
   useEffect(() => {
