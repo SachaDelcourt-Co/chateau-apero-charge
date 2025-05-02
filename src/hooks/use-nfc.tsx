@@ -12,6 +12,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
   const nfcAbortController = useRef<AbortController | null>(null);
+  const nfcReaderRef = useRef<any>(null); // Store reference to the NDEFReader
   
   // Check if NFC is supported
   useEffect(() => {
@@ -36,11 +37,31 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (nfcAbortController.current) {
-        nfcAbortController.current.abort();
-      }
+      stopScanInternal();
     };
   }, []);
+
+  // Internal function to stop scanning to avoid code duplication
+  const stopScanInternal = () => {
+    console.log('[NFC Debug] stopScanInternal called');
+    
+    // Safely abort the controller if it exists
+    if (nfcAbortController.current) {
+      try {
+        nfcAbortController.current.abort();
+        console.log('[NFC Debug] AbortController aborted successfully');
+      } catch (error) {
+        console.error('[NFC Debug] Error aborting controller:', error);
+      }
+      nfcAbortController.current = null;
+    }
+    
+    // Clear reader reference
+    nfcReaderRef.current = null;
+    
+    // Update state
+    setIsScanning(false);
+  };
 
   // Helper function to extract the ID from text content
   const extractIdFromText = (text: string): string | null => {
@@ -77,26 +98,31 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       return false;
     }
     
+    // First, ensure any existing scan is stopped properly
+    stopScanInternal();
+    
     try {
-      setIsScanning(true);
-      
-      // Create a new abort controller to be able to stop scanning
+      // Create a fresh AbortController
       nfcAbortController.current = new AbortController();
       const signal = nfcAbortController.current.signal;
       
       console.log('[NFC Debug] Creating NDEFReader instance');
       // @ts-ignore - TypeScript might not have NDEFReader in its types yet
       const reader = new NDEFReader();
+      nfcReaderRef.current = reader;
       
-      console.log('[NFC Debug] Calling reader.scan()');
-      await reader.scan({ signal });
-      
-      console.log('[NFC Debug] NFC scan started successfully');
-      toast({
-        title: "Scan NFC activé",
-        description: "Approchez une carte NFC pour scanner"
+      // Add error listener first before starting the scan
+      reader.addEventListener("error", (error: any) => {
+        console.error("[NFC Debug] NFC reading error:", error);
+        toast({
+          title: "Erreur NFC",
+          description: error.message || "Une erreur est survenue lors de la lecture NFC",
+          variant: "destructive"
+        });
+        stopScanInternal();
       });
       
+      // Add reading listener
       reader.addEventListener("reading", ({ message, serialNumber }: any) => {
         try {
           console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
@@ -191,40 +217,45 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
         }
       });
       
-      reader.addEventListener("error", (error: any) => {
-        console.error("[NFC Debug] NFC reading error:", error);
-        toast({
-          title: "Erreur NFC",
-          description: error.message || "Une erreur est survenue lors de la lecture NFC",
-          variant: "destructive"
-        });
-        setIsScanning(false);
+      console.log('[NFC Debug] Calling reader.scan() with signal');
+      // Now start the scan after setting up listeners
+      await reader.scan({ signal });
+      setIsScanning(true);
+      
+      console.log('[NFC Debug] NFC scan started successfully');
+      toast({
+        title: "Scan NFC activé",
+        description: "Approchez une carte NFC pour scanner"
       });
       
       return true;
     } catch (error) {
       console.error("[NFC Debug] Error starting NFC scan:", error);
-      toast({
-        title: "Erreur NFC",
-        description: (error as Error)?.message || "Impossible d'activer le scan NFC",
-        variant: "destructive"
-      });
-      setIsScanning(false);
+      stopScanInternal();
+      
+      // Provide user feedback
+      if ((error as Error)?.message?.includes("aborted")) {
+        toast({
+          title: "Scan NFC interrompu",
+          description: "Le scan NFC a été interrompu",
+          variant: "default"
+        });
+      } else {
+        toast({
+          title: "Erreur NFC",
+          description: (error as Error)?.message || "Impossible d'activer le scan NFC",
+          variant: "destructive"
+        });
+      }
+      
       return false;
     }
   }, [isSupported, onScan, validateId, getTotalAmount]);
   
   const stopScan = useCallback(() => {
-    console.log('[NFC Debug] stopScan called');
-    if (nfcAbortController.current) {
-      nfcAbortController.current.abort();
-      nfcAbortController.current = null;
-      setIsScanning(false);
-      console.log('[NFC Debug] NFC scan stopped successfully');
-      return true;
-    }
-    console.log('[NFC Debug] No active NFC scan to stop');
-    return false;
+    console.log('[NFC Debug] stopScan called by user');
+    stopScanInternal();
+    return true;
   }, []);
   
   return {

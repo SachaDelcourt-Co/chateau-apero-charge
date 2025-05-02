@@ -263,21 +263,39 @@ export const BarOrderSystem: React.FC = () => {
   };
 
   // Handler for NFC scanning button
-  const handleNfcToggle = () => {
-    if (isScanning) {
-      stopScan();
-      toast({
-        title: "Scan NFC désactivé",
-        description: "Le scanner NFC a été désactivé"
-      });
-    } else {
-      const result = startScan();
-      if (result) {
-        // Reset the modified flag when user explicitly activates scanning
+  const handleNfcToggle = async () => {
+    try {
+      if (isScanning) {
+        console.log("[BarOrderSystem] Stopping NFC scan");
+        stopScan();
+        toast({
+          title: "Scan NFC désactivé",
+          description: "Le scanner NFC a été désactivé"
+        });
+      } else {
+        console.log("[BarOrderSystem] Starting NFC scan, current total:", calculateTotal());
+        // Reset any existing error
+        setErrorMessage(null);
+        
+        // Reset order modified flag when explicitly activating scanning
         setOrderModifiedAfterScan(false);
-        // Toast already shown by the hook
-        console.log("[NFC Debug] NFC scanning started, current total:", calculateTotal());
+        
+        // Start scanning
+        const result = await startScan();
+        if (result) {
+          console.log("[BarOrderSystem] NFC scanning started successfully");
+          // Toast already shown by the hook
+        } else {
+          console.log("[BarOrderSystem] Failed to start NFC scanning");
+        }
       }
+    } catch (error) {
+      console.error("[BarOrderSystem] Error toggling NFC scan:", error);
+      toast({
+        title: "Erreur NFC",
+        description: "Une erreur est survenue lors de la gestion du scan NFC",
+        variant: "destructive"
+      });
     }
   };
 
