@@ -20,13 +20,8 @@ export const BarOrderSystem: React.FC = () => {
   const isMobile = useIsMobile();
   // Store the latest calculated total to ensure consistency
   const [currentTotal, setCurrentTotal] = useState<number>(0);
-
-  // Update currentTotal whenever orderItems change
-  useEffect(() => {
-    const total = calculateTotal();
-    console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
-    setCurrentTotal(total);
-  }, [orderItems]);
+  // Track if order was modified since last scan activation
+  const [orderModifiedAfterScan, setOrderModifiedAfterScan] = useState(false);
 
   // Calculate the total order amount
   const calculateTotal = (): number => {
@@ -69,6 +64,24 @@ export const BarOrderSystem: React.FC = () => {
     // Provide a callback to get the latest total at scan time
     getTotalAmount: calculateTotal
   });
+
+  // Update currentTotal whenever orderItems change
+  useEffect(() => {
+    const total = calculateTotal();
+    console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
+    setCurrentTotal(total);
+    
+    // Auto-stop NFC scanning whenever order items change
+    if (isScanning) {
+      console.log("[NFC Debug] Order modified, stopping NFC scan to ensure correct amount");
+      stopScan();
+      setOrderModifiedAfterScan(true);
+      toast({
+        title: "Scan NFC désactivé",
+        description: "Le scan a été désactivé car la commande a été modifiée. Veuillez réactiver le scan après avoir finalisé la commande."
+      });
+    }
+  }, [orderItems, isScanning, stopScan]);
 
   // Définir l'ordre des catégories
   const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
@@ -260,6 +273,8 @@ export const BarOrderSystem: React.FC = () => {
     } else {
       const result = startScan();
       if (result) {
+        // Reset the modified flag when user explicitly activates scanning
+        setOrderModifiedAfterScan(false);
         // Toast already shown by the hook
         console.log("[NFC Debug] NFC scanning started, current total:", calculateTotal());
       }
@@ -377,13 +392,29 @@ export const BarOrderSystem: React.FC = () => {
                 
                 <Button
                   onClick={handleNfcToggle}
-                  variant={isScanning ? "destructive" : "outline"}
+                  variant={orderModifiedAfterScan ? "default" : (isScanning ? "destructive" : "outline")}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className="w-full mb-2"
+                  className={`w-full mb-2 ${orderModifiedAfterScan ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}`}
                 >
                   <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                  {isScanning 
+                    ? "Arrêter le scan NFC" 
+                    : (orderModifiedAfterScan 
+                        ? "Réactiver le scan pour payer" 
+                        : "Activer le scan NFC pour payer")}
                 </Button>
+                
+                {orderModifiedAfterScan && !isScanning && (
+                  <div className="bg-amber-100 text-amber-800 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
+                    <span>Commande modifiée. Veuillez réactiver le scan NFC pour le nouveau montant de {currentTotal.toFixed(2)}€</span>
+                  </div>
+                )}
+                
+                {isScanning && (
+                  <div className="bg-blue-100 text-blue-800 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
+                    <span>Scanner votre carte NFC maintenant pour payer {currentTotal.toFixed(2)}€</span>
+                  </div>
+                )}
                 
                 {isProcessing && (
                   <div className="mt-2 flex items-center justify-center">

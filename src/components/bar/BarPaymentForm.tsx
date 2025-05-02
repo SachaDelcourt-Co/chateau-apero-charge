@@ -241,8 +241,14 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                   className="w-full"
                 >
                   <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                  {isScanning ? "Arrêter le scan NFC" : "Activer le scan NFC pour payer"}
                 </Button>
+                
+                {isScanning && (
+                  <div className="bg-blue-100 text-blue-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base mt-2">
+                    <span>Scanner votre carte NFC maintenant pour payer {getCurrentTotal().toFixed(2)}€</span>
+                  </div>
+                )}
                 
                 {errorMessage && (
                   <div className="bg-red-100 text-red-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base">
