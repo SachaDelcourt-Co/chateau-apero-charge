@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,8 @@ export const BarOrderSystem: React.FC = () => {
   const [currentTotal, setCurrentTotal] = useState<number>(0);
   // Track if order was modified since last scan activation
   const [orderModifiedAfterScan, setOrderModifiedAfterScan] = useState(false);
+  // Ref to track previous order items to avoid unnecessary scan stops
+  const previousOrderRef = useRef<string>('');
 
   // Calculate the total order amount
   const calculateTotal = (): number => {
@@ -71,15 +73,23 @@ export const BarOrderSystem: React.FC = () => {
     console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
     setCurrentTotal(total);
     
-    // Auto-stop NFC scanning whenever order items change
-    if (isScanning) {
-      console.log("[NFC Debug] Order modified, stopping NFC scan to ensure correct amount");
-      stopScan();
-      setOrderModifiedAfterScan(true);
-      toast({
-        title: "Scan NFC désactivé",
-        description: "Le scan a été désactivé car la commande a été modifiée. Veuillez réactiver le scan après avoir finalisé la commande."
-      });
+    // Auto-stop NFC scanning ONLY if this is a real order change (not the initial render)
+    if (isScanning && orderItems.length > 0) {
+      const currentOrder = JSON.stringify(orderItems);
+      
+      // Only stop scanning if order actually changed and not first render
+      if (previousOrderRef.current && previousOrderRef.current !== currentOrder) {
+        console.log("[NFC Debug] Order modified, stopping NFC scan to ensure correct amount");
+        stopScan();
+        setOrderModifiedAfterScan(true);
+        toast({
+          title: "Scan NFC désactivé",
+          description: "Le scan a été désactivé car la commande a été modifiée. Veuillez réactiver le scan après avoir finalisé la commande."
+        });
+      }
+      
+      // Update previous order ref
+      previousOrderRef.current = currentOrder;
     }
   }, [orderItems, isScanning, stopScan]);
 
@@ -242,10 +252,17 @@ export const BarOrderSystem: React.FC = () => {
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
         
+        // Stop scanning after successful payment
+        if (isScanning) {
+          console.log("[BarOrderSystem] Stopping NFC scan after successful payment");
+          stopScan();
+        }
+        
         // Clear order state after successful payment
         setOrderItems([]);
         setCardId('');
         setCurrentTotal(0);
+        previousOrderRef.current = '';
         
         toast({
           title: "Paiement réussi",
@@ -279,6 +296,10 @@ export const BarOrderSystem: React.FC = () => {
         
         // Reset order modified flag when explicitly activating scanning
         setOrderModifiedAfterScan(false);
+        
+        // Update the order reference to current state
+        previousOrderRef.current = JSON.stringify(orderItems);
+        console.log("[BarOrderSystem] Setting reference order:", previousOrderRef.current);
         
         // Start scanning
         const result = await startScan();
