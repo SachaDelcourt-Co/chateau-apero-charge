@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // We use the values from the Supabase integration
@@ -161,6 +160,9 @@ export async function getBarProducts(): Promise<BarProduct[]> {
 
 export async function createBarOrder(order: BarOrder): Promise<{ success: boolean; orderId?: string }> {
   try {
+    console.log("Processing order:", order);
+    console.log("Total amount to charge:", order.total_amount);
+    
     // Start a transaction by beginning a single batch
     // 1. First get the current card amount to make sure it has enough balance
     const { data: cardData, error: cardError } = await supabase
@@ -176,6 +178,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
 
     const currentAmount = parseFloat(cardData.amount || '0');
     if (currentAmount < order.total_amount) {
+      console.error('Insufficient funds:', currentAmount, 'required:', order.total_amount);
       return { success: false };
     }
 
@@ -217,6 +220,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
 
     // 4. Update the card amount
     const newAmount = (currentAmount - order.total_amount).toString();
+    console.log("Updating card amount from:", currentAmount, "to:", newAmount);
     
     const { error: updateError } = await supabase
       .from('table_cards')

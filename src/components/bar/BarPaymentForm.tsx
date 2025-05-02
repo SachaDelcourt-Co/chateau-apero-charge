@@ -71,7 +71,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       
-      // Ensure the total_amount is correct considering quantities
+      // Ensure the total_amount is correct from the order object passed as prop
       if (cardAmountFloat < order.total_amount) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${order.total_amount.toFixed(2)}€.`);
         setIsProcessing(false);
@@ -80,11 +80,11 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       setCardBalance(card.amount);
 
-      // Process the order with a fresh copy of the order
+      // Process the order with a deep copy to avoid reference issues
       const orderData: BarOrder = {
         ...order,
         card_id: cardId.trim(),
-        items: [...order.items] // Create a fresh copy of the items array
+        items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
       };
 
       const orderResult = await createBarOrder(orderData);

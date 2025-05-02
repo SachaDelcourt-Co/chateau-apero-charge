@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
@@ -115,7 +114,7 @@ export const BarOrderSystem: React.FC = () => {
     });
   };
 
-  // Calculate the total order amount - Fixed to properly handle quantities
+  // Calculate the total order amount
   const calculateTotal = (): number => {
     return orderItems.reduce((total, item) => {
       // Calculate per item considering quantity
@@ -181,8 +180,8 @@ export const BarOrderSystem: React.FC = () => {
       // Process the order with the correctly calculated total
       const orderData: BarOrder = {
         card_id: id.trim(),
-        total_amount: total,
-        items: [...orderItems] // Create a fresh copy of the items array
+        total_amount: total, // Use the calculated total from UI
+        items: JSON.parse(JSON.stringify(orderItems)) // Deep copy to avoid reference issues
       };
 
       const orderResult = await createBarOrder(orderData);
