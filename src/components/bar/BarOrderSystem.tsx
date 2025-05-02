@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, CreditCard, AlertCircle } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNfc } from '@/hooks/use-nfc';
@@ -19,43 +19,15 @@ export const BarOrderSystem: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
-  // Process payment when a card ID is received
-  const handleCardScan = useCallback((id: string) => {
-    console.log('Card scanned in BarOrderSystem:', id);
-    
-    // Force UI update immediately
-    setCardId(id);
-    
-    // Show toast notification for visual feedback
-    toast({
-      title: "Carte détectée",
-      description: `Carte ${id} scannée avec succès.`,
-      variant: "default"
-    });
-    
-    // Use timeout to ensure UI updates before processing
-    setTimeout(() => {
-      // Only process payment if we have order items
-      if (orderItems.length > 0) {
-        processPayment(id);
-      } else {
-        toast({
-          title: "Commande vide",
-          description: "Ajoutez des produits pour compléter la commande.",
-          variant: "destructive"
-        });
-      }
-    }, 100);
-  }, [orderItems]);
-
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: handleCardScan,
-    // Add a unique component ID
-    componentId: 'bar-order-system'
+    onScan: (id) => {
+      setCardId(id);
+      processPayment(id);
+    }
   });
 
   // Définir l'ordre des catégories
@@ -88,30 +60,6 @@ export const BarOrderSystem: React.FC = () => {
     
     loadProducts();
   }, []);
-  
-  // Start NFC scanning in a separate effect to avoid dependency issues
-  useEffect(() => {
-    let mounted = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    
-    // Only start scanning if supported, not already scanning, component is mounted and not loading
-    if (mounted && isSupported && !isScanning && !isLoading) {
-      // Small delay to ensure component is fully mounted
-      timer = setTimeout(() => {
-        if (mounted && !isScanning) {
-          console.log('Starting NFC scan in BarOrderSystem');
-          startScan().catch(error => console.error('Failed to start NFC scan:', error));
-        }
-      }, 1000); // Longer delay to ensure other components have time to initialize
-    }
-    
-    // Cleanup: clear timer and stop scanning when component unmounts
-    return () => {
-      mounted = false;
-      if (timer) clearTimeout(timer);
-      stopScan();
-    };
-  }, [isSupported, isScanning, isLoading, startScan, stopScan]);
 
   // Handle adding a product to the order
   const handleAddProduct = (product: BarProduct) => {
@@ -197,9 +145,6 @@ export const BarOrderSystem: React.FC = () => {
   };
 
   const processPayment = async (id: string) => {
-    // Prevent processing if already in progress
-    if (isProcessing) return;
-    
     if (orderItems.length === 0) {
       toast({
         title: "Commande vide",
@@ -224,9 +169,6 @@ export const BarOrderSystem: React.FC = () => {
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       const total = calculateTotal();
-      
-      console.log("Processing payment with total:", total);
-      console.log("Order items:", orderItems);
       
       if (cardAmountFloat < total) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
@@ -371,21 +313,17 @@ export const BarOrderSystem: React.FC = () => {
                     maxLength={8}
                     disabled={isProcessing || orderItems.length === 0}
                   />
-                  {cardId && cardId.length > 0 && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
-                        {cardId}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 
-                {isScanning && (
-                  <div className="bg-green-100 text-green-800 p-2 rounded-md flex items-start text-sm mb-2">
-                    <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
-                    <span>Scan NFC actif - Approchez une carte pour payer</span>
-                  </div>
-                )}
+                <Button
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "outline"}
+                  disabled={isProcessing || orderItems.length === 0 || !isSupported}
+                  className="w-full mb-2"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                </Button>
                 
                 {isProcessing && (
                   <div className="mt-2 flex items-center justify-center">
@@ -402,7 +340,7 @@ export const BarOrderSystem: React.FC = () => {
                 )}
                 
                 <p className="text-xs text-gray-500 mt-1">
-                  Entrez les 8 caractères de l'ID ou approchez une carte NFC pour payer automatiquement
+                  Entrez les 8 caractères de l'ID ou utilisez le scanner NFC pour traiter le paiement automatiquement
                 </p>
               </div>
             </div>

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarOrder, createBarOrder, getTableCardById } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro } from 'lucide-react';
+import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNfc } from '@/hooks/use-nfc';
 
@@ -27,53 +27,16 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
-  // Handler for when a card is scanned
-  const handleCardScan = useCallback((id: string) => {
-    console.log('Card scanned in BarPaymentForm:', id);
-    
-    // Update the UI state
-    setCardId(id);
-    
-    // Don't process immediately if already processing
-    if (!isProcessing) {
-      handlePaymentWithId(id);
-    }
-  }, [isProcessing]);
-  
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
     // Handle scanned ID
-    onScan: handleCardScan,
-    // Add a unique component ID
-    componentId: 'bar-payment-form'
-  });
-  
-  // Start NFC scanning when component mounts - with proper dependency management
-  useEffect(() => {
-    let mounted = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    
-    // Only attempt to start scanning if specific conditions are met
-    // We prioritize this component for scanning since it's the payment form
-    if (mounted && isSupported && !isScanning && !paymentSuccess && !isProcessing) {
-      // Slightly longer delay to ensure main component is fully mounted
-      timer = setTimeout(() => {
-        if (mounted && !isScanning && !paymentSuccess) {
-          console.log('Payment form starting NFC scan');
-          startScan().catch(err => console.error('Failed to start NFC scan:', err));
-        }
-      }, 1500);
+    onScan: (id) => {
+      setCardId(id);
+      handlePaymentWithId(id);
     }
-    
-    // Cleanup function to stop scanning when the component unmounts
-    return () => {
-      mounted = false;
-      if (timer) clearTimeout(timer);
-      stopScan();
-    };
-  }, [isSupported, isScanning, startScan, stopScan, paymentSuccess, isProcessing]);
+  });
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
@@ -81,11 +44,6 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   };
 
   const handlePaymentWithId = async (id: string) => {
-    // Prevent multiple submissions
-    if (isProcessing) return;
-    
-    console.log('Processing payment with id:', id);
-    
     // Create a synthetic form event
     const syntheticEvent = {
       preventDefault: () => {}
@@ -97,10 +55,6 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Prevent multiple submissions
-    if (isProcessing) return;
-    
     setIsProcessing(true);
     setErrorMessage(null);
 
@@ -115,9 +69,6 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
       }
 
       const cardAmountFloat = parseFloat(card.amount || '0');
-      
-      console.log("Processing payment with total:", order.total_amount);
-      console.log("Order items:", order.items);
       
       if (cardAmountFloat < order.total_amount) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${order.total_amount.toFixed(2)}€.`);
@@ -135,9 +86,6 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       if (orderResult.success) {
         setPaymentSuccess(true);
-        // Stop scanning when payment is successful
-        stopScan();
-        
         toast({
           title: "Paiement réussi",
           description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - order.total_amount).toFixed(2)}€`
@@ -246,12 +194,16 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                   </div>
                 </div>
                 
-                {isScanning && (
-                  <div className="bg-green-100 text-green-800 p-2 sm:p-3 rounded-md flex items-start text-sm">
-                    <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 mt-0.5 flex-shrink-0" />
-                    <span>Scan NFC actif - Approchez une carte pour payer</span>
-                  </div>
-                )}
+                <Button
+                  type="button"
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "outline"}
+                  disabled={isProcessing || !isSupported}
+                  className="w-full"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte NFC"}
+                </Button>
                 
                 {errorMessage && (
                   <div className="bg-red-100 text-red-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base">
@@ -275,10 +227,6 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                     "Payer maintenant"
                   )}
                 </Button>
-                
-                <p className="text-xs text-center text-gray-500">
-                  Entrez les 8 caractères de l'ID ou approchez une carte NFC pour payer automatiquement
-                </p>
               </div>
             </form>
           </div>
