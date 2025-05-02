@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +42,11 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     }
   });
 
+  // Log the total amount when the component mounts to aid debugging
+  useEffect(() => {
+    console.log("BarPaymentForm initialized with total amount:", totalAmount);
+  }, [totalAmount]);
+
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
     setErrorMessage(null); // Clear any previous errors
@@ -62,7 +67,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     
-    console.log("Processing order with total:", totalAmount);
+    console.log("Processing payment with total:", totalAmount);
 
     try {
       // Check if card exists and has sufficient balance
@@ -181,7 +186,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                   <span>Total</span>
                   <span className="flex items-center">
                     <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    {order.total_amount.toFixed(2)}
+                    {totalAmount.toFixed(2)}
                   </span>
                 </div>
               </div>

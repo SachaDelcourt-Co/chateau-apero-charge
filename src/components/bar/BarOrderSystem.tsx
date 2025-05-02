@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
@@ -25,6 +24,7 @@ export const BarOrderSystem: React.FC = () => {
   // Update currentTotal whenever orderItems change
   useEffect(() => {
     const total = calculateTotal();
+    console.log("Order items changed, recalculated total:", total);
     setCurrentTotal(total);
   }, [orderItems]);
 
@@ -35,10 +35,8 @@ export const BarOrderSystem: React.FC = () => {
     // Handle scanned ID
     onScan: (id) => {
       setCardId(id);
-      // Always use the fresh calculated total when processing payment
-      const calculatedTotal = calculateTotal();
-      setCurrentTotal(calculatedTotal);
-      processPayment(id, calculatedTotal);
+      // Use the current total from state which is always up to date with orderItems
+      processPayment(id, currentTotal);
     }
   });
 
@@ -154,10 +152,8 @@ export const BarOrderSystem: React.FC = () => {
     
     // Process payment automatically when 8 characters are entered
     if (value.length === 8) {
-      // Always recalculate total when processing payment
-      const calculatedTotal = calculateTotal();
-      setCurrentTotal(calculatedTotal);
-      processPayment(value, calculatedTotal);
+      // Use the current total from state which is always up to date with orderItems
+      processPayment(value, currentTotal);
     }
   };
 
@@ -174,7 +170,7 @@ export const BarOrderSystem: React.FC = () => {
     setIsProcessing(true);
     setErrorMessage(null);
     
-    console.log("Processing payment with total:", total);
+    console.log("Processing payment with total:", total, "Order items:", orderItems);
 
     try {
       // Check if card exists and has sufficient balance
@@ -342,9 +338,7 @@ export const BarOrderSystem: React.FC = () => {
                     if (isScanning) {
                       stopScan();
                     } else {
-                      // Always recalculate the total when starting the scan
-                      const freshTotal = calculateTotal();
-                      setCurrentTotal(freshTotal);
+                      // We don't recalculate the total here anymore - we use the current state value
                       startScan();
                     }
                   }}
