@@ -28,6 +28,16 @@ export const BarOrderSystem: React.FC = () => {
     setCurrentTotal(total);
   }, [orderItems]);
 
+  // Calculate the total order amount
+  const calculateTotal = (): number => {
+    return orderItems.reduce((total, item) => {
+      // Calculate per item considering quantity
+      const itemTotal = item.price * item.quantity;
+      // Subtract for returns (caution return), add for everything else
+      return total + (item.is_return ? -itemTotal : itemTotal);
+    }, 0);
+  };
+
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
@@ -35,9 +45,12 @@ export const BarOrderSystem: React.FC = () => {
     // Handle scanned ID
     onScan: (id) => {
       setCardId(id);
-      // Use the current total from state which is always up to date with orderItems
-      processPayment(id, currentTotal);
-    }
+      // Call processPayment with the latest calculated total (not the cached total)
+      const latestTotal = calculateTotal();
+      processPayment(id, latestTotal);
+    },
+    // Provide a callback to get the latest total at scan time
+    getTotalAmount: calculateTotal
   });
 
   // Définir l'ordre des catégories
@@ -122,16 +135,6 @@ export const BarOrderSystem: React.FC = () => {
         return prevItems.filter((_, index) => index !== itemIndex);
       }
     });
-  };
-
-  // Calculate the total order amount
-  const calculateTotal = (): number => {
-    return orderItems.reduce((total, item) => {
-      // Calculate per item considering quantity
-      const itemTotal = item.price * item.quantity;
-      // Subtract for returns (caution return), add for everything else
-      return total + (item.is_return ? -itemTotal : itemTotal);
-    }, 0);
   };
 
   const handleClearOrder = () => {

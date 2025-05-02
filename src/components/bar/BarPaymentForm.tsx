@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,8 +27,10 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
-  // Store the actual total amount to be used for payment
-  const [totalAmount] = useState<number>(order.total_amount);
+  // Get the current total amount (direct from order props to ensure it's always current)
+  const getCurrentTotal = (): number => {
+    return order.total_amount;
+  };
   
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
@@ -39,13 +40,15 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     onScan: (id) => {
       setCardId(id);
       handlePaymentWithId(id);
-    }
+    },
+    // Provide a callback to get the latest total at scan time
+    getTotalAmount: getCurrentTotal
   });
 
   // Log the total amount when the component mounts to aid debugging
   useEffect(() => {
-    console.log("BarPaymentForm initialized with total amount:", totalAmount);
-  }, [totalAmount]);
+    console.log("BarPaymentForm initialized with total amount:", getCurrentTotal());
+  }, []);
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
@@ -67,7 +70,9 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     
-    console.log("Processing payment with total:", totalAmount);
+    // Always use the current total from the order prop instead of the stored state
+    const currentTotal = getCurrentTotal();
+    console.log("Processing payment with total:", currentTotal);
 
     try {
       // Check if card exists and has sufficient balance
@@ -81,20 +86,20 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       
-      // Use the stored total amount to compare with card balance
-      if (cardAmountFloat < totalAmount) {
-        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${totalAmount.toFixed(2)}€.`);
+      // Use the current total to compare with card balance
+      if (cardAmountFloat < currentTotal) {
+        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
         setIsProcessing(false);
         return;
       }
 
       setCardBalance(card.amount);
 
-      // Process the order with the stored total amount
+      // Process the order with the current total amount
       const orderData: BarOrder = {
         ...order,
         card_id: cardId.trim(),
-        total_amount: totalAmount, // Use the stored total amount
+        total_amount: currentTotal, // Use the current total amount
         items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
       };
 
@@ -106,7 +111,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
         setPaymentSuccess(true);
         toast({
           title: "Paiement réussi",
-          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - totalAmount).toFixed(2)}€`
+          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - currentTotal).toFixed(2)}€`
         });
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
@@ -120,7 +125,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   };
 
   if (paymentSuccess) {
-    const newBalance = parseFloat(cardBalance || '0') - totalAmount;
+    const newBalance = parseFloat(cardBalance || '0') - getCurrentTotal();
     
     return (
       <Card className="bg-white/90 shadow-lg">
@@ -140,7 +145,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
               <div className="font-medium">{parseFloat(cardBalance || '0').toFixed(2)}€</div>
               
               <div className="text-gray-600">Montant payé:</div>
-              <div className="font-medium">{totalAmount.toFixed(2)}€</div>
+              <div className="font-medium">{getCurrentTotal().toFixed(2)}€</div>
               
               <div className="text-gray-600">Nouveau solde:</div>
               <div className="font-medium">{newBalance.toFixed(2)}€</div>
@@ -186,7 +191,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
                   <span>Total</span>
                   <span className="flex items-center">
                     <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                    {totalAmount.toFixed(2)}
+                    {getCurrentTotal().toFixed(2)}
                   </span>
                 </div>
               </div>

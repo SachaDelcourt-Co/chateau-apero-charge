@@ -258,9 +258,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               <Alert className="bg-amber-50 border-amber-200">
                 <AlertDescription className="text-amber-700">
                   <div className="flex flex-col space-y-1">
-                    <span><strong>Description:</strong> {cardInfo.description || 'Aucune description'}</span>
                     <span><strong>ID:</strong> {cardInfo.id}</span>
-                    <span><strong>Créée le:</strong> {new Date(cardInfo.created_at).toLocaleDateString()}</span>
                   </div>
                 </AlertDescription>
               </Alert>

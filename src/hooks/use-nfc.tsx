@@ -4,9 +4,10 @@ import { toast } from '@/hooks/use-toast';
 interface UseNfcOptions {
   onScan?: (id: string) => void;
   validateId?: (id: string) => boolean;
+  getTotalAmount?: () => number;
 }
 
-export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
+export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {}) {
   const [isScanning, setIsScanning] = useState(false);
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
@@ -144,7 +145,14 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
               if (extractedId && (!validateId || validateId(extractedId))) {
                 console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
-                if (onScan) onScan(extractedId);
+                if (onScan) {
+                  // Get the latest total amount if callback is provided
+                  const latestAmount = getTotalAmount ? getTotalAmount() : null;
+                  console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+                  
+                  // Call onScan with the extracted ID
+                  onScan(extractedId);
+                }
                 return;
               }
             }
@@ -158,7 +166,14 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
             if (!validateId || validateId(id)) {
               console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
-              if (onScan) onScan(id);
+              if (onScan) {
+                // Get the latest total amount if callback is provided
+                const latestAmount = getTotalAmount ? getTotalAmount() : null;
+                console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+                
+                // Call onScan with the extracted ID
+                onScan(id);
+              }
               return;
             }
           }
@@ -197,7 +212,7 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       setIsScanning(false);
       return false;
     }
-  }, [isSupported, onScan, validateId]);
+  }, [isSupported, onScan, validateId, getTotalAmount]);
   
   const stopScan = useCallback(() => {
     console.log('[NFC Debug] stopScan called');
