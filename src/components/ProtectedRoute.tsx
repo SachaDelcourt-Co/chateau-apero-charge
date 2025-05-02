@@ -1,5 +1,6 @@
 
-import { Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
 
 type Role = 'admin' | 'bar' | 'recharge';
@@ -10,7 +11,14 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children, requiredRoles }: ProtectedRouteProps) => {
-  const { user, isLoading, hasAccess, role } = useAuth();
+  const { user, isLoading, hasAccess, role, isLoggedIn } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      navigate('/login');
+    }
+  }, [isLoggedIn, isLoading, navigate]);
 
   if (isLoading) {
     // Afficher un écran de chargement pendant que l'authentification est vérifiée

@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import ChateauLogo from '@/components/ChateauLogo';
@@ -13,11 +14,18 @@ import { NfcTest } from '@/components/NfcTest';
 const RechargePage: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { signOut, email } = useAuth();
+  const { signOut, email, isLoggedIn } = useAuth();
   const { toast } = useToast();
   
   // Check if we're in development mode
   const isDevelopment = import.meta.env.MODE === 'development';
+
+  // Effect to redirect to login if not logged in
+  useEffect(() => {
+    if (!isLoggedIn) {
+      navigate('/login');
+    }
+  }, [isLoggedIn, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -27,7 +35,11 @@ const RechargePage: React.FC = () => {
         title: "Déconnexion réussie",
         description: "Vous avez été déconnecté avec succès"
       });
+      
+      // Force navigation to login page after successful logout
+      navigate('/login');
     } catch (error) {
+      console.error('Error during logout:', error);
       toast({
         title: "Erreur",
         description: "Une erreur est survenue lors de la déconnexion",

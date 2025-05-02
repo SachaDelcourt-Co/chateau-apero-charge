@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useEffect } from 'react';
 import ChateauBackground from '@/components/ChateauBackground';
 import { BarOrderSystem } from '@/components/bar/BarOrderSystem';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -7,14 +8,23 @@ import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { NfcDebugger } from '@/components/NfcDebugger';
+import { useNavigate } from 'react-router-dom';
 
 const BarPage: React.FC = () => {
   const isMobile = useIsMobile();
-  const { signOut, email } = useAuth();
+  const { signOut, email, isLoggedIn } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   // Check if we're in development mode
   const isDevelopment = import.meta.env.MODE === 'development';
+  
+  // Effect to redirect to login if not logged in
+  useEffect(() => {
+    if (!isLoggedIn) {
+      navigate('/login');
+    }
+  }, [isLoggedIn, navigate]);
   
   const handleLogout = async () => {
     try {
@@ -24,7 +34,11 @@ const BarPage: React.FC = () => {
         title: "Déconnexion réussie",
         description: "Vous avez été déconnecté avec succès"
       });
+      
+      // Force navigation to login page after successful logout
+      navigate('/login');
     } catch (error) {
+      console.error('Error during logout:', error);
       toast({
         title: "Erreur",
         description: "Une erreur est survenue lors de la déconnexion",
