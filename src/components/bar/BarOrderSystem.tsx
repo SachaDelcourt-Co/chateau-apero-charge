@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
@@ -18,6 +19,14 @@ export const BarOrderSystem: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  // Store the latest calculated total to ensure consistency
+  const [currentTotal, setCurrentTotal] = useState<number>(0);
+
+  // Update currentTotal whenever orderItems change
+  useEffect(() => {
+    const total = calculateTotal();
+    setCurrentTotal(total);
+  }, [orderItems]);
 
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
@@ -26,7 +35,10 @@ export const BarOrderSystem: React.FC = () => {
     // Handle scanned ID
     onScan: (id) => {
       setCardId(id);
-      processPayment(id);
+      // Always use the fresh calculated total when processing payment
+      const calculatedTotal = calculateTotal();
+      setCurrentTotal(calculatedTotal);
+      processPayment(id, calculatedTotal);
     }
   });
 
@@ -128,6 +140,7 @@ export const BarOrderSystem: React.FC = () => {
     setOrderItems([]);
     setCardId('');
     setErrorMessage(null);
+    setCurrentTotal(0);
     toast({
       title: "Commande effacée",
       description: "La commande a été effacée"
@@ -141,11 +154,14 @@ export const BarOrderSystem: React.FC = () => {
     
     // Process payment automatically when 8 characters are entered
     if (value.length === 8) {
-      processPayment(value);
+      // Always recalculate total when processing payment
+      const calculatedTotal = calculateTotal();
+      setCurrentTotal(calculatedTotal);
+      processPayment(value, calculatedTotal);
     }
   };
 
-  const processPayment = async (id: string) => {
+  const processPayment = async (id: string, total: number) => {
     if (orderItems.length === 0) {
       toast({
         title: "Commande vide",
@@ -157,6 +173,8 @@ export const BarOrderSystem: React.FC = () => {
 
     setIsProcessing(true);
     setErrorMessage(null);
+    
+    console.log("Processing payment with total:", total);
 
     try {
       // Check if card exists and has sufficient balance
@@ -169,7 +187,6 @@ export const BarOrderSystem: React.FC = () => {
       }
 
       const cardAmountFloat = parseFloat(card.amount || '0');
-      const total = calculateTotal();
       
       if (cardAmountFloat < total) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
@@ -177,12 +194,14 @@ export const BarOrderSystem: React.FC = () => {
         return;
       }
 
-      // Process the order with the correctly calculated total
+      // Process the order with the explicitly provided total
       const orderData: BarOrder = {
         card_id: id.trim(),
-        total_amount: total, // Use the calculated total from UI
+        total_amount: total, // Use the provided total, not a recalculated value
         items: JSON.parse(JSON.stringify(orderItems)) // Deep copy to avoid reference issues
       };
+
+      console.log("Sending order with total:", orderData.total_amount);
 
       const orderResult = await createBarOrder(orderData);
 
@@ -192,6 +211,7 @@ export const BarOrderSystem: React.FC = () => {
         // Clear order state after successful payment
         setOrderItems([]);
         setCardId('');
+        setCurrentTotal(0);
         
         toast({
           title: "Paiement réussi",
@@ -297,7 +317,7 @@ export const BarOrderSystem: React.FC = () => {
             <div className="border-t pt-3">
               <div className="flex justify-between items-center mb-3">
                 <span className="text-base font-semibold">Total:</span>
-                <span className="text-lg font-bold">{calculateTotal().toFixed(2)}€</span>
+                <span className="text-lg font-bold">{currentTotal.toFixed(2)}€</span>
               </div>
               
               <div>
@@ -318,7 +338,16 @@ export const BarOrderSystem: React.FC = () => {
                 </div>
                 
                 <Button
-                  onClick={isScanning ? stopScan : startScan}
+                  onClick={() => {
+                    if (isScanning) {
+                      stopScan();
+                    } else {
+                      // Always recalculate the total when starting the scan
+                      const freshTotal = calculateTotal();
+                      setCurrentTotal(freshTotal);
+                      startScan();
+                    }
+                  }}
                   variant={isScanning ? "destructive" : "outline"}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
                   className="w-full mb-2"

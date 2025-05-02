@@ -28,6 +28,9 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
   
+  // Store the actual total amount to be used for payment
+  const [totalAmount] = useState<number>(order.total_amount);
+  
   // Initialize NFC hook with a validation function and scan handler
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
@@ -58,6 +61,8 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     e.preventDefault();
     setIsProcessing(true);
     setErrorMessage(null);
+    
+    console.log("Processing order with total:", totalAmount);
 
     try {
       // Check if card exists and has sufficient balance
@@ -71,21 +76,24 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       
-      // Ensure the total_amount is correct from the order object passed as prop
-      if (cardAmountFloat < order.total_amount) {
-        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${order.total_amount.toFixed(2)}€.`);
+      // Use the stored total amount to compare with card balance
+      if (cardAmountFloat < totalAmount) {
+        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${totalAmount.toFixed(2)}€.`);
         setIsProcessing(false);
         return;
       }
 
       setCardBalance(card.amount);
 
-      // Process the order with a deep copy to avoid reference issues
+      // Process the order with the stored total amount
       const orderData: BarOrder = {
         ...order,
         card_id: cardId.trim(),
+        total_amount: totalAmount, // Use the stored total amount
         items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
       };
+
+      console.log("Sending order with total:", orderData.total_amount);
 
       const orderResult = await createBarOrder(orderData);
 
@@ -93,7 +101,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
         setPaymentSuccess(true);
         toast({
           title: "Paiement réussi",
-          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - order.total_amount).toFixed(2)}€`
+          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - totalAmount).toFixed(2)}€`
         });
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
@@ -107,7 +115,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
   };
 
   if (paymentSuccess) {
-    const newBalance = parseFloat(cardBalance || '0') - order.total_amount;
+    const newBalance = parseFloat(cardBalance || '0') - totalAmount;
     
     return (
       <Card className="bg-white/90 shadow-lg">
@@ -127,7 +135,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
               <div className="font-medium">{parseFloat(cardBalance || '0').toFixed(2)}€</div>
               
               <div className="text-gray-600">Montant payé:</div>
-              <div className="font-medium">{order.total_amount.toFixed(2)}€</div>
+              <div className="font-medium">{totalAmount.toFixed(2)}€</div>
               
               <div className="text-gray-600">Nouveau solde:</div>
               <div className="font-medium">{newBalance.toFixed(2)}€</div>
