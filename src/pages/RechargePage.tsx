@@ -8,6 +8,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { NfcDebugger } from '@/components/NfcDebugger';
+import { NfcTest } from '@/components/NfcTest';
 
 const RechargePage: React.FC = () => {
   const navigate = useNavigate();
@@ -68,6 +69,9 @@ const RechargePage: React.FC = () => {
             </Button>
           </div>
         </div>
+        
+        {/* Add test NFC component in development mode */}
+        {isDevelopment && <NfcTest />}
         
         <div className="bg-white p-3 sm:p-6 rounded-lg shadow-xl">
           <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">

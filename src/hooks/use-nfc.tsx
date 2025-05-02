@@ -14,7 +14,22 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
   
   // Check if NFC is supported
   useEffect(() => {
-    setIsSupported('NDEFReader' in window);
+    // Add more detailed logging for debugging
+    const hasNDEFReader = 'NDEFReader' in window;
+    console.log('[NFC Debug] NDEFReader in window:', hasNDEFReader);
+    console.log('[NFC Debug] Window object:', Object.keys(window).filter(k => k.includes('NFC') || k.includes('NDEF')));
+    console.log('[NFC Debug] Current environment:', {
+      isSecureContext: window.isSecureContext,
+      userAgent: navigator.userAgent,
+      platform: navigator.platform
+    });
+    
+    setIsSupported(hasNDEFReader);
+    
+    // If not supported, provide some context why
+    if (!hasNDEFReader) {
+      console.warn('[NFC Debug] Web NFC API is not supported in this browser. Chrome for Android (version 89+) over HTTPS is required.');
+    }
   }, []);
   
   // Cleanup on unmount
@@ -49,10 +64,13 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
   };
   
   const startScan = useCallback(async () => {
+    console.log('[NFC Debug] startScan called, isSupported:', isSupported);
+    
     if (!isSupported) {
+      console.warn('[NFC Debug] Cannot start NFC scan - API not supported');
       toast({
         title: "NFC non supporté",
-        description: "Votre navigateur ne supporte pas la lecture NFC",
+        description: "Votre navigateur ne supporte pas la lecture NFC. Utilisez Chrome sur Android en HTTPS.",
         variant: "destructive"
       });
       return false;
@@ -65,11 +83,14 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       nfcAbortController.current = new AbortController();
       const signal = nfcAbortController.current.signal;
       
+      console.log('[NFC Debug] Creating NDEFReader instance');
       // @ts-ignore - TypeScript might not have NDEFReader in its types yet
       const reader = new NDEFReader();
       
+      console.log('[NFC Debug] Calling reader.scan()');
       await reader.scan({ signal });
       
+      console.log('[NFC Debug] NFC scan started successfully');
       toast({
         title: "Scan NFC activé",
         description: "Approchez une carte NFC pour scanner"
@@ -77,9 +98,11 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       
       reader.addEventListener("reading", ({ message, serialNumber }: any) => {
         try {
+          console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
+          
           // First priority: Try to read from NDEF message records
           if (message && message.records) {
-            console.log("NFC message records:", message.records);
+            console.log("[NFC Debug] NFC message records:", message.records);
             
             for (const record of message.records) {
               let extractedId = null;
@@ -95,13 +118,13 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                   text = text.substring(1);
                 }
                 
-                console.log("Decoded text from NFC:", text);
+                console.log("[NFC Debug] Decoded text from NFC:", text);
                 extractedId = extractIdFromText(text);
               } 
               else if (record.recordType === "url") {
                 const textDecoder = new TextDecoder();
                 const url = textDecoder.decode(record.data);
-                console.log("Decoded URL from NFC:", url);
+                console.log("[NFC Debug] Decoded URL from NFC:", url);
                 
                 // Try to extract ID from URL (it might be in the path or as a parameter)
                 const urlMatch = url.match(/[a-zA-Z0-9]{8}/);
@@ -113,13 +136,13 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                 // For unknown types, try to decode as plain text
                 const textDecoder = new TextDecoder();
                 const data = textDecoder.decode(record.data);
-                console.log("Decoded unknown data from NFC:", data);
+                console.log("[NFC Debug] Decoded unknown data from NFC:", data);
                 extractedId = extractIdFromText(data);
               }
               
               // If we found a valid ID, use it
               if (extractedId && (!validateId || validateId(extractedId))) {
-                console.log("Valid ID extracted from NFC payload:", extractedId);
+                console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 if (onScan) onScan(extractedId);
                 return;
@@ -129,11 +152,11 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
           
           // Second priority: Try with serialNumber as fallback
           if (serialNumber) {
-            console.log("NFC serial number:", serialNumber);
+            console.log("[NFC Debug] NFC serial number:", serialNumber);
             // Try to extract ID from serial number
             const id = serialNumber.substring(0, 8);
             if (!validateId || validateId(id)) {
-              console.log("Using serial number as ID:", id);
+              console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
               if (onScan) onScan(id);
               return;
@@ -141,9 +164,10 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
           }
           
           // If we made it here, we couldn't find a valid ID
+          console.warn("[NFC Debug] No valid ID found in NFC tag");
           throw new Error("Format de carte non valide");
         } catch (error) {
-          console.error("Error reading NFC card:", error);
+          console.error("[NFC Debug] Error reading NFC card:", error);
           toast({
             title: "Erreur de lecture",
             description: "La carte n'est pas au format attendu",
@@ -153,7 +177,7 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       });
       
       reader.addEventListener("error", (error: any) => {
-        console.error("NFC reading error:", error);
+        console.error("[NFC Debug] NFC reading error:", error);
         toast({
           title: "Erreur NFC",
           description: error.message || "Une erreur est survenue lors de la lecture NFC",
@@ -164,7 +188,7 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       
       return true;
     } catch (error) {
-      console.error("Error starting NFC scan:", error);
+      console.error("[NFC Debug] Error starting NFC scan:", error);
       toast({
         title: "Erreur NFC",
         description: (error as Error)?.message || "Impossible d'activer le scan NFC",
@@ -176,12 +200,15 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
   }, [isSupported, onScan, validateId]);
   
   const stopScan = useCallback(() => {
+    console.log('[NFC Debug] stopScan called');
     if (nfcAbortController.current) {
       nfcAbortController.current.abort();
       nfcAbortController.current = null;
       setIsScanning(false);
+      console.log('[NFC Debug] NFC scan stopped successfully');
       return true;
     }
+    console.log('[NFC Debug] No active NFC scan to stop');
     return false;
   }, []);
   

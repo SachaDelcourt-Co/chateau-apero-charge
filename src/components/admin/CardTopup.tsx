@@ -32,6 +32,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     validateId: (id) => id.length === 8,
     // Handle scanned ID
     onScan: (id) => {
+      console.log('[CardTopup] NFC card scanned with ID:', id);
       setCardId(id);
       checkCardBalance(id);
       // Optional: toast to indicate successful scan
@@ -51,6 +52,11 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
       setCurrentAmount(null);
     }
   }, [cardId]);
+
+  // Debug effect to log NFC support status
+  useEffect(() => {
+    console.log('[CardTopup] NFC isSupported:', isSupported);
+  }, [isSupported]);
 
   const checkCardBalance = async (id: string) => {
     if (!id || id.length !== 8) return;
@@ -188,6 +194,31 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* NFC Scan Button - Prominent placement */}
+            {isSupported !== null && (
+              <div className="flex justify-center mb-4">
+                <Button
+                  type="button"
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "default"}
+                  size="lg"
+                  disabled={isSupported === false}
+                  className="w-full text-center"
+                >
+                  <Scan className="h-5 w-5 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Scanner une carte via NFC"}
+                </Button>
+              </div>
+            )}
+            
+            {isSupported === false && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>
+                  Le scan NFC n'est pas disponible. Cette fonctionnalité nécessite Chrome sur Android avec HTTPS.
+                </AlertDescription>
+              </Alert>
+            )}
+            
             <div className="space-y-2">
               <Label htmlFor="card-id">Numéro de carte</Label>
               <div className="relative">
@@ -220,16 +251,6 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                     </div>
                   ) : null}
                 </div>
-                <Button
-                  type="button"
-                  variant={isScanning ? "destructive" : "outline"}
-                  size="sm"
-                  onClick={isScanning ? stopScan : startScan}
-                  disabled={!isSupported || isLoading}
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Arrêter scan" : "Scanner carte"}
-                </Button>
               </div>
             </div>
             
