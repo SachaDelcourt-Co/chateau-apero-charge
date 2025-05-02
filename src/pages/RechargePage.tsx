@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -8,12 +7,16 @@ import { Home, LogOut } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
+import { NfcDebugger } from '@/components/NfcDebugger';
 
 const RechargePage: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { signOut, email } = useAuth();
   const { toast } = useToast();
+  
+  // Check if we're in development mode
+  const isDevelopment = import.meta.env.MODE === 'development';
 
   const handleLogout = async () => {
     try {
@@ -75,6 +78,9 @@ const RechargePage: React.FC = () => {
             <CardTopup />
           </div>
         </div>
+        
+        {/* Show NFC debugger only in development mode */}
+        {isDevelopment && <NfcDebugger />}
       </div>
     </div>
   );

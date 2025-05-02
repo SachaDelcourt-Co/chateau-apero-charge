@@ -1,14 +1,15 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CreditCard, CheckCircle } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Scan, Info } from "lucide-react";
 import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useNfc } from '@/hooks/use-nfc';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CardTopupProps {
   onSuccess?: () => void;
@@ -18,10 +19,60 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
   const [cardId, setCardId] = useState('');
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingCard, setIsCheckingCard] = useState(false);
   const [success, setSuccess] = useState(false);
   const [currentAmount, setCurrentAmount] = useState<string | null>(null);
   const [paidByCard, setPaidByCard] = useState(false);
+  const [cardInfo, setCardInfo] = useState<any>(null);
   const { toast } = useToast();
+  
+  // Initialize NFC hook with a validation function and scan handler
+  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+    // Validate that ID is 8 characters long
+    validateId: (id) => id.length === 8,
+    // Handle scanned ID
+    onScan: (id) => {
+      setCardId(id);
+      checkCardBalance(id);
+      // Optional: toast to indicate successful scan
+      toast({
+        title: "Carte détectée",
+        description: `ID de carte: ${id}`,
+      });
+    }
+  });
+
+  // Effect to check card balance when card ID changes
+  useEffect(() => {
+    if (cardId.length === 8) {
+      checkCardBalance(cardId);
+    } else {
+      setCardInfo(null);
+      setCurrentAmount(null);
+    }
+  }, [cardId]);
+
+  const checkCardBalance = async (id: string) => {
+    if (!id || id.length !== 8) return;
+    
+    setIsCheckingCard(true);
+    try {
+      const card = await getTableCardById(id);
+      if (card) {
+        setCardInfo(card);
+        setCurrentAmount(card.amount?.toString() || '0');
+      } else {
+        setCardInfo(null);
+        setCurrentAmount(null);
+      }
+    } catch (error) {
+      console.error('Error checking card:', error);
+      setCardInfo(null);
+      setCurrentAmount(null);
+    } finally {
+      setIsCheckingCard(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +165,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     setPaidByCard(false);
     setSuccess(false);
     setCurrentAmount(null);
+    setCardInfo(null);
   };
 
   return (
@@ -149,7 +201,49 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                   disabled={isLoading}
                 />
               </div>
+              <div className="flex justify-between items-center mt-1">
+                <div>
+                  {isCheckingCard ? (
+                    <div className="text-sm text-gray-500 flex items-center">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Vérification...
+                    </div>
+                  ) : cardInfo ? (
+                    <div className="text-sm text-green-600 flex items-center">
+                      <Info className="h-3 w-3 mr-1" />
+                      Solde actuel: <span className="font-medium ml-1">{parseFloat(currentAmount || '0').toFixed(2)}€</span>
+                    </div>
+                  ) : cardId.length === 8 ? (
+                    <div className="text-sm text-red-600 flex items-center">
+                      <Info className="h-3 w-3 mr-1" />
+                      Carte non trouvée
+                    </div>
+                  ) : null}
+                </div>
+                <Button
+                  type="button"
+                  variant={isScanning ? "destructive" : "outline"}
+                  size="sm"
+                  onClick={isScanning ? stopScan : startScan}
+                  disabled={!isSupported || isLoading}
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter scan" : "Scanner carte"}
+                </Button>
+              </div>
             </div>
+            
+            {cardInfo && (
+              <Alert className="bg-amber-50 border-amber-200">
+                <AlertDescription className="text-amber-700">
+                  <div className="flex flex-col space-y-1">
+                    <span><strong>Description:</strong> {cardInfo.description || 'Aucune description'}</span>
+                    <span><strong>ID:</strong> {cardInfo.id}</span>
+                    <span><strong>Créée le:</strong> {new Date(cardInfo.created_at).toLocaleDateString()}</span>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="amount">Montant (€)</Label>
@@ -185,7 +279,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading}
+              disabled={isLoading || !cardInfo}
             >
               {isLoading ? (
                 <>
