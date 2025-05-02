@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,6 +71,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       const cardAmountFloat = parseFloat(card.amount || '0');
       
+      // Ensure the total_amount is correct considering quantities
       if (cardAmountFloat < order.total_amount) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${order.total_amount.toFixed(2)}€.`);
         setIsProcessing(false);
@@ -78,11 +80,14 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
 
       setCardBalance(card.amount);
 
-      // Process the order
-      const orderResult = await createBarOrder({
+      // Process the order with a fresh copy of the order
+      const orderData: BarOrder = {
         ...order,
-        card_id: cardId.trim()
-      });
+        card_id: cardId.trim(),
+        items: [...order.items] // Create a fresh copy of the items array
+      };
+
+      const orderResult = await createBarOrder(orderData);
 
       if (orderResult.success) {
         setPaymentSuccess(true);

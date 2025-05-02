@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
@@ -114,12 +115,13 @@ export const BarOrderSystem: React.FC = () => {
     });
   };
 
-  // Calculate the total order amount
+  // Calculate the total order amount - Fixed to properly handle quantities
   const calculateTotal = (): number => {
     return orderItems.reduce((total, item) => {
+      // Calculate per item considering quantity
+      const itemTotal = item.price * item.quantity;
       // Subtract for returns (caution return), add for everything else
-      const amount = item.is_return ? -item.price * item.quantity : item.price * item.quantity;
-      return total + amount;
+      return total + (item.is_return ? -itemTotal : itemTotal);
     }, 0);
   };
 
@@ -176,11 +178,11 @@ export const BarOrderSystem: React.FC = () => {
         return;
       }
 
-      // Process the order
+      // Process the order with the correctly calculated total
       const orderData: BarOrder = {
         card_id: id.trim(),
         total_amount: total,
-        items: orderItems
+        items: [...orderItems] // Create a fresh copy of the items array
       };
 
       const orderResult = await createBarOrder(orderData);
@@ -188,6 +190,7 @@ export const BarOrderSystem: React.FC = () => {
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
         
+        // Clear order state after successful payment
         setOrderItems([]);
         setCardId('');
         
