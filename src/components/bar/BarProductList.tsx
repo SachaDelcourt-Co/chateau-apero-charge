@@ -42,8 +42,8 @@ export const BarProductList: React.FC<BarProductListProps> = ({
       // Alcohol category
       else if (name.includes('gin') && !name.includes('carafe') ||
         name.includes('spritz') && !name.includes('carafe') ||
-        name.includes('bière spécial') || 
-        name.includes('biere special') ||
+        name.includes('bière spéciale') || 
+        name.includes('biere speciale') ||
         name.includes('pils') && !name.includes('carafe') || 
         name.includes('verre bulle')) {
         alcoholProducts.push(product);
