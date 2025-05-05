@@ -47,7 +47,7 @@ const BarPage: React.FC = () => {
   
   return (
     <ChateauBackground className="min-h-screen">
-      <div className="w-full h-full">
+      <div className="w-full h-full p-0">
         <div className="absolute top-2 right-2 z-10">
           <Button 
             variant="outline" 
