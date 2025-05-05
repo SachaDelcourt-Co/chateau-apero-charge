@@ -73,12 +73,55 @@ export const BarOrderSystem: React.FC = () => {
     setCurrentTotal(total);
     
     // When the order changes, restart the NFC scanner to capture the new total
-    if (isScanning && orderItems.length > 0) {
+    if (isScanning) {
       const currentOrder = JSON.stringify(orderItems);
       
+      // Empty order should be treated as "[]" in the reference
+      if (!previousOrderRef.current && orderItems.length === 0) {
+        previousOrderRef.current = JSON.stringify([]);
+        console.log("[NFC Debug] Setting initial empty order reference");
+      }
+      
       // Only restart scanner if order actually changed and not first render
+      // Always restart if we're adding the first product (empty array to non-empty)
+      const isFirstProductAdded = previousOrderRef.current === JSON.stringify([]) && orderItems.length > 0;
+      
       if (previousOrderRef.current && previousOrderRef.current !== currentOrder) {
         console.log("[NFC Debug] Order modified, restarting NFC scan to capture new total:", total);
+        
+        // Update reference order
+        previousOrderRef.current = currentOrder;
+        
+        // First stop scanning
+        stopScan();
+        
+        // Then restart scanning after a short delay
+        setTimeout(async () => {
+          try {
+            console.log("[NFC Debug] Restarting NFC scan with new total:", total);
+            const result = await startScan();
+            if (result) {
+              console.log("[NFC Debug] NFC scan successfully restarted with new total:", total);
+              toast({
+                title: "Scanner mis à jour",
+                description: `Le scanner NFC a été mis à jour avec le nouveau total: ${total.toFixed(2)}€`,
+                variant: "default"
+              });
+            } else {
+              console.log("[NFC Debug] Failed to restart NFC scanning");
+              toast({
+                title: "Erreur du scanner",
+                description: "Impossible de redémarrer le scanner NFC. Veuillez réessayer.",
+                variant: "destructive"
+              });
+            }
+          } catch (error) {
+            console.error("[NFC Debug] Error restarting NFC scan:", error);
+          }
+        }, 500); // Short delay to ensure the previous scan has stopped
+      } else if (isFirstProductAdded) {
+        // Special case: adding first product to an empty order
+        console.log("[NFC Debug] First product added, restarting NFC scan with new total:", total);
         
         // Update reference order
         previousOrderRef.current = currentOrder;
@@ -284,7 +327,10 @@ export const BarOrderSystem: React.FC = () => {
         setOrderItems([]);
         setCardId('');
         setCurrentTotal(0);
-        previousOrderRef.current = '';
+        
+        // CRITICAL: Set the previous order reference to empty array, not empty string
+        // This ensures the system recognizes adding the first product as a change
+        previousOrderRef.current = JSON.stringify([]);
         
         // If NFC scanning was active, restart it after a short delay
         // This avoids clearing the success message too quickly
@@ -362,9 +408,15 @@ export const BarOrderSystem: React.FC = () => {
         const freshTotal = calculateTotal();
         console.log("[BarOrderSystem] Starting scanner with fresh total:", freshTotal);
         
-        // Update the order reference to current state
-        previousOrderRef.current = JSON.stringify(orderItems);
-        console.log("[BarOrderSystem] Setting reference order:", previousOrderRef.current);
+        // IMPORTANT: For empty orders, explicitly treat as empty array with 0€ total
+        if (orderItems.length === 0) {
+          previousOrderRef.current = JSON.stringify([]);
+          console.log("[BarOrderSystem] Starting with empty order - 0€ total");
+        } else {
+          // Update the order reference to current state
+          previousOrderRef.current = JSON.stringify(orderItems);
+          console.log("[BarOrderSystem] Setting reference order:", previousOrderRef.current);
+        }
         
         // Start scanning
         const result = await startScan();
@@ -468,7 +520,10 @@ export const BarOrderSystem: React.FC = () => {
             <div className="border-t border-white/20 pt-3">
               <div className="flex justify-between items-center mb-3">
                 <span className="text-base font-semibold text-white">Total:</span>
-                <span className="text-lg font-bold text-white">{currentTotal.toFixed(2)}€</span>
+                <span className="text-lg font-bold text-white">
+                  {/* Always display 0.00€ for empty orders, otherwise show the calculated total */}
+                  {orderItems.length === 0 ? "0.00€" : `${currentTotal.toFixed(2)}€`}
+                </span>
               </div>
               
               <div className="text-white">
@@ -502,7 +557,11 @@ export const BarOrderSystem: React.FC = () => {
                 
                 {isScanning && (
                   <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
-                    <span>Scanner une carte NFC pour payer {currentTotal.toFixed(2)}€. Le scanner restera actif pour les clients suivants.</span>
+                    {orderItems.length === 0 ? (
+                      <span>Ajoutez des produits pour activer le paiement. Le scanner se mettra à jour automatiquement.</span>
+                    ) : (
+                      <span>Scanner une carte NFC pour payer {currentTotal.toFixed(2)}€. Le scanner restera actif pour les clients suivants.</span>
+                    )}
                   </div>
                 )}
                 
