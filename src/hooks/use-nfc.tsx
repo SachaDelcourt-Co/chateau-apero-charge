@@ -172,9 +172,13 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 
-                // Get the latest total amount if callback is provided
-                const latestAmount = getTotalAmount ? getTotalAmount() : null;
-                console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+                // CRITICAL: Always fetch the latest total at the exact moment of scanning
+                // not using any previously cached value
+                let latestAmount = 0;
+                if (getTotalAmount) {
+                  latestAmount = getTotalAmount();
+                  console.log("[NFC Debug] EXACT current total at scan moment:", latestAmount);
+                }
                 
                 // Temporarily pause scanning but don't stop completely
                 // This prevents multiple rapid reads of the same card
@@ -243,9 +247,13 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
               
-              // Get the latest total amount if callback is provided
-              const latestAmount = getTotalAmount ? getTotalAmount() : null;
-              console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
+              // CRITICAL: Always fetch the latest total at the exact moment of scanning
+              // not using any previously cached value
+              let latestAmount = 0;
+              if (getTotalAmount) {
+                latestAmount = getTotalAmount();
+                console.log("[NFC Debug] EXACT current total at scan moment:", latestAmount);
+              }
               
               // Temporarily pause scanning but don't stop completely
               // This prevents multiple rapid reads of the same card

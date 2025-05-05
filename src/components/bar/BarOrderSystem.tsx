@@ -72,29 +72,50 @@ export const BarOrderSystem: React.FC = () => {
     console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
     setCurrentTotal(total);
     
-    // Update the reference order without stopping scanning
-    if (orderItems.length > 0) {
+    // When the order changes, restart the NFC scanner to capture the new total
+    if (isScanning && orderItems.length > 0) {
       const currentOrder = JSON.stringify(orderItems);
       
-      // Instead of stopping scan, just update the reference and log changes
+      // Only restart scanner if order actually changed and not first render
       if (previousOrderRef.current && previousOrderRef.current !== currentOrder) {
-        console.log("[NFC Debug] Order modified while scanning active, new total:", total);
+        console.log("[NFC Debug] Order modified, restarting NFC scan to capture new total:", total);
         
-        // Update the order reference
+        // Update reference order
         previousOrderRef.current = currentOrder;
         
-        // Notify user that changes have been registered
-        toast({
-          title: "Commande mise à jour",
-          description: `Le total a été mis à jour à ${total.toFixed(2)}€`,
-          variant: "default"
-        });
+        // First stop scanning
+        stopScan();
+        
+        // Then restart scanning after a short delay
+        setTimeout(async () => {
+          try {
+            console.log("[NFC Debug] Restarting NFC scan with new total:", total);
+            const result = await startScan();
+            if (result) {
+              console.log("[NFC Debug] NFC scan successfully restarted with new total:", total);
+              toast({
+                title: "Scanner mis à jour",
+                description: `Le scanner NFC a été mis à jour avec le nouveau total: ${total.toFixed(2)}€`,
+                variant: "default"
+              });
+            } else {
+              console.log("[NFC Debug] Failed to restart NFC scanning");
+              toast({
+                title: "Erreur du scanner",
+                description: "Impossible de redémarrer le scanner NFC. Veuillez réessayer.",
+                variant: "destructive"
+              });
+            }
+          } catch (error) {
+            console.error("[NFC Debug] Error restarting NFC scan:", error);
+          }
+        }, 500); // Short delay to ensure the previous scan has stopped
       } else if (!previousOrderRef.current) {
         // First time setting the order
         previousOrderRef.current = currentOrder;
       }
     }
-  }, [orderItems]);
+  }, [orderItems, isScanning, stopScan, startScan]);
 
   // Add an effect to track scanning state changes from the useNfc hook
   useEffect(() => {
@@ -201,12 +222,17 @@ export const BarOrderSystem: React.FC = () => {
     setIsProcessing(true);
     setErrorMessage(null);
     
-    // Do one final calculation to ensure we have the absolute latest total
-    const finalTotal = calculateTotal();
-    console.log("Processing payment with total:", total, "Final calculated total:", finalTotal);
+    // CRITICAL - Always recalculate the total at the exact moment of payment
+    // Ignore any passed-in total values and only use the current state
+    const absoluteLatestTotal = calculateTotal();
+    console.log(
+      "❗ PAYMENT PROCESSING - IGNORING passed total:", total, 
+      "Using absolute latest total:", absoluteLatestTotal,
+      "Current order items:", orderItems
+    );
     
-    // Always use the latest calculated total, not the one passed in
-    total = finalTotal;
+    // Always use the freshly calculated total, never the passed-in value
+    total = absoluteLatestTotal;
 
     try {
       // Check if card exists and has sufficient balance
@@ -233,7 +259,7 @@ export const BarOrderSystem: React.FC = () => {
         items: JSON.parse(JSON.stringify(orderItems)) // Deep copy to avoid reference issues
       };
 
-      console.log("Sending order with total:", orderData.total_amount);
+      console.log("❗ Sending order with EXACT current total:", orderData.total_amount);
 
       const orderResult = await createBarOrder(orderData);
 
