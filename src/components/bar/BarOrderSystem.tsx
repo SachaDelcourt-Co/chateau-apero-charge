@@ -266,8 +266,6 @@ export const BarOrderSystem: React.FC = () => {
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
         
-        // No need to stop scanning here as it's handled in the useNfc hook when card is scanned
-        
         // Clear order state after successful payment
         setOrderItems([]);
         setCardId('');
@@ -278,6 +276,34 @@ export const BarOrderSystem: React.FC = () => {
           title: "Paiement réussi",
           description: `La commande a été traitée avec succès. Nouveau solde: ${newBalance}€`
         });
+        
+        // If NFC scanning was active, restart it after a short delay
+        // This avoids clearing the success message too quickly
+        if (isScanning) {
+          console.log("[BarOrderSystem] Restarting NFC scanner for next customer");
+          
+          // Short delay to allow user to see the success message
+          setTimeout(async () => {
+            try {
+              // First make sure scanning is stopped
+              stopScan();
+              
+              // Then restart with a fresh context
+              const result = await startScan();
+              if (result) {
+                console.log("[BarOrderSystem] NFC scanner successfully restarted for next customer");
+                toast({
+                  title: "Scanner prêt",
+                  description: "Le scanner NFC est prêt pour le prochain client",
+                });
+              } else {
+                console.error("[BarOrderSystem] Failed to restart NFC scanner after payment");
+              }
+            } catch (error) {
+              console.error("[BarOrderSystem] Error restarting NFC scanner:", error);
+            }
+          }, 2000); // 2 second delay
+        }
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
       }
@@ -321,7 +347,7 @@ export const BarOrderSystem: React.FC = () => {
           console.log("[BarOrderSystem] Persistent NFC scanning activated");
           toast({
             title: "Mode Scanner activé",
-            description: "Le scanner NFC est actif en permanence. Vous pouvez modifier la commande à tout moment."
+            description: "Le scanner NFC est actif en permanence. Il restera actif après chaque paiement."
           });
         } else {
           console.log("[BarOrderSystem] Failed to start NFC scanning");
@@ -451,7 +477,7 @@ export const BarOrderSystem: React.FC = () => {
                 
                 {isScanning && (
                   <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
-                    <span>Scanner une carte NFC pour payer {currentTotal.toFixed(2)}€</span>
+                    <span>Scanner une carte NFC pour payer {currentTotal.toFixed(2)}€. Le scanner restera actif pour les clients suivants.</span>
                   </div>
                 )}
                 
