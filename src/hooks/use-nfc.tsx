@@ -101,6 +101,16 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
     // First, ensure any existing scan is stopped properly
     stopScanInternal();
     
+    // Reset the last scanned ID when starting a new scan
+    // This helps ensure we don't have stale state between scans
+    setLastScannedId(null);
+    
+    // Log the current total amount to verify we're getting a fresh value
+    if (getTotalAmount) {
+      const freshTotal = getTotalAmount();
+      console.log('[NFC Debug] Starting scan with fresh total:', freshTotal);
+    }
+    
     try {
       // Create a fresh AbortController
       nfcAbortController.current = new AbortController();
@@ -126,6 +136,14 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       reader.addEventListener("reading", ({ message, serialNumber }: any) => {
         try {
           console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
+          
+          // Always check the LATEST total at the very beginning of card detection
+          // This is critical between different order sessions
+          let currentTotalAtScanMoment = 0;
+          if (getTotalAmount) {
+            currentTotalAtScanMoment = getTotalAmount();
+            console.log("[NFC Debug] 🔴 EXACT TOTAL at beginning of card detection:", currentTotalAtScanMoment);
+          }
           
           // First priority: Try to read from NDEF message records
           if (message && message.records) {
@@ -172,13 +190,9 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 
-                // CRITICAL: Always fetch the latest total at the exact moment of scanning
-                // not using any previously cached value
-                let latestAmount = 0;
-                if (getTotalAmount) {
-                  latestAmount = getTotalAmount();
-                  console.log("[NFC Debug] EXACT current total at scan moment:", latestAmount);
-                }
+                // Use the total that was already captured at the beginning of the scan
+                // This prevents any race conditions or state changes while processing
+                console.log("[NFC Debug] Using already captured total from scan start:", currentTotalAtScanMoment);
                 
                 // Temporarily pause scanning but don't stop completely
                 // This prevents multiple rapid reads of the same card
@@ -195,7 +209,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 // Notify user that card was detected
                 toast({
                   title: "Carte détectée",
-                  description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                  description: `Traitement en cours pour ${currentTotalAtScanMoment?.toFixed(2) || 0}€`,
                   variant: "default"
                 });
                 
@@ -209,6 +223,14 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                   try {
                     // Only restart if we're still in scanning mode
                     if (isScanning) {
+                      console.log("[NFC Debug] Preparing to restart NFC scanning with fresh state");
+                      
+                      // Check the current total before restarting to ensure fresh state
+                      if (getTotalAmount) {
+                        const freshTotal = getTotalAmount();
+                        console.log("[NFC Debug] Restarting scan with fresh total:", freshTotal);
+                      }
+                      
                       // Create a fresh AbortController
                       nfcAbortController.current = new AbortController();
                       const signal = nfcAbortController.current.signal;
@@ -247,13 +269,9 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
               
-              // CRITICAL: Always fetch the latest total at the exact moment of scanning
-              // not using any previously cached value
-              let latestAmount = 0;
-              if (getTotalAmount) {
-                latestAmount = getTotalAmount();
-                console.log("[NFC Debug] EXACT current total at scan moment:", latestAmount);
-              }
+              // Use the total that was already captured at the beginning of the scan
+              // This prevents any race conditions or state changes while processing
+              console.log("[NFC Debug] Using already captured total from scan start:", currentTotalAtScanMoment);
               
               // Temporarily pause scanning but don't stop completely
               // This prevents multiple rapid reads of the same card
@@ -270,7 +288,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               // Notify user that card was detected
               toast({
                 title: "Carte détectée",
-                description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                description: `Traitement en cours pour ${currentTotalAtScanMoment?.toFixed(2) || 0}€`,
                 variant: "default"
               });
               
@@ -284,6 +302,14 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 try {
                   // Only restart if we're still in scanning mode
                   if (isScanning) {
+                    console.log("[NFC Debug] Preparing to restart NFC scanning with fresh state");
+                    
+                    // Check the current total before restarting to ensure fresh state
+                    if (getTotalAmount) {
+                      const freshTotal = getTotalAmount();
+                      console.log("[NFC Debug] Restarting scan with fresh total:", freshTotal);
+                    }
+                    
                     // Create a fresh AbortController
                     nfcAbortController.current = new AbortController();
                     const signal = nfcAbortController.current.signal;
