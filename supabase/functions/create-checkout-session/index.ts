@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
@@ -18,7 +17,7 @@ serve(async (req) => {
 
   try {
     // Parse the request body
-    const { amount, cardId } = await req.json();
+    const { amount, cardId, paymentMethods = ['card'] } = await req.json();
     
     if (!amount || !cardId) {
       return new Response(
@@ -36,7 +35,7 @@ serve(async (req) => {
 
     // Create the checkout session
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: paymentMethods, // Use the provided payment methods or default to card
       line_items: [
         {
           price_data: {

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +9,13 @@ import { Input } from "@/components/ui/input";
 import { getTableCardById, TableCard } from '@/lib/supabase';
 import { Loader2, CreditCard, AlertCircle } from "lucide-react";
 import { redirectToCheckout } from '@/api/stripe';
+
+// Payment method logos
+const PAYMENT_LOGOS = {
+  bancontact: "https://www.bancontact.com/sites/default/files/2022-12/logo-bancontact-payconiq-color.svg",
+  visa: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg",
+  mastercard: "https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg"
+};
 
 const Payment: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -156,8 +162,30 @@ const Payment: React.FC = () => {
                 disabled={stripeProcessing}
               >
                 {stripeProcessing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CreditCard className="h-4 w-4 mr-2" />}
-                {stripeProcessing ? "Traitement en cours..." : "Payer par carte bancaire"}
+                {stripeProcessing ? "Traitement en cours..." : "Payer par carte ou Bancontact"}
               </Button>
+              
+              <div className="text-xs text-white/70 text-center mt-1 mb-3">
+                Paiement sécurisé via Stripe. Bancontact et cartes de crédit acceptés.
+              </div>
+              
+              <div className="flex justify-center items-center space-x-3 mb-4">
+                <img 
+                  src={PAYMENT_LOGOS.bancontact} 
+                  alt="Bancontact" 
+                  className="h-6 bg-white rounded p-0.5" 
+                />
+                <img 
+                  src={PAYMENT_LOGOS.visa} 
+                  alt="Visa" 
+                  className="h-5" 
+                />
+                <img 
+                  src={PAYMENT_LOGOS.mastercard} 
+                  alt="Mastercard" 
+                  className="h-5" 
+                />
+              </div>
               
               <Button
                 variant="outline"

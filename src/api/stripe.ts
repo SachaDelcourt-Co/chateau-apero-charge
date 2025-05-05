@@ -1,4 +1,3 @@
-
 /**
  * API functions for Stripe integration
  */
@@ -19,7 +18,11 @@ export const createCheckoutSession = async (amount: number, cardId: string) => {
   try {
     // Call the Supabase Edge Function
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-      body: { amount, cardId }
+      body: { 
+        amount, 
+        cardId,
+        paymentMethods: ['card', 'bancontact'] // Add Bancontact as a payment method
+      }
     });
     
     if (error) {
