@@ -4,10 +4,9 @@ import { toast } from '@/hooks/use-toast';
 interface UseNfcOptions {
   onScan?: (id: string) => void;
   validateId?: (id: string) => boolean;
-  getTotalAmount?: () => number;
 }
 
-export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {}) {
+export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
   const [isScanning, setIsScanning] = useState(false);
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
@@ -133,13 +132,6 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
         try {
           console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
           
-          // Always get the freshest total amount at the exact moment of scanning
-          let latestAmount = 0;
-          if (getTotalAmount) {
-            latestAmount = getTotalAmount();
-            console.log("[NFC Debug] Latest amount at scan moment:", latestAmount);
-          }
-          
           // First priority: Try to read from NDEF message records
           if (message && message.records) {
             console.log("[NFC Debug] NFC message records:", message.records);
@@ -185,10 +177,6 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 
-                // Use the total that was already captured at the beginning of the scan
-                // This prevents any race conditions or state changes while processing
-                console.log("[NFC Debug] Using already captured total from scan start:", latestAmount);
-                
                 // Temporarily pause scanning but don't stop completely
                 // This prevents multiple rapid reads of the same card
                 const currentController = nfcAbortController.current;
@@ -204,7 +192,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 // Notify user that card was detected
                 toast({
                   title: "Carte détectée",
-                  description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                  description: `Traitement en cours pour ${extractedId}`,
                   variant: "default"
                 });
                 
@@ -256,10 +244,6 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               console.log("[NFC Debug] Using serial number as ID:", id);
               setLastScannedId(id);
               
-              // Use the total that was already captured at the beginning of the scan
-              // This prevents any race conditions or state changes while processing
-              console.log("[NFC Debug] Using already captured total from scan start:", latestAmount);
-              
               // Temporarily pause scanning but don't stop completely
               // This prevents multiple rapid reads of the same card
               const currentController = nfcAbortController.current;
@@ -275,7 +259,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               // Notify user that card was detected
               toast({
                 title: "Carte détectée",
-                description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                description: `Traitement en cours pour ${id}`,
                 variant: "default"
               });
               
@@ -363,7 +347,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       
       return false;
     }
-  }, [isSupported, onScan, validateId, getTotalAmount]);
+  }, [isSupported, onScan, validateId]);
   
   const stopScan = useCallback(() => {
     console.log('[NFC Debug] stopScan called by user');
