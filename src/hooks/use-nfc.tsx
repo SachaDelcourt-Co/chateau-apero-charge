@@ -208,7 +208,13 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                     if (isScanning) {
                       console.log("[NFC Debug] Restarting scan after card read");
                       
-                      // Create a fresh AbortController and reader
+                      // IMPORTANT: Stop completely first to ensure proper cleanup
+                      stopScanInternal();
+                      
+                      // Small delay to ensure everything is cleaned up
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      
+                      // Now create fresh instances
                       nfcAbortController.current = new AbortController();
                       const signal = nfcAbortController.current.signal;
                       
@@ -216,17 +222,20 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                       const newReader = new NDEFReader();
                       nfcReaderRef.current = newReader;
                       
-                      // Register event listeners (simplified)
+                      // Add minimal error handler
                       newReader.addEventListener("error", (err: any) => {
                         console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                        stopScanInternal();
                       });
                       
-                      // Restart the scan
+                      // Start the scan with the fresh reader
                       await newReader.scan({ signal });
-                      console.log('[NFC Debug] NFC scanning restarted after processing card');
+                      setIsScanning(true);
+                      console.log('[NFC Debug] NFC scanning successfully restarted');
                     }
                   } catch (error) {
                     console.error("[NFC Debug] Error restarting NFC scan:", error);
+                    stopScanInternal(); // Ensure we clean up
                   }
                 }, 2000); // Wait 2 seconds before restarting scan
                 
@@ -275,7 +284,13 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                   if (isScanning) {
                     console.log("[NFC Debug] Restarting scan after card read");
                     
-                    // Create a fresh AbortController and reader
+                    // IMPORTANT: Stop completely first to ensure proper cleanup
+                    stopScanInternal();
+                    
+                    // Small delay to ensure everything is cleaned up
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Now create fresh instances
                     nfcAbortController.current = new AbortController();
                     const signal = nfcAbortController.current.signal;
                     
@@ -283,17 +298,20 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                     const newReader = new NDEFReader();
                     nfcReaderRef.current = newReader;
                     
-                    // Register event listeners (simplified)
+                    // Add minimal error handler
                     newReader.addEventListener("error", (err: any) => {
                       console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                      stopScanInternal();
                     });
                     
-                    // Restart the scan
+                    // Start the scan with the fresh reader
                     await newReader.scan({ signal });
-                    console.log('[NFC Debug] NFC scanning restarted after processing card');
+                    setIsScanning(true);
+                    console.log('[NFC Debug] NFC scanning successfully restarted');
                   }
                 } catch (error) {
                   console.error("[NFC Debug] Error restarting NFC scan:", error);
+                  stopScanInternal(); // Ensure we clean up
                 }
               }, 2000); // Wait 2 seconds before restarting scan
               

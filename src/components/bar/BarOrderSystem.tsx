@@ -47,12 +47,21 @@ export const BarOrderSystem: React.FC = () => {
       // Set card ID immediately for UI feedback
       setCardId(id);
       
-      // Use the EXACT current total from the UI - no recalculation
-      const exactCurrentTotal = currentTotal;
-      console.log("[NFC Scan] Using exact current UI total:", exactCurrentTotal);
+      // Calculate total directly from order items to ensure it's correct
+      const calculatedTotal = orderItems.reduce((sum, item) => {
+        return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
+      }, 0);
       
-      // Process payment with the exact current UI total
-      processPayment(id, exactCurrentTotal);
+      // Log both values for debugging
+      console.log("[NFC Scan] State total:", currentTotal);
+      console.log("[NFC Scan] Calculated total:", calculatedTotal);
+      
+      // Use the calculated total to be absolutely sure
+      const finalTotal = calculatedTotal;
+      console.log("[NFC Scan] *** FINAL AMOUNT TO PROCESS:", finalTotal, "€ ***");
+      
+      // Process payment with this amount
+      processPayment(id, finalTotal);
     }
   });
 
@@ -82,11 +91,11 @@ export const BarOrderSystem: React.FC = () => {
         setTimeout(() => {
           startScan();
           
-          // Only show toast for significant changes to avoid too many notifications
-          if (Math.abs(total) > 0.01) {
+          // Only show toast for significant changes (> 0.50€) to avoid too many notifications
+          if (Math.abs(total) > 0.5) {
             toast({
               title: "Scanner mis à jour",
-              description: `Scanner NFC mis à jour avec le nouveau total: ${total.toFixed(2)}€`
+              description: `Nouveau total: ${total.toFixed(2)}€`
             });
           }
         }, 500);
@@ -203,7 +212,28 @@ export const BarOrderSystem: React.FC = () => {
     setIsProcessing(true);
     setErrorMessage(null);
     
-    // Use the EXACT total passed in - no recalculation
+    // Double check total amount - if it's 0 but we have order items, something is wrong
+    if (total === 0 && orderItems.length > 0) {
+      console.error("ERROR: Total amount is 0 but order has items!", orderItems);
+      // Calculate directly as a fallback
+      total = orderItems.reduce((sum, item) => {
+        return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
+      }, 0);
+      console.log("Recalculated total as fallback:", total);
+    }
+    
+    // CRITICAL: Ensure the amount is not zero if we have items
+    if (total <= 0 && orderItems.some(item => !item.is_return)) {
+      console.error("CRITICAL ERROR: Total is zero or negative but has non-return items!");
+      toast({
+        title: "Erreur de calcul",
+        description: "Le montant total est incorrect. Veuillez réessayer.",
+        variant: "destructive"
+      });
+      setIsProcessing(false);
+      return;
+    }
+    
     console.log("Processing payment with EXACT total amount:", total);
 
     try {
@@ -241,15 +271,16 @@ export const BarOrderSystem: React.FC = () => {
         // Remember if we were scanning
         const wasScanning = isScanning;
         
-        // First, stop scanning if active
+        // First, completely stop scanning if active
         if (wasScanning) {
+          console.log("Completely stopping NFC scanner before reset");
           stopScan();
         }
         
-        // Show success message
+        // Show success message with the EXACT amount debited
         toast({
           title: "Paiement réussi",
-          description: `La commande a été traitée avec succès. Nouveau solde: ${newBalance}€`
+          description: `Carte débitée de ${total.toFixed(2)}€. Nouveau solde: ${newBalance}€`
         });
         
         // Completely reset all state
@@ -258,11 +289,13 @@ export const BarOrderSystem: React.FC = () => {
         setCurrentTotal(0);
         previousOrderRef.current = '';
         
-        // Restart scanning after a brief delay if it was active
+        // Restart scanning after a sufficient delay if it was active
         if (wasScanning) {
+          console.log("Will restart scanner with clean state after delay");
           setTimeout(() => {
+            console.log("Restarting NFC scanner with fresh state");
             startScan();
-          }, 500);
+          }, 800); // Slightly longer delay for better cleanup
         }
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
@@ -441,9 +474,9 @@ export const BarOrderSystem: React.FC = () => {
                 {isScanning && (
                   <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
                     {orderItems.length === 0 ? (
-                      <span>Ajoutez des produits pour activer le paiement. Le scanner se mettra à jour automatiquement.</span>
+                      <span>Ajoutez des produits pour activer le paiement.</span>
                     ) : (
-                      <span>Scanner une carte NFC pour payer <strong>exactement {currentTotal.toFixed(2)}€</strong></span>
+                      <span>Présentez une carte pour payer <strong>{currentTotal.toFixed(2)}€</strong></span>
                     )}
                   </div>
                 )}
