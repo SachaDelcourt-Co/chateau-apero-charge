@@ -309,67 +309,30 @@ export const BarOrderSystem: React.FC = () => {
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
         
-        // Store scanning state before clearing order
-        const wasScanning = isScanning;
-        
+        // Show success message
         toast({
           title: "Paiement réussi",
           description: `La commande a été traitée avec succès. Nouveau solde: ${newBalance}€`
         });
         
-        // IMPORTANT: First stop the scanner to ensure it's properly reset
-        if (wasScanning) {
-          console.log("[BarOrderSystem] First stopping NFC scanner before clearing order state");
+        // CRITICAL: COMPLETELY RESET THE STATE
+        // First stop the NFC scanner completely
+        if (isScanning) {
           stopScan();
         }
         
-        // IMPORTANT: Clear all order state to ensure fresh start
+        // Then clear ALL order state
         setOrderItems([]);
         setCardId('');
         setCurrentTotal(0);
+        previousOrderRef.current = '';
         
-        // CRITICAL: Set the previous order reference to empty array, not empty string
-        // This ensures the system recognizes adding the first product as a change
-        previousOrderRef.current = JSON.stringify([]);
-        
-        // If NFC scanning was active, restart it after a short delay
-        // This avoids clearing the success message too quickly
-        if (wasScanning) {
-          console.log("[BarOrderSystem] Preparing to restart NFC scan for next customer");
-          
-          // Small delay to allow user to see the success message
-          setTimeout(async () => {
-            try {
-              // Recalculate total to ensure it's 0 for the new order
-              const freshTotal = calculateTotal();
-              console.log("[BarOrderSystem] Restarting NFC scan with fresh total:", freshTotal);
-              
-              const result = await startScan();
-              
-              if (result) {
-                console.log("[BarOrderSystem] NFC scan successfully restarted with fresh total:", freshTotal);
-                
-                // Force update the previousOrderRef to empty array to ensure any
-                // subsequent changes are detected properly
-                previousOrderRef.current = JSON.stringify([]);
-                
-                toast({
-                  title: "Scanner mis à jour",
-                  description: `Le scanner NFC a été mis à jour avec un nouveau total: ${freshTotal.toFixed(2)}€`,
-                  variant: "default"
-                });
-              } else {
-                console.log("[BarOrderSystem] Failed to restart NFC scanning");
-                toast({
-                  title: "Erreur du scanner",
-                  description: "Impossible de redémarrer le scanner NFC. Veuillez réessayer.",
-                  variant: "destructive"
-                });
-              }
-            } catch (error) {
-              console.error("[BarOrderSystem] Error restarting NFC scan:", error);
-            }
-          }, 1000); // 1 second delay is enough since we already stopped scanning
+        // If was scanning, restart the scanner with a clean state
+        if (isScanning) {
+          // Wait a moment before restarting to ensure clean state
+          setTimeout(() => {
+            startScan();
+          }, 500);
         }
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
@@ -453,10 +416,10 @@ export const BarOrderSystem: React.FC = () => {
       {/* Product selection - Left wider area */}
       <div className="md:col-span-3 h-full overflow-y-auto pb-20 md:pb-0">
         <div className="p-3">
-          <BarProductList 
-            products={products} 
-            onAddProduct={handleAddProduct} 
-          />
+              <BarProductList 
+                products={products} 
+                onAddProduct={handleAddProduct} 
+              />
         </div>
       </div>
       
