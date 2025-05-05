@@ -106,31 +106,12 @@ export const BarOrderSystem: React.FC = () => {
     }
   }, [isScanning, orderModifiedAfterScan, cardId]);
 
-  // Définir l'ordre des catégories
-  const categoryOrder = ['soft', 'cocktail', 'bière', 'vin', 'caution'];
-
   // Load products on component mount
   useEffect(() => {
     const loadProducts = async () => {
       setIsLoading(true);
       const productData = await getBarProducts();
-      
-      // Trier les produits selon l'ordre des catégories défini
-      const sortedProducts = [...productData].sort((a, b) => {
-        const catA = a.category?.toLowerCase() || '';
-        const catB = b.category?.toLowerCase() || '';
-        
-        const indexA = categoryOrder.indexOf(catA);
-        const indexB = categoryOrder.indexOf(catB);
-        
-        // Si la catégorie n'est pas dans notre liste, la mettre à la fin
-        const orderA = indexA >= 0 ? indexA : 999;
-        const orderB = indexB >= 0 ? indexB : 999;
-        
-        return orderA - orderB;
-      });
-      
-      setProducts(sortedProducts);
+      setProducts(productData);
       setIsLoading(false);
     };
     
@@ -331,43 +312,36 @@ export const BarOrderSystem: React.FC = () => {
 
   if (isLoading) {
     return (
-      <Card className="w-full">
-        <CardContent className="p-6 flex flex-col items-center justify-center min-h-[300px]">
-          <Loader2 className="h-12 w-12 animate-spin text-amber-500 mb-4" />
-          <p className="text-lg">Chargement des produits...</p>
-        </CardContent>
-      </Card>
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-12 w-12 animate-spin text-amber-500" />
+      </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-6">
-      {/* Product selection - Left column on desktop, top on mobile */}
-      <div className="md:col-span-2">
-        <Card className="bg-white/90 shadow-lg">
-          <CardContent className={`${isMobile ? 'p-3' : 'p-6'}`}>
-            <h3 className="text-xl font-semibold mb-2 md:mb-3">Sélection des produits</h3>
-            
-            <ScrollArea className="h-[40vh] md:h-[60vh] pr-4">
-              <BarProductList 
-                products={products} 
-                onAddProduct={handleAddProduct} 
-              />
-            </ScrollArea>
-          </CardContent>
-        </Card>
+    <div className="grid grid-cols-1 md:grid-cols-4 w-full h-full">
+      {/* Product selection - Left wider area */}
+      <div className="md:col-span-3 overflow-auto h-screen pb-20 md:pb-0">
+        <div className="p-3">
+          <ScrollArea className="h-full pr-1">
+            <BarProductList 
+              products={products} 
+              onAddProduct={handleAddProduct} 
+            />
+          </ScrollArea>
+        </div>
       </div>
       
-      {/* Order summary & Payment - Right column on desktop, bottom on mobile */}
-      <div className="md:col-span-1">
-        <Card className="bg-white/90 shadow-lg h-full">
-          <CardContent className="p-3 sm:p-6 flex flex-col h-full">
+      {/* Order summary & Payment - Right column */}
+      <div className="md:col-span-1 bg-black/50 h-screen overflow-auto">
+        <Card className="bg-black/30 h-full rounded-none border-0">
+          <CardContent className="p-3 sm:p-4 flex flex-col h-full">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xl font-semibold">Récapitulatif</h3>
+              <h3 className="text-xl font-semibold text-white">Récapitulatif</h3>
               
               {orderItems.length > 0 && (
                 <button 
-                  className="text-sm text-red-600 hover:text-red-800" 
+                  className="text-sm text-red-400 hover:text-red-200" 
                   onClick={handleClearOrder}
                 >
                   Effacer tout
@@ -376,27 +350,27 @@ export const BarOrderSystem: React.FC = () => {
             </div>
             
             {orderItems.length === 0 ? (
-              <div className="text-center text-gray-500 py-3">
+              <div className="text-center text-gray-300 py-3">
                 Votre commande est vide
               </div>
             ) : (
-              <ScrollArea className="flex-grow mb-4" style={{ maxHeight: isMobile ? "30vh" : "40vh" }}>
+              <ScrollArea className="flex-grow mb-4 pr-1" style={{ maxHeight: "40vh" }}>
                 <ul className="space-y-2">
                   {orderItems.map((item, index) => (
-                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b pb-2">
+                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b border-white/20 pb-2">
                       <div>
                         <div className="flex items-center">
-                          <span className={`font-medium ${item.is_return ? 'text-green-600' : ''}`}>
+                          <span className={`font-medium text-white ${item.is_return ? 'text-green-400' : ''}`}>
                             {item.product_name}
                           </span>
                           {item.quantity > 1 && (
-                            <span className="ml-2 text-sm bg-gray-200 px-2 py-0.5 rounded-full">
+                            <span className="ml-2 text-sm bg-gray-700 px-2 py-0.5 rounded-full text-white">
                               x{item.quantity}
                             </span>
                           )}
                         </div>
                         
-                        <div className="text-xs sm:text-sm text-gray-600">
+                        <div className="text-xs sm:text-sm text-gray-400">
                           {item.is_return 
                             ? `-${(item.price * item.quantity).toFixed(2)}€`
                             : `${(item.price * item.quantity).toFixed(2)}€`}
@@ -404,7 +378,7 @@ export const BarOrderSystem: React.FC = () => {
                       </div>
                       
                       <button 
-                        className="text-sm text-gray-500 hover:text-red-600 px-2 py-1" 
+                        className="text-sm text-gray-400 hover:text-red-400 px-2 py-1" 
                         onClick={() => handleRemoveItem(index)}
                       >
                         -
@@ -415,13 +389,13 @@ export const BarOrderSystem: React.FC = () => {
               </ScrollArea>
             )}
             
-            <div className="border-t pt-3">
+            <div className="border-t border-white/20 pt-3">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-base font-semibold">Total:</span>
-                <span className="text-lg font-bold">{currentTotal.toFixed(2)}€</span>
+                <span className="text-base font-semibold text-white">Total:</span>
+                <span className="text-lg font-bold text-white">{currentTotal.toFixed(2)}€</span>
               </div>
               
-              <div>
+              <div className="text-white">
                 <label htmlFor="card-id" className="block text-sm font-medium mb-1">
                   ID de la carte (8 caractères)
                 </label>
@@ -432,7 +406,7 @@ export const BarOrderSystem: React.FC = () => {
                     value={cardId}
                     onChange={handleCardIdChange}
                     placeholder="00LrJ9bQ"
-                    className="pl-9"
+                    className="pl-9 bg-white/10 border-white/20 text-white placeholder:text-gray-500"
                     maxLength={8}
                     disabled={isProcessing || orderItems.length === 0}
                   />
@@ -442,7 +416,7 @@ export const BarOrderSystem: React.FC = () => {
                   onClick={handleNfcToggle}
                   variant={orderModifiedAfterScan ? "default" : (isScanning ? "destructive" : "outline")}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className={`w-full mb-2 ${orderModifiedAfterScan ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}`}
+                  className={`w-full mb-2 ${orderModifiedAfterScan ? "bg-amber-500 hover:bg-amber-600 text-white" : "border-white/20"}`}
                 >
                   <Scan className="h-4 w-4 mr-2" />
                   {isScanning 
@@ -453,32 +427,32 @@ export const BarOrderSystem: React.FC = () => {
                 </Button>
                 
                 {orderModifiedAfterScan && !isScanning && (
-                  <div className="bg-amber-100 text-amber-800 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
+                  <div className="bg-amber-900/50 text-amber-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
                     <span>Commande modifiée. Veuillez réactiver le scan NFC pour le nouveau montant de {currentTotal.toFixed(2)}€</span>
                   </div>
                 )}
                 
                 {isScanning && (
-                  <div className="bg-blue-100 text-blue-800 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
+                  <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
                     <span>Scanner votre carte NFC maintenant pour payer {currentTotal.toFixed(2)}€</span>
                   </div>
                 )}
                 
                 {isProcessing && (
-                  <div className="mt-2 flex items-center justify-center">
+                  <div className="mt-2 flex items-center justify-center text-white">
                     <Loader2 className="h-5 w-5 animate-spin mr-2" />
                     <span className="text-sm">Traitement en cours...</span>
                   </div>
                 )}
                 
                 {errorMessage && (
-                  <div className="mt-2 bg-red-100 text-red-800 p-2 rounded-md flex items-start text-sm">
+                  <div className="mt-2 bg-red-900/50 text-red-300 p-2 rounded-md flex items-start text-sm">
                     <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
                     <span>{errorMessage}</span>
                   </div>
                 )}
                 
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-400 mt-1">
                   Entrez les 8 caractères de l'ID ou utilisez le scanner NFC pour traiter le paiement automatiquement
                 </p>
               </div>

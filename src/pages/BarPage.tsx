@@ -2,7 +2,6 @@
 import React, { useEffect } from 'react';
 import ChateauBackground from '@/components/ChateauBackground';
 import { BarOrderSystem } from '@/components/bar/BarOrderSystem';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
@@ -11,7 +10,6 @@ import { NfcDebugger } from '@/components/NfcDebugger';
 import { useNavigate } from 'react-router-dom';
 
 const BarPage: React.FC = () => {
-  const isMobile = useIsMobile();
   const { signOut, email, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -48,32 +46,19 @@ const BarPage: React.FC = () => {
   };
   
   return (
-    <ChateauBackground className="p-2 md:p-4 min-h-screen">
-      <div className="container mx-auto max-w-6xl">
-        <div className="flex justify-between items-center mb-3">
-          <h1 className={`text-2xl ${isMobile ? "" : "md:text-3xl"} font-dancing text-white`}>
-            Les apéros du château
-          </h1>
-          <div className="flex items-center space-x-2">
-            {email && (
-              <div className="text-sm text-white mr-2 hidden sm:block">
-                {email}
-              </div>
-            )}
-            <Button 
-              variant="outline" 
-              size={isMobile ? "sm" : "default"} 
-              onClick={handleLogout} 
-              className="bg-white/20 text-white hover:bg-white/40 border-white"
-            >
-              <LogOut className="h-4 w-4 mr-1" />
-              {isMobile ? "" : "Déconnexion"}
-            </Button>
-          </div>
+    <ChateauBackground className="min-h-screen">
+      <div className="w-full h-full">
+        <div className="absolute top-2 right-2 z-10">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleLogout} 
+            className="bg-white/20 text-white hover:bg-white/40 border-white"
+          >
+            <LogOut className="h-4 w-4 mr-1" />
+            Déconnexion
+          </Button>
         </div>
-        <h2 className="text-lg md:text-xl text-white text-center mb-2">
-          Système de Bar
-        </h2>
         
         <BarOrderSystem />
         
