@@ -72,25 +72,29 @@ export const BarOrderSystem: React.FC = () => {
     console.log("[Total Debug] Order items changed, recalculated total:", total, "Items:", orderItems);
     setCurrentTotal(total);
     
-    // Auto-stop NFC scanning ONLY if this is a real order change (not the initial render)
-    if (isScanning && orderItems.length > 0) {
+    // Update the reference order without stopping scanning
+    if (orderItems.length > 0) {
       const currentOrder = JSON.stringify(orderItems);
       
-      // Only stop scanning if order actually changed and not first render
+      // Instead of stopping scan, just update the reference and log changes
       if (previousOrderRef.current && previousOrderRef.current !== currentOrder) {
-        console.log("[NFC Debug] Order modified, stopping NFC scan to ensure correct amount");
-        stopScan();
-        setOrderModifiedAfterScan(true);
+        console.log("[NFC Debug] Order modified while scanning active, new total:", total);
+        
+        // Update the order reference
+        previousOrderRef.current = currentOrder;
+        
+        // Notify user that changes have been registered
         toast({
-          title: "Scan NFC désactivé",
-          description: "Le scan a été désactivé car la commande a été modifiée. Veuillez réactiver le scan après avoir finalisé la commande."
+          title: "Commande mise à jour",
+          description: `Le total a été mis à jour à ${total.toFixed(2)}€`,
+          variant: "default"
         });
+      } else if (!previousOrderRef.current) {
+        // First time setting the order
+        previousOrderRef.current = currentOrder;
       }
-      
-      // Update previous order ref
-      previousOrderRef.current = currentOrder;
     }
-  }, [orderItems, isScanning, stopScan]);
+  }, [orderItems]);
 
   // Add an effect to track scanning state changes from the useNfc hook
   useEffect(() => {
@@ -265,12 +269,20 @@ export const BarOrderSystem: React.FC = () => {
       if (isScanning) {
         console.log("[BarOrderSystem] Stopping NFC scan");
         stopScan();
+        
+        // Reset state
+        setOrderModifiedAfterScan(false);
+        
+        toast({
+          title: "Mode Scanner désactivé",
+          description: "Le scanner NFC a été désactivé"
+        });
       } else {
-        console.log("[BarOrderSystem] Starting NFC scan, current total:", calculateTotal());
+        console.log("[BarOrderSystem] Starting persistent NFC scan mode");
         // Reset any existing error
         setErrorMessage(null);
         
-        // Reset order modified flag when explicitly activating scanning
+        // Reset modified flag
         setOrderModifiedAfterScan(false);
         
         // Update the order reference to current state
@@ -280,8 +292,11 @@ export const BarOrderSystem: React.FC = () => {
         // Start scanning
         const result = await startScan();
         if (result) {
-          console.log("[BarOrderSystem] NFC scanning started successfully");
-          // Toast already shown by the hook
+          console.log("[BarOrderSystem] Persistent NFC scanning activated");
+          toast({
+            title: "Mode Scanner activé",
+            description: "Le scanner NFC est actif en permanence. Vous pouvez modifier la commande à tout moment."
+          });
         } else {
           console.log("[BarOrderSystem] Failed to start NFC scanning");
         }
@@ -398,27 +413,19 @@ export const BarOrderSystem: React.FC = () => {
                 
                 <Button
                   onClick={handleNfcToggle}
-                  variant={orderModifiedAfterScan ? "default" : (isScanning ? "destructive" : "outline")}
+                  variant={isScanning ? "destructive" : "outline"}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className={`w-full mb-2 ${orderModifiedAfterScan ? "bg-amber-500 hover:bg-amber-600 text-white" : "border-white/20"}`}
+                  className={`w-full mb-2 ${isScanning ? "bg-green-600 hover:bg-green-700 text-white" : "border-white/20"}`}
                 >
                   <Scan className="h-4 w-4 mr-2" />
                   {isScanning 
-                    ? "Arrêter le scan NFC" 
-                    : (orderModifiedAfterScan 
-                        ? "Réactiver le scan pour payer" 
-                        : "Activer le scan NFC pour payer")}
+                    ? "Mode Scanner Actif" 
+                    : "Activer le Scanner NFC"}
                 </Button>
-                
-                {orderModifiedAfterScan && !isScanning && (
-                  <div className="bg-amber-900/50 text-amber-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
-                    <span>Commande modifiée. Veuillez réactiver le scan NFC pour le nouveau montant de {currentTotal.toFixed(2)}€</span>
-                  </div>
-                )}
                 
                 {isScanning && (
                   <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
-                    <span>Scanner votre carte NFC maintenant pour payer {currentTotal.toFixed(2)}€</span>
+                    <span>Scanner une carte NFC pour payer {currentTotal.toFixed(2)}€</span>
                   </div>
                 )}
                 

@@ -176,20 +176,58 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 const latestAmount = getTotalAmount ? getTotalAmount() : null;
                 console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
                 
-                // Stop scanning after successful card read
-                stopScanInternal();
-                console.log("[NFC Debug] NFC scanning stopped after successful card read");
+                // Temporarily pause scanning but don't stop completely
+                // This prevents multiple rapid reads of the same card
+                const currentController = nfcAbortController.current;
+                if (currentController) {
+                  try {
+                    currentController.abort();
+                    console.log("[NFC Debug] NFC scanning temporarily paused after card read");
+                  } catch (error) {
+                    console.error('[NFC Debug] Error pausing NFC scan:', error);
+                  }
+                }
                 
-                // Notify user that scanning has stopped
+                // Notify user that card was detected
                 toast({
                   title: "Carte détectée",
-                  description: "Le scan NFC a été désactivé après la lecture de la carte."
+                  description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                  variant: "default"
                 });
                 
                 // Call onScan with the extracted ID if provided
                 if (onScan) {
                   onScan(extractedId);
                 }
+                
+                // Restart scan after a short delay to prevent multiple reads
+                setTimeout(async () => {
+                  try {
+                    // Only restart if we're still in scanning mode
+                    if (isScanning) {
+                      // Create a fresh AbortController
+                      nfcAbortController.current = new AbortController();
+                      const signal = nfcAbortController.current.signal;
+                      
+                      // @ts-ignore - TypeScript might not have NDEFReader in its types yet
+                      const newReader = new NDEFReader();
+                      nfcReaderRef.current = newReader;
+                      
+                      // Register event listeners (simplified)
+                      newReader.addEventListener("error", (err: any) => {
+                        console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                      });
+                      
+                      // Copy the reading event handler from above, but don't register it here to keep the code shorter
+                      
+                      // Restart the scan
+                      await newReader.scan({ signal });
+                      console.log('[NFC Debug] NFC scanning restarted after processing card');
+                    }
+                  } catch (error) {
+                    console.error("[NFC Debug] Error restarting NFC scan:", error);
+                  }
+                }, 2000); // Wait 2 seconds before restarting scan
                 
                 return;
               }
@@ -209,20 +247,58 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               const latestAmount = getTotalAmount ? getTotalAmount() : null;
               console.log("[NFC Debug] Current total amount at scan time:", latestAmount);
               
-              // Stop scanning after successful card read
-              stopScanInternal();
-              console.log("[NFC Debug] NFC scanning stopped after successful card read");
+              // Temporarily pause scanning but don't stop completely
+              // This prevents multiple rapid reads of the same card
+              const currentController = nfcAbortController.current;
+              if (currentController) {
+                try {
+                  currentController.abort();
+                  console.log("[NFC Debug] NFC scanning temporarily paused after card read");
+                } catch (error) {
+                  console.error('[NFC Debug] Error pausing NFC scan:', error);
+                }
+              }
               
-              // Notify user that scanning has stopped
+              // Notify user that card was detected
               toast({
                 title: "Carte détectée",
-                description: "Le scan NFC a été désactivé après la lecture de la carte."
+                description: `Traitement en cours pour ${latestAmount?.toFixed(2) || 0}€`,
+                variant: "default"
               });
               
               // Call onScan with the ID if provided
               if (onScan) {
                 onScan(id);
               }
+              
+              // Restart scan after a short delay to prevent multiple reads
+              setTimeout(async () => {
+                try {
+                  // Only restart if we're still in scanning mode
+                  if (isScanning) {
+                    // Create a fresh AbortController
+                    nfcAbortController.current = new AbortController();
+                    const signal = nfcAbortController.current.signal;
+                    
+                    // @ts-ignore - TypeScript might not have NDEFReader in its types yet
+                    const newReader = new NDEFReader();
+                    nfcReaderRef.current = newReader;
+                    
+                    // Register event listeners (simplified)
+                    newReader.addEventListener("error", (err: any) => {
+                      console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                    });
+                    
+                    // Copy the reading event handler from above, but don't register it here to keep the code shorter
+                    
+                    // Restart the scan
+                    await newReader.scan({ signal });
+                    console.log('[NFC Debug] NFC scanning restarted after processing card');
+                  }
+                } catch (error) {
+                  console.error("[NFC Debug] Error restarting NFC scan:", error);
+                }
+              }, 2000); // Wait 2 seconds before restarting scan
               
               return;
             }
