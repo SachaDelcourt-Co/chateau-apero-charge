@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
@@ -22,82 +21,73 @@ export const BarProductList: React.FC<BarProductListProps> = ({
 }) => {
   const isMobile = useIsMobile();
 
-  // Group products by category
+  // Group products by category using hardcoded groups
   const groupedProducts = React.useMemo(() => {
-    const result: ProductCategory[] = [];
-    const categorizedProducts: Record<string, BarProduct[]> = {};
-
-    // Define category keywords for sorting
-    const softProducts = ["eau", "coca"];
-    const alcoholProducts = ["gin", "spritz", "bière", "pils", "verre bulle"];
-    const containerProducts = ["bouteille", "carafe"];
-    const depositProducts = ["caution", "retour"];
-
-    // Sort products into categories
+    const softProducts: BarProduct[] = [];
+    const alcoholProducts: BarProduct[] = [];
+    const containerProducts: BarProduct[] = [];
+    const depositProducts: BarProduct[] = [];
+    const otherProducts: BarProduct[] = [];
+    
+    // Manually categorize each product
     products.forEach(product => {
-      const productNameLower = product.name.toLowerCase();
+      const name = product.name.toLowerCase();
       
-      // Check for Softs
-      if (softProducts.some(soft => productNameLower.includes(soft))) {
-        if (!categorizedProducts["Softs"]) {
-          categorizedProducts["Softs"] = [];
-        }
-        categorizedProducts["Softs"].push(product);
-        return;
+      // Softs category
+      if (name.includes('eau') || 
+          name.includes('coca') || 
+          name.includes('coca-cola')) {
+        softProducts.push(product);
       }
-      
-      // Check for Alcohol
-      if (alcoholProducts.some(alcohol => productNameLower.includes(alcohol))) {
-        if (!categorizedProducts["Alcool"]) {
-          categorizedProducts["Alcool"] = [];
-        }
-        categorizedProducts["Alcool"].push(product);
-        return;
+      // Alcohol category
+      else if (name.includes('gin') && !name.includes('carafe') ||
+        name.includes('spritz') && !name.includes('carafe') ||
+        name.includes('bière spécial') || 
+        name.includes('biere special') ||
+        name.includes('pils') && !name.includes('carafe') || 
+        name.includes('verre bulle')) {
+        alcoholProducts.push(product);
       }
-      
-      // Check for Carafes/Bottles
-      if (containerProducts.some(container => productNameLower.includes(container))) {
-        if (!categorizedProducts["Carafes/Bouteilles"]) {
-          categorizedProducts["Carafes/Bouteilles"] = [];
-        }
-        categorizedProducts["Carafes/Bouteilles"].push(product);
-        return;
+      // Containers category
+      else if (name.includes('bouteille') || 
+               name.includes('carafe')) {
+        containerProducts.push(product);
       }
-      
-      // Check for Deposits/Returns
-      if (depositProducts.some(deposit => productNameLower.includes(deposit)) || product.is_deposit || product.is_return) {
-        if (!categorizedProducts["Cautions"]) {
-          categorizedProducts["Cautions"] = [];
-        }
-        categorizedProducts["Cautions"].push(product);
-        return;
+      // Deposit/Return category
+      else if (name.includes('caution') || 
+               name.includes('retour') || 
+               product.is_deposit || 
+               product.is_return) {
+        depositProducts.push(product);
       }
-      
-      // Default category handling
-      const categoryName = product.category || "Autre";
-      if (!categorizedProducts[categoryName]) {
-        categorizedProducts[categoryName] = [];
-      }
-      categorizedProducts[categoryName].push(product);
-    });
-    
-    // Define the order of categories to display
-    const categoryOrder = ["Softs", "Alcool", "Carafes/Bouteilles", "Cautions"];
-    
-    // Add categories in the defined order first
-    categoryOrder.forEach(category => {
-      if (categorizedProducts[category]?.length > 0) {
-        result.push({ name: category, products: categorizedProducts[category] });
-        delete categorizedProducts[category];
+      // Other products
+      else {
+        otherProducts.push(product);
       }
     });
+
+    const result: ProductCategory[] = [];
     
-    // Add any remaining categories
-    Object.keys(categorizedProducts).forEach(category => {
-      if (categorizedProducts[category]?.length > 0) {
-        result.push({ name: category, products: categorizedProducts[category] });
-      }
-    });
+    // Add categories in specific order
+    if (softProducts.length > 0) {
+      result.push({name: 'Softs', products: softProducts});
+    }
+    
+    if (alcoholProducts.length > 0) {
+      result.push({name: 'Alcool', products: alcoholProducts});
+    }
+    
+    if (containerProducts.length > 0) {
+      result.push({name: 'Carafes/Bouteilles', products: containerProducts});
+    }
+    
+    if (depositProducts.length > 0) {
+      result.push({name: 'Cautions', products: depositProducts});
+    }
+    
+    if (otherProducts.length > 0) {
+      result.push({name: 'Autre', products: otherProducts});
+    }
     
     return result;
   }, [products]);
