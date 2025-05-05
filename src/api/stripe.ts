@@ -21,7 +21,7 @@ export const createCheckoutSession = async (amount: number, cardId: string) => {
       body: { 
         amount, 
         cardId,
-        paymentMethods: ['card', 'bancontact'] // Add Bancontact as a payment method
+        paymentMethods: ['bancontact', 'card'] // Prioritize Bancontact for Belgian users
       }
     });
     

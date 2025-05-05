@@ -12,7 +12,7 @@ import { redirectToCheckout } from '@/api/stripe';
 
 // Payment method logos
 const PAYMENT_LOGOS = {
-  bancontact: "https://www.bancontact.com/sites/default/files/2022-12/logo-bancontact-payconiq-color.svg",
+  bancontact: "https://cdn.worldvectorlogo.com/logos/bancontact-1.svg",
   visa: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg",
   mastercard: "https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg"
 };
@@ -165,16 +165,22 @@ const Payment: React.FC = () => {
                 {stripeProcessing ? "Traitement en cours..." : "Payer par carte ou Bancontact"}
               </Button>
               
-              <div className="text-xs text-white/70 text-center mt-1 mb-3">
+              <div className="text-xs text-white/70 text-center mt-1 mb-2">
                 Paiement sécurisé via Stripe. Bancontact et cartes de crédit acceptés.
               </div>
               
+              <div className="text-xs text-white/80 text-center mb-3 px-2">
+                Après avoir cliqué sur le bouton ci-dessous, vous pourrez choisir entre Bancontact et carte de crédit sur la page de paiement.
+              </div>
+              
               <div className="flex justify-center items-center space-x-3 mb-4">
-                <img 
-                  src={PAYMENT_LOGOS.bancontact} 
-                  alt="Bancontact" 
-                  className="h-6 bg-white rounded p-0.5" 
-                />
+                <div className="h-6 bg-white rounded p-0.5 flex items-center justify-center">
+                  <img 
+                    src={PAYMENT_LOGOS.bancontact} 
+                    alt="Bancontact" 
+                    className="h-4" 
+                  />
+                </div>
                 <img 
                   src={PAYMENT_LOGOS.visa} 
                   alt="Visa" 
