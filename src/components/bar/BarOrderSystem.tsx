@@ -90,14 +90,6 @@ export const BarOrderSystem: React.FC = () => {
         // Then restart after a short delay
         setTimeout(() => {
           startScan();
-          
-          // Only show toast for significant changes (> 0.50€) to avoid too many notifications
-          if (Math.abs(total) > 0.5) {
-            toast({
-              title: "Scanner mis à jour",
-              description: `Nouveau total: ${total.toFixed(2)}€`
-            });
-          }
         }, 500);
       } 
       // For first time setup, just save the reference
@@ -201,11 +193,7 @@ export const BarOrderSystem: React.FC = () => {
 
   const processPayment = async (id: string, total: number) => {
     if (orderItems.length === 0) {
-      toast({
-        title: "Commande vide",
-        description: "Veuillez ajouter des produits à la commande",
-        variant: "destructive"
-      });
+      setErrorMessage("Commande vide. Veuillez ajouter des produits.");
       return;
     }
 
@@ -225,11 +213,7 @@ export const BarOrderSystem: React.FC = () => {
     // CRITICAL: Ensure the amount is not zero if we have items
     if (total <= 0 && orderItems.some(item => !item.is_return)) {
       console.error("CRITICAL ERROR: Total is zero or negative but has non-return items!");
-      toast({
-        title: "Erreur de calcul",
-        description: "Le montant total est incorrect. Veuillez réessayer.",
-        variant: "destructive"
-      });
+      setErrorMessage("Erreur de calcul. Le montant total est incorrect.");
       setIsProcessing(false);
       return;
     }
@@ -249,6 +233,12 @@ export const BarOrderSystem: React.FC = () => {
       const cardAmountFloat = parseFloat(card.amount || '0');
       
       if (cardAmountFloat < total) {
+        // Show toast for insufficient balance - one of the two cases we want to keep
+        toast({
+          title: "Solde insuffisant",
+          description: `La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
+          variant: "destructive"
+        });
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
         setIsProcessing(false);
         return;
@@ -277,10 +267,10 @@ export const BarOrderSystem: React.FC = () => {
           stopScan();
         }
         
-        // Show success message with the EXACT amount debited
+        // Show success message with remaining balance - one of the two cases we want to keep
         toast({
           title: "Paiement réussi",
-          description: `Carte débitée de ${total.toFixed(2)}€. Nouveau solde: ${newBalance}€`
+          description: `Solde restant: ${newBalance}€`
         });
         
         // Completely reset all state
@@ -315,11 +305,6 @@ export const BarOrderSystem: React.FC = () => {
         // Stop the scanner
         console.log("Stopping NFC scanner");
         stopScan();
-        
-        toast({
-          title: "Scanner désactivé",
-          description: "Le scanner NFC a été désactivé"
-        });
       } else {
         // Start the scanner
         console.log("Starting NFC scanner");
@@ -331,28 +316,11 @@ export const BarOrderSystem: React.FC = () => {
         previousOrderRef.current = JSON.stringify(orderItems);
         
         // Start scanning
-        const success = await startScan();
-        
-        if (success) {
-          toast({
-            title: "Scanner activé",
-            description: "Le scanner NFC est activé. Présentez une carte pour payer."
-          });
-        } else {
-          toast({
-            title: "Erreur",
-            description: "Impossible d'activer le scanner NFC",
-            variant: "destructive"
-          });
-        }
+        await startScan();
       }
     } catch (error) {
       console.error("Error toggling NFC scanner:", error);
-      toast({
-        title: "Erreur",
-        description: "Une erreur est survenue avec le scanner NFC",
-        variant: "destructive"
-      });
+      setErrorMessage("Une erreur est survenue avec le scanner NFC");
     }
   };
 
@@ -378,43 +346,44 @@ export const BarOrderSystem: React.FC = () => {
       
       {/* Order summary & Payment - Right column */}
       <div className="md:col-span-1 bg-black/50 h-screen overflow-auto">
-        <Card className="bg-black/30 h-full rounded-none border-0">
-          <CardContent className="p-3 sm:p-4 flex flex-col h-full">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xl font-semibold text-white">Récapitulatif</h3>
+        <Card className="bg-black/30 h-auto rounded-none border-0 flex flex-col">
+          <CardContent className="p-2 sm:p-3 flex flex-col">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-lg font-semibold text-white">Récapitulatif</h3>
               
               {orderItems.length > 0 && (
                 <button 
-                  className="text-sm text-red-400 hover:text-red-200" 
+                  className="text-xs text-red-400 hover:text-red-200" 
                   onClick={handleClearOrder}
                 >
-                  Effacer tout
+                  Effacer
                 </button>
               )}
             </div>
             
+            {/* Order items list */}
             {orderItems.length === 0 ? (
-              <div className="text-center text-gray-300 py-3">
-                Votre commande est vide
+              <div className="text-center text-gray-300 py-2 text-sm">
+                Commande vide
               </div>
             ) : (
-              <div className="flex-grow mb-4 pr-1 overflow-y-auto" style={{ maxHeight: "40vh" }}>
-                <ul className="space-y-2">
+              <div className="mb-2 pr-1 overflow-y-auto max-h-[40vh]">
+                <ul className="space-y-1">
                   {orderItems.map((item, index) => (
-                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b border-white/20 pb-2">
+                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b border-white/20 pb-1">
                       <div>
                         <div className="flex items-center">
-                          <span className={`font-medium text-white ${item.is_return ? 'text-green-400' : ''}`}>
+                          <span className={`font-medium text-white text-sm ${item.is_return ? 'text-green-400' : ''}`}>
                             {item.product_name}
                           </span>
                           {item.quantity > 1 && (
-                            <span className="ml-2 text-sm bg-gray-700 px-2 py-0.5 rounded-full text-white">
+                            <span className="ml-2 text-xs bg-gray-700 px-1.5 py-0.5 rounded-full text-white">
                               x{item.quantity}
                             </span>
                           )}
                         </div>
                         
-                        <div className="text-xs sm:text-sm text-gray-400">
+                        <div className="text-xs text-gray-400">
                           {item.is_return 
                             ? `-${(item.price * item.quantity).toFixed(2)}€`
                             : `${(item.price * item.quantity).toFixed(2)}€`}
@@ -422,7 +391,7 @@ export const BarOrderSystem: React.FC = () => {
                       </div>
                       
                       <button 
-                        className="text-sm text-gray-400 hover:text-red-400 px-2 py-1" 
+                        className="text-xs text-gray-400 hover:text-red-400 px-2 py-1" 
                         onClick={() => handleRemoveItem(index)}
                       >
                         -
@@ -433,71 +402,70 @@ export const BarOrderSystem: React.FC = () => {
               </div>
             )}
             
-            <div className="border-t border-white/20 pt-3">
-              <div className="flex justify-between items-center mb-3">
+            <div className="border-t border-white/20 pt-2 mt-auto">
+              <div className="flex justify-between items-center mb-2">
                 <span className="text-base font-semibold text-white">Total:</span>
                 <span className="text-lg font-bold text-white">
-                  {/* Always display 0.00€ for empty orders, otherwise show the calculated total */}
                   {orderItems.length === 0 ? "0.00€" : `${currentTotal.toFixed(2)}€`}
                 </span>
               </div>
               
               <div className="text-white">
                 <label htmlFor="card-id" className="block text-sm font-medium mb-1">
-                  ID de la carte (8 caractères)
+                  ID de la carte
                 </label>
                 <div className="relative mb-2">
                   <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input 
+                  <input 
                     id="card-id"
                     value={cardId}
                     onChange={handleCardIdChange}
                     placeholder="00LrJ9bQ"
-                    className="pl-9 bg-white/10 border-white/20 text-white placeholder:text-gray-500"
                     maxLength={8}
                     disabled={isProcessing || orderItems.length === 0}
+                    className="w-full pl-9 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 
-                <Button
+                {/* Custom button since the UI component has styling issues */}
+                <button
                   onClick={handleNfcToggle}
-                  variant={isScanning ? "destructive" : "outline"}
                   disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className={`w-full mb-2 ${isScanning ? "bg-green-600 hover:bg-green-700 text-white" : "border-white/20"}`}
+                  className={`w-full mb-2 flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white ${
+                    isProcessing || orderItems.length === 0 || !isSupported 
+                      ? "bg-gray-500 cursor-not-allowed opacity-50" 
+                      : isScanning 
+                        ? "bg-green-600 hover:bg-green-700" 
+                        : "bg-blue-600 hover:bg-blue-700"
+                  }`}
                 >
                   <Scan className="h-4 w-4 mr-2" />
-                  {isScanning 
-                    ? "Mode Scanner Actif" 
-                    : "Activer le Scanner NFC"}
-                </Button>
+                  {isScanning ? "Scanner Actif" : "Activer Scanner NFC"}
+                </button>
                 
                 {isScanning && (
-                  <div className="bg-blue-900/50 text-blue-300 p-2 rounded-md flex items-start text-sm mt-2 mb-2">
+                  <div className="bg-blue-900/50 text-blue-300 p-1.5 rounded-md flex items-start text-xs mt-1 mb-1">
                     {orderItems.length === 0 ? (
-                      <span>Ajoutez des produits pour activer le paiement.</span>
+                      <span>Ajoutez des produits</span>
                     ) : (
-                      <span>Présentez une carte pour payer <strong>{currentTotal.toFixed(2)}€</strong></span>
+                      <span>Présentez une carte - <strong>{currentTotal.toFixed(2)}€</strong></span>
                     )}
                   </div>
                 )}
                 
                 {isProcessing && (
-                  <div className="mt-2 flex items-center justify-center text-white">
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    <span className="text-sm">Traitement en cours...</span>
+                  <div className="mt-1 flex items-center justify-center text-white">
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    <span className="text-xs">Traitement...</span>
                   </div>
                 )}
                 
                 {errorMessage && (
-                  <div className="mt-2 bg-red-900/50 text-red-300 p-2 rounded-md flex items-start text-sm">
-                    <AlertCircle className="h-4 w-4 mr-1 mt-0.5 flex-shrink-0" />
+                  <div className="mt-1 bg-red-900/50 text-red-300 p-1.5 rounded-md flex items-start text-xs">
+                    <AlertCircle className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
                     <span>{errorMessage}</span>
                   </div>
                 )}
-                
-                <p className="text-xs text-gray-400 mt-1">
-                  Entrez les 8 caractères de l'ID ou utilisez le scanner NFC pour traiter le paiement automatiquement
-                </p>
               </div>
             </div>
           </CardContent>

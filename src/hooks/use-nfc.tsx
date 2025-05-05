@@ -119,11 +119,6 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       // Add error listener first before starting the scan
       reader.addEventListener("error", (error: any) => {
         console.error("[NFC Debug] NFC reading error:", error);
-        toast({
-          title: "Erreur NFC",
-          description: error.message || "Une erreur est survenue lors de la lecture NFC",
-          variant: "destructive"
-        });
         stopScanInternal();
       });
       
@@ -188,13 +183,6 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                     console.error('[NFC Debug] Error pausing NFC scan:', error);
                   }
                 }
-                
-                // Notify user that card was detected
-                toast({
-                  title: "Carte détectée",
-                  description: `Traitement en cours pour ${extractedId}`,
-                  variant: "default"
-                });
                 
                 // Call onScan with the extracted ID if provided
                 if (onScan) {
@@ -265,13 +253,6 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
                 }
               }
               
-              // Notify user that card was detected
-              toast({
-                title: "Carte détectée",
-                description: `Traitement en cours pour ${id}`,
-                variant: "default"
-              });
-              
               // Call onScan with the ID if provided
               if (onScan) {
                 onScan(id);
@@ -338,10 +319,6 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       setIsScanning(true);
       
       console.log('[NFC Debug] NFC scan started successfully');
-      toast({
-        title: "Scan NFC activé",
-        description: "Approchez une carte NFC pour scanner"
-      });
       
       return true;
     } catch (error) {
@@ -350,17 +327,9 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       
       // Provide user feedback
       if ((error as Error)?.message?.includes("aborted")) {
-        toast({
-          title: "Scan NFC interrompu",
-          description: "Le scan NFC a été interrompu",
-          variant: "default"
-        });
+        console.log("[NFC Debug] Scan was aborted by user or system");
       } else {
-        toast({
-          title: "Erreur NFC",
-          description: (error as Error)?.message || "Impossible d'activer le scan NFC",
-          variant: "destructive"
-        });
+        console.error("[NFC Debug] NFC error:", (error as Error)?.message);
       }
       
       return false;
