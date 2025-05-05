@@ -269,45 +269,61 @@ export const BarOrderSystem: React.FC = () => {
         // Store scanning state before clearing order
         const wasScanning = isScanning;
         
-        // IMPORTANT: First completely clear all order state to ensure fresh start
-        setOrderItems([]);
-        setCardId('');
-        setCurrentTotal(0);
-        previousOrderRef.current = '';
-        
         toast({
           title: "Paiement réussi",
           description: `La commande a été traitée avec succès. Nouveau solde: ${newBalance}€`
         });
         
+        // IMPORTANT: First stop the scanner to ensure it's properly reset
+        if (wasScanning) {
+          console.log("[BarOrderSystem] First stopping NFC scanner before clearing order state");
+          stopScan();
+        }
+        
+        // IMPORTANT: Clear all order state to ensure fresh start
+        setOrderItems([]);
+        setCardId('');
+        setCurrentTotal(0);
+        previousOrderRef.current = '';
+        
         // If NFC scanning was active, restart it after a short delay
         // This avoids clearing the success message too quickly
         if (wasScanning) {
-          console.log("[BarOrderSystem] Restarting NFC scanner for next customer");
+          console.log("[BarOrderSystem] Preparing to restart NFC scan for next customer");
           
-          // First completely stop the scanner to clear any cached state
-          stopScan();
-          
-          // Short delay to allow user to see the success message
+          // Small delay to allow user to see the success message
           setTimeout(async () => {
             try {
-              console.log("[BarOrderSystem] Creating fresh scanner with reset total. Current total:", calculateTotal());
+              // Recalculate total to ensure it's 0 for the new order
+              const freshTotal = calculateTotal();
+              console.log("[BarOrderSystem] Restarting NFC scan with fresh total:", freshTotal);
               
-              // Then restart with a completely fresh context
               const result = await startScan();
+              
               if (result) {
-                console.log("[BarOrderSystem] NFC scanner successfully restarted with fresh state. Current total:", calculateTotal());
+                console.log("[BarOrderSystem] NFC scan successfully restarted with fresh total:", freshTotal);
+                
+                // Force update the previousOrderRef to empty array to ensure any
+                // subsequent changes are detected properly
+                previousOrderRef.current = JSON.stringify([]);
+                
                 toast({
-                  title: "Scanner prêt",
-                  description: "Le scanner NFC est prêt pour le prochain client avec un montant réinitialisé",
+                  title: "Scanner mis à jour",
+                  description: `Le scanner NFC a été mis à jour avec un nouveau total: ${freshTotal.toFixed(2)}€`,
+                  variant: "default"
                 });
               } else {
-                console.error("[BarOrderSystem] Failed to restart NFC scanner after payment");
+                console.log("[BarOrderSystem] Failed to restart NFC scanning");
+                toast({
+                  title: "Erreur du scanner",
+                  description: "Impossible de redémarrer le scanner NFC. Veuillez réessayer.",
+                  variant: "destructive"
+                });
               }
             } catch (error) {
-              console.error("[BarOrderSystem] Error restarting NFC scanner:", error);
+              console.error("[BarOrderSystem] Error restarting NFC scan:", error);
             }
-          }, 2000); // 2 second delay
+          }, 1000); // 1 second delay is enough since we already stopped scanning
         }
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");

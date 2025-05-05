@@ -105,10 +105,18 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
     // This helps ensure we don't have stale state between scans
     setLastScannedId(null);
     
-    // Log the current total amount to verify we're getting a fresh value
+    // CRITICAL - Always get a completely fresh total when starting a scan
+    // This is essential for correct functionality between different orders
     if (getTotalAmount) {
       const freshTotal = getTotalAmount();
-      console.log('[NFC Debug] Starting scan with fresh total:', freshTotal);
+      console.log('[NFC Debug] ❗ Starting scan with FRESH TOTAL:', freshTotal);
+      
+      // Double-check to make sure the total is what we expect (should be 0 for a new order)
+      if (freshTotal === 0) {
+        console.log('[NFC Debug] 👍 Confirmed zero total for new order scan');
+      } else {
+        console.log('[NFC Debug] ⚠️ Warning: Starting scan with non-zero total:', freshTotal);
+      }
     }
     
     try {
@@ -137,12 +145,20 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
         try {
           console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
           
-          // Always check the LATEST total at the very beginning of card detection
-          // This is critical between different order sessions
+          // CRITICAL: Always check the LATEST total at the very beginning of card detection
+          // This is crucial between different order sessions
           let currentTotalAtScanMoment = 0;
           if (getTotalAmount) {
             currentTotalAtScanMoment = getTotalAmount();
             console.log("[NFC Debug] 🔴 EXACT TOTAL at beginning of card detection:", currentTotalAtScanMoment);
+            
+            // Check if the total is what we expect for a new order after payment (should be 0 or very small)
+            if (currentTotalAtScanMoment === 0) {
+              console.log("[NFC Debug] ✅ Verified zero total for new order");
+            } else if (currentTotalAtScanMoment > 0) {
+              // If total is non-zero, it should be because there are actual items in the order
+              console.log("[NFC Debug] ℹ️ Non-zero total detected. This should reflect actual items in the current order.");
+            }
           }
           
           // First priority: Try to read from NDEF message records
