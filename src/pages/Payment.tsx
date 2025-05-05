@@ -169,30 +169,6 @@ const Payment: React.FC = () => {
                 Paiement sécurisé via Stripe. Bancontact et cartes de crédit acceptés.
               </div>
               
-              <div className="text-xs text-white/80 text-center mb-3 px-2">
-                Après avoir cliqué sur le bouton ci-dessous, vous pourrez choisir entre Bancontact et carte de crédit sur la page de paiement.
-              </div>
-              
-              <div className="flex justify-center items-center space-x-3 mb-4">
-                <div className="h-6 bg-white rounded p-0.5 flex items-center justify-center">
-                  <img 
-                    src={PAYMENT_LOGOS.bancontact} 
-                    alt="Bancontact" 
-                    className="h-4" 
-                  />
-                </div>
-                <img 
-                  src={PAYMENT_LOGOS.visa} 
-                  alt="Visa" 
-                  className="h-5" 
-                />
-                <img 
-                  src={PAYMENT_LOGOS.mastercard} 
-                  alt="Mastercard" 
-                  className="h-5" 
-                />
-              </div>
-              
               <Button
                 variant="outline"
                 className="w-full bg-transparent text-white border-white hover:bg-white/10"
