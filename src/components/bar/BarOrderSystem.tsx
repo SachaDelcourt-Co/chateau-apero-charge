@@ -7,7 +7,6 @@ import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, crea
 import { toast } from '@/hooks/use-toast';
 import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNfc } from '@/hooks/use-nfc';
 
 export const BarOrderSystem: React.FC = () => {
@@ -308,14 +307,12 @@ export const BarOrderSystem: React.FC = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 w-full h-full">
       {/* Product selection - Left wider area */}
-      <div className="md:col-span-3 overflow-auto h-screen pb-20 md:pb-0">
+      <div className="md:col-span-3 h-full overflow-y-auto pb-20 md:pb-0">
         <div className="p-3">
-          <ScrollArea className="h-full pr-1">
-            <BarProductList 
-              products={products} 
-              onAddProduct={handleAddProduct} 
-            />
-          </ScrollArea>
+          <BarProductList 
+            products={products} 
+            onAddProduct={handleAddProduct} 
+          />
         </div>
       </div>
       
@@ -341,7 +338,7 @@ export const BarOrderSystem: React.FC = () => {
                 Votre commande est vide
               </div>
             ) : (
-              <ScrollArea className="flex-grow mb-4 pr-1" style={{ maxHeight: "40vh" }}>
+              <div className="flex-grow mb-4 pr-1 overflow-y-auto" style={{ maxHeight: "40vh" }}>
                 <ul className="space-y-2">
                   {orderItems.map((item, index) => (
                     <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b border-white/20 pb-2">
@@ -373,7 +370,7 @@ export const BarOrderSystem: React.FC = () => {
                     </li>
                   ))}
                 </ul>
-              </ScrollArea>
+              </div>
             )}
             
             <div className="border-t border-white/20 pt-3">

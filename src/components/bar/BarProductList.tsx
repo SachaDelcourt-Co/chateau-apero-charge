@@ -169,8 +169,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
                   {product.name}
                 </span>
                 <div className="flex items-center mt-1">
-                  <Euro className="h-4 w-4 mr-1" />
-                  <span className="text-sm font-bold">{product.price.toFixed(2)}</span>
+                  <span className="text-sm font-bold">{product.price.toFixed(2)}€</span>
                 </div>
               </Button>
             ))}
