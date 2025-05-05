@@ -145,11 +145,6 @@ export const BarOrderSystem: React.FC = () => {
         }];
       }
     });
-    
-    toast({
-      title: "Produit ajouté",
-      description: `${product.name} a été ajouté à la commande`,
-    });
   };
 
   // Handle removing a product from the order
@@ -176,10 +171,6 @@ export const BarOrderSystem: React.FC = () => {
     setCardId('');
     setErrorMessage(null);
     setCurrentTotal(0);
-    toast({
-      title: "Commande effacée",
-      description: "La commande a été effacée"
-    });
   };
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,10 +266,6 @@ export const BarOrderSystem: React.FC = () => {
       if (isScanning) {
         console.log("[BarOrderSystem] Stopping NFC scan");
         stopScan();
-        toast({
-          title: "Scan NFC désactivé",
-          description: "Le scanner NFC a été désactivé"
-        });
       } else {
         console.log("[BarOrderSystem] Starting NFC scan, current total:", calculateTotal());
         // Reset any existing error

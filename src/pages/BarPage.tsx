@@ -1,17 +1,15 @@
-
 import React, { useEffect } from 'react';
 import ChateauBackground from '@/components/ChateauBackground';
 import { BarOrderSystem } from '@/components/bar/BarOrderSystem';
 import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from '@/hooks/use-toast';
 import { NfcDebugger } from '@/components/NfcDebugger';
 import { useNavigate } from 'react-router-dom';
 
 const BarPage: React.FC = () => {
   const { signOut, email, isLoggedIn } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
   
   // Check if we're in development mode
@@ -28,6 +26,7 @@ const BarPage: React.FC = () => {
     try {
       await signOut();
       
+      // Keep this toast as it's related to a critical action (logout)
       toast({
         title: "Déconnexion réussie",
         description: "Vous avez été déconnecté avec succès"
