@@ -12,7 +12,7 @@ import { redirectToCheckout } from '@/api/stripe';
 
 // Payment method logos
 const PAYMENT_LOGOS = {
-  bancontact: "https://www.google.com/url?sa=i&url=https%3A%2F%2Fbrandlogos.net%2Fbancontact-logo-vector-96176.html&psig=AOvVaw1JQT-uSjopca68Pr0eyE3-&ust=1746529292737000&source=images&cd=vfe&opi=89978449&ved=0CBQQjRxqFwoTCJjb9-KWjI0DFQAAAAAdAAAAABAE",
+  bancontact: "https://www.google.com/url?sa=i&url=https%3A%2F%2Fwww.logis-auderghem.be%2Finfrastructures.php&psig=AOvVaw0_OmXe26ind85zyTZDMUmt&ust=1746530677028000&source=images&cd=vfe&opi=89978449&ved=0CBQQjRxqFwoTCLiN2febjI0DFQAAAAAdAAAAABBH",
   visa: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Visa_Inc._logo.svg",
   mastercard: "https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg"
 };
