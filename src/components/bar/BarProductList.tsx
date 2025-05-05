@@ -2,7 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
-import { Euro, Beer, Wine, GlassWater, CupSoda, Cocktail } from 'lucide-react';
+import { Euro, Beer, Wine, GlassWater, CupSoda } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Separator } from '@/components/ui/separator';
 
@@ -146,10 +146,12 @@ export const BarProductList: React.FC<BarProductListProps> = ({
       return <Beer {...props} />;
     } else if (productNameLower.includes("vin")) {
       return <Wine {...props} />;
-    } else if (productNameLower.includes("eau") || productNameLower.includes("coca")) {
+    } else if (productNameLower.includes("eau")) {
+      return <GlassWater {...props} />;
+    } else if (productNameLower.includes("coca")) {
       return <CupSoda {...props} />;
     } else if (productNameLower.includes("spritz") || productNameLower.includes("gin")) {
-      return <Cocktail {...props} />;
+      return <Beer {...props} />; // Replace Cocktail with Beer for spritz/gin
     }
     
     // Default by category
