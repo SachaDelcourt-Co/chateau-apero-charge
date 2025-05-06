@@ -1,17 +1,11 @@
-
 import { createClient } from '@supabase/supabase-js';
+import { supabase as integrationSupabase } from "@/integrations/supabase/client";
 
-// We use the values from the Supabase integration
-const supabaseUrl = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
+// We use the client from the integrations directory, which is already configured
+export const supabase = integrationSupabase;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+// Re-export the supabase client for compatibility with existing code
+export { supabase };
 
 export interface TableCard {
   id: string;

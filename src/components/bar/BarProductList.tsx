@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { BarProduct } from '@/lib/supabase';
@@ -21,132 +22,106 @@ export const BarProductList: React.FC<BarProductListProps> = ({
 }) => {
   const isMobile = useIsMobile();
 
-  // Group products by category using hardcoded groups
+  // Group products by category using database categories
   const groupedProducts = React.useMemo(() => {
-    const softProducts: BarProduct[] = [];
-    const alcoholProducts: BarProduct[] = [];
-    const containerProducts: BarProduct[] = [];
-    const depositProducts: BarProduct[] = [];
-    const otherProducts: BarProduct[] = [];
+    // Initialize category groups based on the database
+    const categories = {
+      'Soft': [] as BarProduct[],
+      'Bière': [] as BarProduct[],
+      'Cocktail': [] as BarProduct[],
+      'Vin': [] as BarProduct[],
+      'Caution': [] as BarProduct[],
+      'Food': [] as BarProduct[],
+      'Autre': [] as BarProduct[],
+    };
     
-    // Manually categorize each product
+    // Categorize products based on their category field
     products.forEach(product => {
-      const name = product.name.toLowerCase();
+      const category = product.category || 'Autre';
       
-      // Softs category
-      if (name.includes('eau') || 
-          name.includes('coca') || 
-          name.includes('coca-cola')) {
-        softProducts.push(product);
-      }
-      // Alcohol category
-      else if (name.includes('gin') && !name.includes('carafe') ||
-        name.includes('spritz') && !name.includes('carafe') ||
-        name.includes('bières spéciale') || 
-        name.includes('bieres speciale') ||
-        name.includes('pils') && !name.includes('carafe') || 
-        name.includes('verre bulle')) {
-        alcoholProducts.push(product);
-      }
-      // Containers category
-      else if (name.includes('bouteille') || 
-               name.includes('carafe')) {
-        containerProducts.push(product);
-      }
-      // Deposit/Return category
-      else if (name.includes('caution') || 
-               name.includes('retour') || 
-               product.is_deposit || 
-               product.is_return) {
-        depositProducts.push(product);
-      }
-      // Other products
-      else {
-        otherProducts.push(product);
+      // Check if this category exists in our predefined list
+      if (category in categories) {
+        categories[category as keyof typeof categories].push(product);
+      } else {
+        categories['Autre'].push(product);
       }
     });
 
+    // Convert to array of category objects
     const result: ProductCategory[] = [];
     
-    // Add categories in specific order
-    if (softProducts.length > 0) {
-      result.push({name: 'Softs', products: softProducts});
+    // Add non-empty categories in specific order
+    if (categories['Soft'].length > 0) {
+      result.push({name: 'Softs', products: categories['Soft']});
     }
     
-    if (alcoholProducts.length > 0) {
-      result.push({name: 'Alcool', products: alcoholProducts});
+    if (categories['Bière'].length > 0) {
+      result.push({name: 'Bières', products: categories['Bière']});
     }
     
-    if (containerProducts.length > 0) {
-      result.push({name: 'Carafes/Bouteilles', products: containerProducts});
+    if (categories['Cocktail'].length > 0) {
+      result.push({name: 'Cocktails', products: categories['Cocktail']});
     }
     
-    if (depositProducts.length > 0) {
-      result.push({name: 'Cautions', products: depositProducts});
+    if (categories['Vin'].length > 0) {
+      result.push({name: 'Vins', products: categories['Vin']});
     }
     
-    if (otherProducts.length > 0) {
-      result.push({name: 'Autre', products: otherProducts});
+    if (categories['Caution'].length > 0) {
+      result.push({name: 'Cautions', products: categories['Caution']});
+    }
+    
+    if (categories['Food'].length > 0) {
+      result.push({name: 'Food', products: categories['Food']});
+    }
+    
+    if (categories['Autre'].length > 0) {
+      result.push({name: 'Autre', products: categories['Autre']});
     }
     
     return result;
   }, [products]);
 
   // Function to determine button color based on product category and name
-  const getButtonColor = (product: BarProduct, categoryName: string): string => {
+  const getButtonColor = (product: BarProduct): string => {
     const productNameLower = product.name.toLowerCase();
+    const category = product.category?.toLowerCase() || '';
     
     // Special cases first
     if (product.is_return) return "bg-green-600 hover:bg-green-700";
     if (product.is_deposit) return "bg-yellow-600 hover:bg-yellow-700";
     
-    // Category-based colors with variations within categories
-    switch (categoryName) {
-      case "Softs":
+    // Category-based colors
+    switch (category) {
+      case "soft":
         if (productNameLower.includes("eau")) return "bg-blue-400 hover:bg-blue-500";
-        if (productNameLower.includes("coca")) {
-          if (productNameLower.includes("zéro") || productNameLower.includes("zero")) {
-            return "bg-blue-600 hover:bg-blue-700";
-          }
-          return "bg-blue-500 hover:bg-blue-600";
-        }
+        if (productNameLower.includes("coca")) return "bg-blue-500 hover:bg-blue-600";
         return "bg-cyan-500 hover:bg-cyan-600";
         
-      case "Alcool":
-        if (productNameLower.includes("bière spécial") || productNameLower.includes("biere special")) {
-          return "bg-amber-500 hover:bg-amber-600";
-        }
-        if (productNameLower.includes("pils")) {
-          if (productNameLower.includes("25")) {
-            return "bg-amber-400 hover:bg-amber-500";
-          }
-          if (productNameLower.includes("50")) {
-            return "bg-amber-600 hover:bg-amber-700";
-          }
-          return "bg-amber-500 hover:bg-amber-600";
-        }
-        if (productNameLower.includes("gin")) return "bg-purple-500 hover:bg-purple-600";
+      case "bière":
+        if (productNameLower.includes("cruche")) return "bg-amber-600 hover:bg-amber-700";
+        if (productNameLower.includes("lupulus hopera")) return "bg-amber-400 hover:bg-amber-500";
+        if (productNameLower.includes("lupulus pils")) return "bg-amber-500 hover:bg-amber-600";
+        return "bg-amber-500 hover:bg-amber-600";
+        
+      case "cocktail":
+        if (productNameLower.includes("gin tonic")) return "bg-purple-500 hover:bg-purple-600";
+        if (productNameLower.includes("spritz 0")) return "bg-orange-400 hover:bg-orange-500";
         if (productNameLower.includes("spritz")) return "bg-orange-500 hover:bg-orange-600";
-        if (productNameLower.includes("verre bulle")) return "bg-pink-500 hover:bg-pink-600";
-        if (productNameLower.includes("vin")) {
-          if (productNameLower.includes("blanc")) return "bg-yellow-400 hover:bg-yellow-500";
-          if (productNameLower.includes("rosé") || productNameLower.includes("rose")) {
-            return "bg-red-300 hover:bg-red-400";
-          }
-          return "bg-red-500 hover:bg-red-600";
-        }
+        return "bg-fuchsia-500 hover:bg-fuchsia-600";
+        
+      case "vin":
+        if (productNameLower.includes("bulle")) return "bg-pink-500 hover:bg-pink-600";
+        if (productNameLower.includes("verre de vin")) return "bg-red-500 hover:bg-red-600";
+        if (productNameLower.includes("bouteille")) return "bg-red-600 hover:bg-red-700";
         return "bg-red-500 hover:bg-red-600";
         
-      case "Carafes/Bouteilles":
-        if (productNameLower.includes("bulle")) return "bg-indigo-400 hover:bg-indigo-500";
-        if (productNameLower.includes("gin")) return "bg-purple-400 hover:bg-purple-500";
-        if (productNameLower.includes("spritz")) return "bg-orange-400 hover:bg-orange-500";
-        if (productNameLower.includes("pils")) return "bg-amber-300 hover:bg-amber-400";
-        return "bg-indigo-500 hover:bg-indigo-600";
-        
-      case "Cautions":
+      case "caution":
         if (productNameLower.includes("retour")) return "bg-green-500 hover:bg-green-600";
         return "bg-yellow-500 hover:bg-yellow-600";
+      
+      case "food":
+        return "bg-emerald-500 hover:bg-emerald-600";
         
       default:
         return "bg-gray-500 hover:bg-gray-600";
@@ -162,7 +137,7 @@ export const BarProductList: React.FC<BarProductListProps> = ({
             {category.products.map(product => (
               <Button
                 key={product.id}
-                className={`h-auto min-h-[70px] py-2 px-2 flex flex-col items-center justify-center ${getButtonColor(product, category.name)} text-white`}
+                className={`h-auto min-h-[70px] py-2 px-2 flex flex-col items-center justify-center ${getButtonColor(product)} text-white`}
                 onClick={() => onAddProduct(product)}
               >
                 <span className="text-sm font-medium text-center line-clamp-2 mb-1">
