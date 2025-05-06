@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -443,6 +444,62 @@ const getFinancialStatistics = async (): Promise<FinancialStats> => {
       salesByPOS[pos] = (salesByPOS[pos] || 0) + Number(item.total_amount);
     });
     
+    // Transactions by time
+    const { data: timeData, error: timeError } = await supabase
+      .from('card_transactions')
+      .select('amount, created_at, transaction_type');
+    
+    if (timeError) throw timeError;
+    
+    // Group by 30-minute intervals
+    const transactionsByTime: Array<{timeInterval: string; count: number; amount: number}> = [];
+    const timeIntervals = new Map<string, {count: number; amount: number}>();
+    
+    timeData.forEach(transaction => {
+      if (!transaction.created_at) return;
+      
+      const date = new Date(transaction.created_at);
+      const hour = date.getHours();
+      const minutes = Math.floor(date.getMinutes() / 30) * 30;
+      const timeKey = `${hour}:${minutes === 0 ? '00' : minutes}`;
+      
+      if (!timeIntervals.has(timeKey)) {
+        timeIntervals.set(timeKey, { count: 0, amount: 0 });
+      }
+      
+      const interval = timeIntervals.get(timeKey)!;
+      interval.count += 1;
+      interval.amount += Number(transaction.amount);
+    });
+    
+    // Convert to array format
+    for (const [timeInterval, data] of timeIntervals.entries()) {
+      transactionsByTime.push({
+        timeInterval,
+        count: data.count,
+        amount: data.amount
+      });
+    }
+    
+    // Sort by time
+    transactionsByTime.sort((a, b) => {
+      const [aHour, aMin] = a.timeInterval.split(':').map(Number);
+      const [bHour, bMin] = b.timeInterval.split(':').map(Number);
+      return (aHour * 60 + aMin) - (bHour * 60 + bMin);
+    });
+    
+    // Sales by point of sale
+    const salesByPointOfSale = Object.entries(salesByPOS).map(([pos, amount]) => {
+      // Count transactions for this POS
+      const posTransactions = posSalesData.filter(item => String(item.point_of_sale || 1) === pos).length;
+      
+      return {
+        pointOfSale: pos,
+        count: posTransactions,
+        amount: amount
+      };
+    });
+    
     return {
       totalSales,
       totalRecharges: {
@@ -453,7 +510,9 @@ const getFinancialStatistics = async (): Promise<FinancialStats> => {
       },
       averageSpendPerPerson,
       remainingBalance,
-      salesByPOS
+      salesByPOS,
+      transactionsByTime,
+      salesByPointOfSale
     };
   } catch (error) {
     console.error("Error getting financial statistics:", error);
@@ -479,13 +538,15 @@ const getProductStatistics = async (): Promise<ProductStats> => {
     // Get product names
     const { data: productsData, error: productsError } = await supabase
       .from('bar_products')
-      .select('id, name');
+      .select('id, name, category');
     
     if (productsError) throw productsError;
     
     const productMap = new Map();
+    const categoryMap = new Map();
     productsData.forEach(product => {
       productMap.set(product.id, product.name);
+      categoryMap.set(product.id, product.category || 'Non catégorisé');
     });
     
     // Calculate top products
@@ -493,6 +554,7 @@ const getProductStatistics = async (): Promise<ProductStats> => {
     orderItemsData.forEach(item => {
       const productId = item.product_id;
       const productName = productMap.get(productId) || `Product ${productId}`;
+      const category = categoryMap.get(productId);
       const quantity = item.quantity;
       const revenue = quantity * item.price;
       
@@ -500,7 +562,8 @@ const getProductStatistics = async (): Promise<ProductStats> => {
         productStats.set(productId, {
           name: productName,
           quantity: 0,
-          revenue: 0
+          revenue: 0,
+          category: category
         });
       }
       
@@ -520,7 +583,9 @@ const getProductStatistics = async (): Promise<ProductStats> => {
     
     // Parse created_at from orders and group by hour
     orderItemsData.forEach(item => {
-      const orderDate = new Date(item.bar_orders?.created_at);
+      if (!item.bar_orders || !item.bar_orders.created_at) return;
+      
+      const orderDate = new Date(item.bar_orders.created_at);
       const hour = orderDate.getHours();
       const productId = item.product_id;
       const productName = productMap.get(productId) || `Product ${productId}`;
@@ -551,7 +616,15 @@ const getProductStatistics = async (): Promise<ProductStats> => {
     
     return {
       topProducts,
-      salesByHour
+      salesByHour,
+      hourlyProductSales: Array.from(hourlyProductSales.entries()).map(([hour, productsMap]) => ({
+        hour,
+        products: Array.from(productsMap.entries()).map(([name, revenue]) => ({
+          name,
+          quantity: 1, // Default as we only have revenue data
+          revenue
+        }))
+      }))
     };
   } catch (error) {
     console.error("Error getting product statistics:", error);
@@ -578,6 +651,8 @@ const getTemporalStatistics = async (): Promise<TemporalStats> => {
     
     // Count transactions by hour
     transactionsData.forEach(transaction => {
+      if (!transaction.created_at) return;
+      
       const date = new Date(transaction.created_at);
       const hour = date.getHours();
       const hourData = hourCounts.get(hour)!;
@@ -615,6 +690,8 @@ const getTemporalStatistics = async (): Promise<TemporalStats> => {
     
     if (cardData && Array.isArray(cardData)) {
       cardData.forEach((transaction: any) => {
+        if (!transaction.created_at || !transaction.card_id) return;
+        
         const cardId = transaction.card_id;
         if (!cardTransactions.has(cardId)) {
           cardTransactions.set(cardId, []);
