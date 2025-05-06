@@ -1,13 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, CreditCard, TrendingUp, Search } from "lucide-react";
+import { Wallet, CreditCard, TrendingUp, Search, RefreshCw } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { toast } from "@/hooks/use-toast";
 
 interface CardData {
   id: string;
@@ -28,6 +30,7 @@ interface CardSummary {
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [cards, setCards] = useState<CardData[]>([]);
   const [filteredCards, setFilteredCards] = useState<CardData[]>([]);
   const [search, setSearch] = useState('');
@@ -41,93 +44,116 @@ const Dashboard: React.FC = () => {
   });
   
   const itemsPerPage = 10;
-  
-  useEffect(() => {
-    const fetchAllCards = async () => {
-      try {
-        setLoading(true);
+
+  // Fonction pour récupérer les données des cartes
+  const fetchAllCards = async () => {
+    try {
+      setRefreshing(true);
+      
+      // Fetch all cards from the table_cards table
+      const { data: tableCards, error: tableCardsError } = await supabase
+        .from('table_cards')
+        .select('*');
         
-        // Fetch all cards from the table_cards table
-        const { data: tableCards, error: tableCardsError } = await supabase
-          .from('table_cards')
-          .select('*');
-          
-        if (tableCardsError) throw tableCardsError;
+      if (tableCardsError) throw tableCardsError;
+      
+      console.log("Fetched cards from table_cards:", tableCards?.length || 0);
+      
+      // Format data from table_cards
+      const formattedTableCards = (tableCards || []).map(card => ({
+        id: card.id,
+        amount: card.amount?.toString() || '0',
+        description: card.description || 'Table Card'
+      }));
+      
+      // Use only the available table
+      const allCards = formattedTableCards;
+      
+      // Calculate summary metrics
+      const validCards = allCards.filter(card => card && card.amount);
+      const totalCards = validCards.length;
+      
+      // Filter cards with balance greater than 0.01 for average calculation
+      const cardsWithBalance = validCards.filter(card => 
+        parseFloat(card.amount.toString()) >= 0.01);
+      
+      const totalBalance = validCards.reduce((sum, card) => 
+        sum + (parseFloat(card.amount.toString()) || 0), 0);
+      
+      // Calculate average only for cards with balance > 0.01
+      const avgBalance = cardsWithBalance.length > 0 ? 
+        totalBalance / cardsWithBalance.length : 0;
+      
+      // Get top 5 cards by amount
+      const topCards = [...validCards]
+        .sort((a, b) => parseFloat(b.amount.toString()) - parseFloat(a.amount.toString()))
+        .slice(0, 5);
+      
+      // Create hourly transaction data for the current day
+      const hourlyTransactions = [];
+      const currentHour = new Date().getHours();
+      
+      // Generate data for hours 0 to current hour
+      for (let hour = 0; hour <= 23; hour++) {
+        const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
         
-        console.log("Fetched cards from table_cards:", tableCards?.length || 0);
-        
-        // Format data from table_cards
-        const formattedTableCards = (tableCards || []).map(card => ({
-          id: card.id,
-          amount: card.amount?.toString() || '0',
-          description: card.description || 'Table Card'
-        }));
-        
-        // Use only the available table
-        const allCards = formattedTableCards;
-        
-        // Calculate summary metrics
-        const validCards = allCards.filter(card => card && card.amount);
-        const totalCards = validCards.length;
-        
-        // Filter cards with balance greater than 0.01 for average calculation
-        const cardsWithBalance = validCards.filter(card => 
-          parseFloat(card.amount.toString()) >= 0.01);
-        
-        const totalBalance = validCards.reduce((sum, card) => 
-          sum + (parseFloat(card.amount.toString()) || 0), 0);
-        
-        // Calculate average only for cards with balance > 0.01
-        const avgBalance = cardsWithBalance.length > 0 ? 
-          totalBalance / cardsWithBalance.length : 0;
-        
-        // Get top 5 cards by amount
-        const topCards = [...validCards]
-          .sort((a, b) => parseFloat(b.amount.toString()) - parseFloat(a.amount.toString()))
-          .slice(0, 5);
-        
-        // Create hourly transaction data for the current day
-        const hourlyTransactions = [];
-        const currentHour = new Date().getHours();
-        
-        // Generate data for hours 0 to current hour
-        for (let hour = 0; hour <= 23; hour++) {
-          const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
-          
-          // Calculate a realistic amount based on actual data
-          // Use higher amounts during business hours (8-18)
-          let hourTransactionValue = 0;
-          if (hour >= 8 && hour <= 18) {
-            hourTransactionValue = Math.floor(totalBalance * (0.003 + Math.random() * 0.007));
-          } else {
-            hourTransactionValue = Math.floor(totalBalance * (0.0005 + Math.random() * 0.002));
-          }
-          
-          hourlyTransactions.push({
-            hour: `${formattedHour}h`,
-            montant: hourTransactionValue
-          });
+        // Calculate a realistic amount based on actual data
+        // Use higher amounts during business hours (8-18)
+        let hourTransactionValue = 0;
+        if (hour >= 8 && hour <= 18) {
+          hourTransactionValue = Math.floor(totalBalance * (0.003 + Math.random() * 0.007));
+        } else {
+          hourTransactionValue = Math.floor(totalBalance * (0.0005 + Math.random() * 0.002));
         }
         
-        setSummary({
-          totalCards,
-          totalBalance,
-          avgBalance,
-          recentTopUps: topCards,
-          hourlyTransactions
+        hourlyTransactions.push({
+          hour: `${formattedHour}h`,
+          montant: hourTransactionValue
         });
-        
-        setCards(allCards);
-        setFilteredCards(allCards);
-      } catch (error) {
-        console.error("Erreur lors de la récupération des cartes:", error);
-      } finally {
-        setLoading(false);
       }
-    };
-    
+      
+      setSummary({
+        totalCards,
+        totalBalance,
+        avgBalance,
+        recentTopUps: topCards,
+        hourlyTransactions
+      });
+      
+      setCards(allCards);
+      setFilteredCards(allCards);
+
+      // Afficher une notification de rafraîchissement réussi si c'était une action de l'utilisateur
+      if (refreshing) {
+        toast({
+          title: "Données actualisées",
+          description: "Les statistiques ont été mises à jour avec succès"
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors de la récupération des cartes:", error);
+      if (refreshing) {
+        toast({
+          title: "Erreur",
+          description: "Impossible de récupérer les données actualisées",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+  
+  // Chargement initial des données
+  useEffect(() => {
     fetchAllCards();
   }, []);
+  
+  // Fonction de rafraîchissement manuel
+  const handleRefresh = () => {
+    fetchAllCards();
+  };
   
   // Filter cards based on search term
   useEffect(() => {
@@ -173,6 +199,20 @@ const Dashboard: React.FC = () => {
   
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Tableau de bord</h2>
+        <Button 
+          onClick={handleRefresh} 
+          variant="outline" 
+          size="sm"
+          disabled={refreshing || loading}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Actualisation...' : 'Actualiser les données'}
+        </Button>
+      </div>
+      
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">

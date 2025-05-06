@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 // We use the values from the Supabase integration
@@ -138,23 +139,45 @@ export interface BarOrder {
   items: OrderItem[];
 }
 
-export async function getBarProducts(): Promise<BarProduct[]> {
-  try {
-    const { data, error } = await supabase
-      .from('bar_products')
-      .select('*')
-      .order('category', { ascending: true })
-      .order('name', { ascending: true });
+// Cache des produits pour optimiser les performances
+let barProductsCache: BarProduct[] = [];
+let lastFetchTime: number = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
 
-    if (error) {
-      console.error('Error fetching bar products:', error);
-      return [];
+export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
+  const now = Date.now();
+  
+  // Si on force le rafraîchissement ou si le cache est expiré, on récupère les données
+  if (forceRefresh || barProductsCache.length === 0 || (now - lastFetchTime) > CACHE_TTL) {
+    try {
+      console.log(`Récupération des produits depuis Supabase (${forceRefresh ? 'forcé' : 'cache expiré'})`);
+      
+      const { data, error } = await supabase
+        .from('bar_products')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching bar products:', error);
+        // En cas d'erreur, retourner le cache actuel s'il existe
+        return barProductsCache.length > 0 ? barProductsCache : [];
+      }
+
+      // Mettre à jour le cache et l'horodatage
+      barProductsCache = data || [];
+      lastFetchTime = now;
+      
+      console.log(`${barProductsCache.length} produits récupérés et mis en cache`);
+      return barProductsCache;
+    } catch (error) {
+      console.error('Exception lors de la récupération des produits:', error);
+      // En cas d'erreur, retourner le cache actuel s'il existe
+      return barProductsCache.length > 0 ? barProductsCache : [];
     }
-
-    return data || [];
-  } catch (error) {
-    console.error('Exception lors de la récupération des produits:', error);
-    return [];
+  } else {
+    console.log(`Utilisation des ${barProductsCache.length} produits en cache`);
+    return barProductsCache;
   }
 }
 
@@ -231,6 +254,9 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
       console.error('Error updating card amount:', updateError);
       return { success: false };
     }
+
+    // Supprimer le cache des produits pour forcer un rafraîchissement lors de la prochaine requête
+    barProductsCache = [];
 
     return { success: true, orderId: orderData.id };
   } catch (error) {
