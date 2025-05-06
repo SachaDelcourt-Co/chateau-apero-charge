@@ -84,7 +84,16 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
     }
 
     console.log('Réponse de Supabase (table_cards):', data);
-    return data;
+    
+    // Ensure the amount is a string
+    if (data) {
+      return {
+        ...data,
+        amount: data.amount?.toString() || "0" // Convert to string
+      };
+    }
+    
+    return null;
   } catch (error) {
     console.error('Exception lors de la récupération de la carte (table_cards):', error);
     return null;
