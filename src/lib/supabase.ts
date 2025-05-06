@@ -231,8 +231,21 @@ export interface BarOrder {
   created_by?: string;
 }
 
-export async function getBarProducts(): Promise<BarProduct[]> {
+// Add caching variables
+let cachedProducts: BarProduct[] | null = null;
+let lastProductFetch = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
   try {
+    const now = Date.now();
+    
+    // Return cached products if they're still fresh and no force refresh is requested
+    if (!forceRefresh && cachedProducts && (now - lastProductFetch) < CACHE_TTL) {
+      console.log('Returning cached bar products');
+      return cachedProducts;
+    }
+    
     // First try the bar_products table directly
     const { data, error } = await supabase
       .from('bar_products')
@@ -255,7 +268,7 @@ export async function getBarProducts(): Promise<BarProduct[]> {
         }
         
         // Convert the format to match our app's expected format
-        return altData.map(product => ({
+        const products = altData.map(product => ({
           id: product.id,
           name: product.name || `Product ${product.id}`,
           price: product.price || 0,
@@ -263,50 +276,26 @@ export async function getBarProducts(): Promise<BarProduct[]> {
           is_deposit: product.is_deposit || false,
           is_return: product.is_return || false
         }));
+        
+        // Update cache
+        cachedProducts = products;
+        lastProductFetch = now;
+        
+        return products;
       } catch (backupError) {
         console.error('Exception in backup products fetch:', backupError);
         return [];
       }
-      
-// Cache des produits pour optimiser les performances
-let barProductsCache: BarProduct[] = [];
-let lastFetchTime: number = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
-
-export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
-  const now = Date.now();
-  
-  // Si on force le rafraîchissement ou si le cache est expiré, on récupère les données
-  if (forceRefresh || barProductsCache.length === 0 || (now - lastFetchTime) > CACHE_TTL) {
-    try {
-      console.log(`Récupération des produits depuis Supabase (${forceRefresh ? 'forcé' : 'cache expiré'})`);
-      
-      const { data, error } = await supabase
-        .from('bar_products')
-        .select('*')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching bar products:', error);
-        // En cas d'erreur, retourner le cache actuel s'il existe
-        return barProductsCache.length > 0 ? barProductsCache : [];
-      }
-
-      // Mettre à jour le cache et l'horodatage
-      barProductsCache = data || [];
-      lastFetchTime = now;
-      
-      console.log(`${barProductsCache.length} produits récupérés et mis en cache`);
-      return barProductsCache;
-    } catch (error) {
-      console.error('Exception lors de la récupération des produits:', error);
-      // En cas d'erreur, retourner le cache actuel s'il existe
-      return barProductsCache.length > 0 ? barProductsCache : [];
     }
-  } else {
-    console.log(`Utilisation des ${barProductsCache.length} produits en cache`);
-    return barProductsCache;
+
+    // Update cache
+    cachedProducts = data || [];
+    lastProductFetch = now;
+    
+    return data || [];
+  } catch (error) {
+    console.error('Exception lors de la récupération des produits:', error);
+    return [];
   }
 }
 
