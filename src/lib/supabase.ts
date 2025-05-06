@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 
 // We use the values from the Supabase integration
@@ -15,8 +14,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 export interface TableCard {
   id: string;
-  amount: string;
+  amount: string | number;
   description?: string | null;
+  last_payment_method?: string | null;
+  recharge_count?: number | null;
+  last_recharge_date?: string | null;
 }
 
 // For backward compatibility, keep the Card interface but modify the implementation
@@ -137,6 +139,7 @@ export interface BarOrder {
   created_at?: string;
   status?: string;
   items: OrderItem[];
+  point_of_sale?: number;
 }
 
 // Cache des produits pour optimiser les performances
@@ -262,5 +265,604 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
   } catch (error) {
     console.error('Exception lors de la création de la commande:', error);
     return { success: false };
+  }
+}
+
+// New statistics functions for admin dashboard
+export interface Statistics {
+  user: UserStats;
+  financial: FinancialStats;
+  product: ProductStats;
+  temporal: TemporalStats;
+}
+
+export interface UserStats {
+  totalCards: number;
+  averageRechargeAmount: number;
+  cardReusageRate: number;
+  multipleRechargeCards: number;
+}
+
+export interface FinancialStats {
+  totalSales: number;
+  totalRecharges: {
+    total: number;
+    cash: number;
+    sumup: number;
+    stripe: number;
+  };
+  averageSpendPerPerson: number;
+  totalRemainingBalance: number;
+  transactionsByTime: {
+    timeInterval: string;
+    count: number;
+    amount: number;
+  }[];
+  salesByPointOfSale: {
+    pointOfSale: number;
+    count: number;
+    amount: number;
+  }[];
+}
+
+export interface ProductStats {
+  topProducts: {
+    name: string;
+    category: string | null;
+    quantity: number;
+    revenue: number;
+  }[];
+  hourlyProductSales: {
+    hour: string;
+    products: {
+      name: string;
+      quantity: number;
+      revenue: number;
+    }[];
+  }[];
+}
+
+export interface TemporalStats {
+  rushHours: {
+    hour: string;
+    rechargeTransactions: number;
+    barTransactions: number;
+  }[];
+  averageTimeBetweenTransactions: number;
+}
+
+// Get all statistics data
+export async function getDashboardStatistics(): Promise<Statistics> {
+  try {
+    console.log('Fetching dashboard statistics...');
+    
+    // Fetch user statistics
+    const userStats = await getUserStatistics();
+    
+    // Fetch financial statistics
+    const financialStats = await getFinancialStatistics();
+    
+    // Fetch product statistics
+    const productStats = await getProductStatistics();
+    
+    // Fetch temporal statistics
+    const temporalStats = await getTemporalStatistics();
+    
+    return {
+      user: userStats,
+      financial: financialStats,
+      product: productStats,
+      temporal: temporalStats
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard statistics:', error);
+    
+    // Return default empty statistics
+    return {
+      user: {
+        totalCards: 0,
+        averageRechargeAmount: 0,
+        cardReusageRate: 0,
+        multipleRechargeCards: 0
+      },
+      financial: {
+        totalSales: 0,
+        totalRecharges: {
+          total: 0,
+          cash: 0,
+          sumup: 0,
+          stripe: 0
+        },
+        averageSpendPerPerson: 0,
+        totalRemainingBalance: 0,
+        transactionsByTime: [],
+        salesByPointOfSale: []
+      },
+      product: {
+        topProducts: [],
+        hourlyProductSales: []
+      },
+      temporal: {
+        rushHours: [],
+        averageTimeBetweenTransactions: 0
+      }
+    };
+  }
+}
+
+// Get user statistics
+async function getUserStatistics(): Promise<UserStats> {
+  try {
+    // Get total number of cards
+    const { count: totalCards, error: countError } = await supabase
+      .from('table_cards')
+      .select('*', { count: 'exact', head: true });
+      
+    if (countError) throw countError;
+    
+    // Get cards with multiple recharges
+    const { data: multipleRechargeCardsData, error: rechargeError } = await supabase
+      .from('table_cards')
+      .select('id')
+      .gt('recharge_count', 1);
+      
+    if (rechargeError) throw rechargeError;
+    
+    const multipleRechargeCards = multipleRechargeCardsData?.length || 0;
+    
+    // Get average recharge amount
+    const { data: recharges, error: avgRechargeError } = await supabase
+      .from('card_transactions')
+      .select('amount')
+      .eq('transaction_type', 'recharge');
+      
+    if (avgRechargeError) throw avgRechargeError;
+    
+    let averageRechargeAmount = 0;
+    if (recharges && recharges.length > 0) {
+      const total = recharges.reduce((sum, transaction) => sum + parseFloat(transaction.amount.toString()), 0);
+      averageRechargeAmount = total / recharges.length;
+    }
+    
+    // Calculate card reusage rate (cards with >1 recharge / total cards)
+    const cardReusageRate = totalCards ? (multipleRechargeCards / totalCards) : 0;
+    
+    return {
+      totalCards: totalCards || 0,
+      averageRechargeAmount,
+      cardReusageRate,
+      multipleRechargeCards
+    };
+  } catch (error) {
+    console.error('Error fetching user statistics:', error);
+    return {
+      totalCards: 0,
+      averageRechargeAmount: 0,
+      cardReusageRate: 0,
+      multipleRechargeCards: 0
+    };
+  }
+}
+
+// Get financial statistics
+async function getFinancialStatistics(): Promise<FinancialStats> {
+  try {
+    // Get total sales
+    const { data: salesData, error: salesError } = await supabase
+      .from('bar_orders')
+      .select('total_amount');
+      
+    if (salesError) throw salesError;
+    
+    const totalSales = salesData 
+      ? salesData.reduce((sum, order) => sum + parseFloat(order.total_amount.toString()), 0)
+      : 0;
+    
+    // Get recharges by payment method
+    const { data: rechargeData, error: rechargeError } = await supabase
+      .from('card_transactions')
+      .select('amount, payment_method')
+      .eq('transaction_type', 'recharge');
+      
+    if (rechargeError) throw rechargeError;
+    
+    const totalRecharges = {
+      total: 0,
+      cash: 0,
+      sumup: 0,
+      stripe: 0
+    };
+    
+    if (rechargeData) {
+      rechargeData.forEach(transaction => {
+        const amount = parseFloat(transaction.amount.toString());
+        totalRecharges.total += amount;
+        
+        if (transaction.payment_method === 'cash') {
+          totalRecharges.cash += amount;
+        } else if (transaction.payment_method === 'sumup') {
+          totalRecharges.sumup += amount;
+        } else if (transaction.payment_method === 'stripe') {
+          totalRecharges.stripe += amount;
+        }
+      });
+    }
+    
+    // Get average spend per person
+    const { data: distinctUsers, error: distinctUsersError } = await supabase
+      .from('bar_orders')
+      .select('card_id')
+      .is('card_id', 'not.null');
+      
+    if (distinctUsersError) throw distinctUsersError;
+    
+    // Count unique card_ids
+    const uniqueCardIds = new Set();
+    distinctUsers?.forEach(order => {
+      if (order.card_id) uniqueCardIds.add(order.card_id);
+    });
+    
+    const averageSpendPerPerson = uniqueCardIds.size > 0 ? totalSales / uniqueCardIds.size : 0;
+    
+    // Get total remaining balance
+    const { data: cardsData, error: cardsError } = await supabase
+      .from('table_cards')
+      .select('amount');
+      
+    if (cardsError) throw cardsError;
+    
+    const totalRemainingBalance = cardsData 
+      ? cardsData.reduce((sum, card) => sum + parseFloat(card.amount?.toString() || '0'), 0)
+      : 0;
+    
+    // Get transactions by time interval (30 min intervals)
+    const { data: timeData, error: timeError } = await supabase
+      .from('bar_orders')
+      .select('created_at, total_amount')
+      .order('created_at', { ascending: true });
+      
+    if (timeError) throw timeError;
+    
+    // Group by 30 minute intervals
+    const transactionsByTime = [];
+    if (timeData) {
+      const timeIntervals = new Map();
+      
+      timeData.forEach(order => {
+        const date = new Date(order.created_at || '');
+        // Round to nearest 30 minutes
+        date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
+        date.setSeconds(0);
+        date.setMilliseconds(0);
+        
+        const timeKey = date.toISOString();
+        const displayTime = `${date.getHours()}:${date.getMinutes() === 0 ? '00' : '30'}`;
+        
+        if (!timeIntervals.has(timeKey)) {
+          timeIntervals.set(timeKey, {
+            timeInterval: displayTime,
+            count: 0,
+            amount: 0
+          });
+        }
+        
+        const interval = timeIntervals.get(timeKey);
+        interval.count += 1;
+        interval.amount += parseFloat(order.total_amount.toString());
+      });
+      
+      timeIntervals.forEach(interval => {
+        transactionsByTime.push(interval);
+      });
+      
+      // Sort by time
+      transactionsByTime.sort((a, b) => {
+        const [aHours, aMinutes] = a.timeInterval.split(':').map(Number);
+        const [bHours, bMinutes] = b.timeInterval.split(':').map(Number);
+        
+        if (aHours !== bHours) {
+          return aHours - bHours;
+        }
+        return aMinutes - bMinutes;
+      });
+    }
+    
+    // Get sales by point of sale
+    const { data: posData, error: posError } = await supabase
+      .from('bar_orders')
+      .select('point_of_sale, total_amount');
+      
+    if (posError) throw posError;
+    
+    const salesByPointOfSale = [];
+    if (posData) {
+      const posSales = new Map();
+      
+      posData.forEach(order => {
+        const pos = order.point_of_sale || 1;
+        
+        if (!posSales.has(pos)) {
+          posSales.set(pos, {
+            pointOfSale: pos,
+            count: 0,
+            amount: 0
+          });
+        }
+        
+        const posStat = posSales.get(pos);
+        posStat.count += 1;
+        posStat.amount += parseFloat(order.total_amount.toString());
+      });
+      
+      posSales.forEach(posStat => {
+        salesByPointOfSale.push(posStat);
+      });
+      
+      // Sort by point of sale
+      salesByPointOfSale.sort((a, b) => a.pointOfSale - b.pointOfSale);
+    }
+    
+    return {
+      totalSales,
+      totalRecharges,
+      averageSpendPerPerson,
+      totalRemainingBalance,
+      transactionsByTime,
+      salesByPointOfSale
+    };
+  } catch (error) {
+    console.error('Error fetching financial statistics:', error);
+    return {
+      totalSales: 0,
+      totalRecharges: {
+        total: 0,
+        cash: 0,
+        sumup: 0,
+        stripe: 0
+      },
+      averageSpendPerPerson: 0,
+      totalRemainingBalance: 0,
+      transactionsByTime: [],
+      salesByPointOfSale: []
+    };
+  }
+}
+
+// Get product statistics
+async function getProductStatistics(): Promise<ProductStats> {
+  try {
+    // Get order items with order created_at
+    const { data: orderItemsData, error: orderItemsError } = await supabase
+      .from('bar_order_items')
+      .select(`
+        product_name,
+        price,
+        quantity,
+        order_id,
+        bar_orders!inner(created_at)
+      `);
+      
+    if (orderItemsError) throw orderItemsError;
+    
+    // Get products for categories
+    const { data: productsData, error: productsError } = await supabase
+      .from('bar_products')
+      .select('name, category');
+      
+    if (productsError) throw productsError;
+    
+    // Create product name to category map
+    const productCategories = new Map();
+    if (productsData) {
+      productsData.forEach(product => {
+        productCategories.set(product.name, product.category);
+      });
+    }
+    
+    // Process top products
+    const productStats = new Map();
+    if (orderItemsData) {
+      orderItemsData.forEach(item => {
+        const productName = item.product_name;
+        
+        if (!productStats.has(productName)) {
+          productStats.set(productName, {
+            name: productName,
+            category: productCategories.get(productName) || null,
+            quantity: 0,
+            revenue: 0
+          });
+        }
+        
+        const stats = productStats.get(productName);
+        stats.quantity += item.quantity;
+        stats.revenue += item.price * item.quantity;
+      });
+    }
+    
+    const topProducts = Array.from(productStats.values())
+      .sort((a, b) => b.revenue - a.revenue);
+    
+    // Process hourly product sales
+    const hourlyProductSales = [];
+    if (orderItemsData) {
+      const hourlyData = new Map();
+      
+      orderItemsData.forEach(item => {
+        const createdAt = new Date(item.bar_orders.created_at);
+        const hour = createdAt.getHours();
+        const hourKey = `${hour}:00`;
+        
+        if (!hourlyData.has(hourKey)) {
+          hourlyData.set(hourKey, {
+            hour: hourKey,
+            products: new Map()
+          });
+        }
+        
+        const hourData = hourlyData.get(hourKey);
+        const productName = item.product_name;
+        
+        if (!hourData.products.has(productName)) {
+          hourData.products.set(productName, {
+            name: productName,
+            quantity: 0,
+            revenue: 0
+          });
+        }
+        
+        const productData = hourData.products.get(productName);
+        productData.quantity += item.quantity;
+        productData.revenue += item.price * item.quantity;
+      });
+      
+      // Convert to array format
+      hourlyData.forEach((hourData, hourKey) => {
+        hourlyProductSales.push({
+          hour: hourKey,
+          products: Array.from(hourData.products.values())
+            .sort((a, b) => b.revenue - a.revenue)
+        });
+      });
+      
+      // Sort by hour
+      hourlyProductSales.sort((a, b) => {
+        const aHour = parseInt(a.hour.split(':')[0]);
+        const bHour = parseInt(b.hour.split(':')[0]);
+        return aHour - bHour;
+      });
+    }
+    
+    return {
+      topProducts,
+      hourlyProductSales
+    };
+  } catch (error) {
+    console.error('Error fetching product statistics:', error);
+    return {
+      topProducts: [],
+      hourlyProductSales: []
+    };
+  }
+}
+
+// Get temporal statistics
+async function getTemporalStatistics(): Promise<TemporalStats> {
+  try {
+    // Get rush hours (transactions per hour)
+    const { data: barTransactions, error: barError } = await supabase
+      .from('bar_orders')
+      .select('created_at');
+      
+    if (barError) throw barError;
+    
+    const { data: rechargeTransactions, error: rechargeError } = await supabase
+      .from('card_transactions')
+      .select('created_at')
+      .eq('transaction_type', 'recharge');
+      
+    if (rechargeError) throw rechargeError;
+    
+    const rushHours = [];
+    if (barTransactions && rechargeTransactions) {
+      const hourData = new Map();
+      
+      // Process bar transactions
+      barTransactions.forEach(transaction => {
+        const date = new Date(transaction.created_at);
+        const hour = date.getHours();
+        const hourKey = `${hour}:00`;
+        
+        if (!hourData.has(hourKey)) {
+          hourData.set(hourKey, {
+            hour: hourKey,
+            barTransactions: 0,
+            rechargeTransactions: 0
+          });
+        }
+        
+        hourData.get(hourKey).barTransactions += 1;
+      });
+      
+      // Process recharge transactions
+      rechargeTransactions.forEach(transaction => {
+        const date = new Date(transaction.created_at);
+        const hour = date.getHours();
+        const hourKey = `${hour}:00`;
+        
+        if (!hourData.has(hourKey)) {
+          hourData.set(hourKey, {
+            hour: hourKey,
+            barTransactions: 0,
+            rechargeTransactions: 0
+          });
+        }
+        
+        hourData.get(hourKey).rechargeTransactions += 1;
+      });
+      
+      // Convert to array and sort by hour
+      hourData.forEach(data => {
+        rushHours.push(data);
+      });
+      
+      rushHours.sort((a, b) => {
+        const aHour = parseInt(a.hour.split(':')[0]);
+        const bHour = parseInt(b.hour.split(':')[0]);
+        return aHour - bHour;
+      });
+    }
+    
+    // Calculate average time between transactions per card
+    let averageTimeBetweenTransactions = 0;
+    if (barTransactions) {
+      // Group transactions by card_id
+      const cardTransactions = new Map();
+      
+      barTransactions.forEach(transaction => {
+        const cardId = transaction.card_id;
+        
+        if (cardId && !cardTransactions.has(cardId)) {
+          cardTransactions.set(cardId, []);
+        }
+        
+        if (cardId) {
+          cardTransactions.get(cardId).push(new Date(transaction.created_at));
+        }
+      });
+      
+      // Calculate average time between transactions for each card
+      let totalTimeDiff = 0;
+      let totalTransactionPairs = 0;
+      
+      cardTransactions.forEach(transactions => {
+        if (transactions.length > 1) {
+          // Sort by time
+          transactions.sort((a, b) => a.getTime() - b.getTime());
+          
+          for (let i = 1; i < transactions.length; i++) {
+            const timeDiff = transactions[i].getTime() - transactions[i-1].getTime();
+            totalTimeDiff += timeDiff;
+            totalTransactionPairs++;
+          }
+        }
+      });
+      
+      // Calculate average time difference in minutes
+      if (totalTransactionPairs > 0) {
+        averageTimeBetweenTransactions = totalTimeDiff / totalTransactionPairs / (1000 * 60); // Convert to minutes
+      }
+    }
+    
+    return {
+      rushHours,
+      averageTimeBetweenTransactions
+    };
+  } catch (error) {
+    console.error('Error fetching temporal statistics:', error);
+    return {
+      rushHours: [],
+      averageTimeBetweenTransactions: 0
+    };
   }
 }

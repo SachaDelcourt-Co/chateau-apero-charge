@@ -43,7 +43,7 @@ const AdminPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="w-full max-w-6xl mx-auto p-4">
+      <div className="w-full max-w-7xl mx-auto p-4">
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-4">
             <ChateauLogo />
@@ -59,29 +59,29 @@ const AdminPage: React.FC = () => {
           </Button>
         </div>
         
-        <div className="bg-white p-6 rounded-lg shadow-xl">
-          <h1 className="text-2xl font-bold mb-6 text-center">Administration</h1>
+        <div className="bg-white rounded-lg shadow-xl">
+          <h1 className="text-2xl font-bold p-6 text-center">Administration</h1>
           
           <Tabs 
             value={activeTab} 
             onValueChange={setActiveTab} 
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-3 px-6">
               <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
               <TabsTrigger value="topup">Recharge de carte</TabsTrigger>
               <TabsTrigger value="users">Utilisateurs</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="dashboard" className="mt-4">
+            <TabsContent value="dashboard" className="p-0">
               <Dashboard key={refreshTrigger} />
             </TabsContent>
             
-            <TabsContent value="topup" className="mt-4">
+            <TabsContent value="topup" className="p-6">
               <CardTopup onSuccess={refreshDashboard} />
             </TabsContent>
             
-            <TabsContent value="users" className="mt-4">
+            <TabsContent value="users" className="p-6">
               <UserManagement />
             </TabsContent>
           </Tabs>
