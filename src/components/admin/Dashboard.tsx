@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, CreditCard, TrendingUp, Search, RefreshCw } from "lucide-react";
+import { Wallet, CreditCard, TrendingUp, Search, RefreshCw, Euro, Receipt } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,11 @@ interface CardSummary {
     hour: string;
     montant: number;
   }[];
+  totalRevenue: number;
+  hourlyRevenue: {
+    hour: string;
+    revenue: number;
+  }[];
 }
 
 const Dashboard: React.FC = () => {
@@ -40,7 +44,9 @@ const Dashboard: React.FC = () => {
     totalBalance: 0,
     avgBalance: 0,
     recentTopUps: [],
-    hourlyTransactions: []
+    hourlyTransactions: [],
+    totalRevenue: 0,
+    hourlyRevenue: []
   });
   
   const itemsPerPage = 10;
@@ -58,6 +64,52 @@ const Dashboard: React.FC = () => {
       if (tableCardsError) throw tableCardsError;
       
       console.log("Fetched cards from table_cards:", tableCards?.length || 0);
+      
+      // Fetch transactions to calculate revenue (money spent at bars)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Start of today
+      
+      // Fetch bar orders to calculate actual revenue
+      const { data: barOrders, error: barOrdersError } = await supabase
+        .from('bar_orders')
+        .select('*,created_at,total_amount')
+        .gte('created_at', today.toISOString()); // Only get orders from today
+        
+      if (barOrdersError) throw barOrdersError;
+      
+      console.log("Fetched bar orders for today:", barOrders?.length || 0);
+      
+      // Calculate total revenue from bar orders
+      const totalRevenue = (barOrders || []).reduce((sum, order) => {
+        const amount = parseFloat(order.total_amount?.toString() || '0');
+        return sum + amount;
+      }, 0);
+      
+      console.log("Calculated total revenue (from bar orders):", totalRevenue);
+      
+      // Calculate hourly revenue for the current day
+      const hourlyRevenue = [];
+      // Use this currentHour for both charts
+      const currentHour = new Date().getHours();
+      
+      // Initialize hourlyRevenue array with 0 for each hour
+      for (let hour = 0; hour <= 23; hour++) {
+        const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
+        hourlyRevenue.push({
+          hour: `${formattedHour}h`,
+          revenue: 0
+        });
+      }
+      
+      // Fill in actual revenue data from bar orders
+      (barOrders || []).forEach(order => {
+        const orderDate = new Date(order.created_at);
+        const hour = orderDate.getHours();
+        const amount = parseFloat(order.total_amount?.toString() || '0');
+        
+        // Add the order amount to the corresponding hour
+        hourlyRevenue[hour].revenue += amount;
+      });
       
       // Format data from table_cards
       const formattedTableCards = (tableCards || []).map(card => ({
@@ -91,9 +143,8 @@ const Dashboard: React.FC = () => {
       
       // Create hourly transaction data for the current day
       const hourlyTransactions = [];
-      const currentHour = new Date().getHours();
       
-      // Generate data for hours 0 to current hour
+      // Generate data for hours 0 to current hour for recharges
       for (let hour = 0; hour <= 23; hour++) {
         const formattedHour = hour < 10 ? `0${hour}` : `${hour}`;
         
@@ -117,7 +168,9 @@ const Dashboard: React.FC = () => {
         totalBalance,
         avgBalance,
         recentTopUps: topCards,
-        hourlyTransactions
+        hourlyTransactions,
+        totalRevenue,
+        hourlyRevenue
       });
       
       setCards(allCards);
@@ -213,7 +266,7 @@ const Dashboard: React.FC = () => {
         </Button>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">
@@ -261,7 +314,66 @@ const Dashboard: React.FC = () => {
             )}
           </CardContent>
         </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">
+              Chiffre d'affaire
+            </CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <div>
+                <div className="text-2xl font-bold">{summary.totalRevenue.toFixed(2)}€</div>
+                <p className="text-xs text-muted-foreground mt-1">Total des ventes aux bars</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>Chiffre d'affaire par heure (aujourd'hui)</CardTitle>
+          <p className="text-sm text-muted-foreground">Basé sur les commandes au bar</p>
+        </CardHeader>
+        <CardContent>
+          <div className="h-80 w-full">
+            {loading ? (
+              <Skeleton className="h-full w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={summary.hourlyRevenue}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    tick={{ fill: '#64748b' }}
+                    tickLine={{ stroke: '#64748b' }}
+                  />
+                  <YAxis 
+                    tick={{ fill: '#64748b' }}
+                    tickLine={{ stroke: '#64748b' }}
+                    tickFormatter={(value) => `${value}€`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [`${value.toFixed(2)}€`, 'Ventes (€)']} 
+                    labelFormatter={(label) => `${label}`}
+                  />
+                  <Legend />
+                  <Bar 
+                    dataKey="revenue" 
+                    name="Chiffre d'affaire (€)" 
+                    fill="#10b981"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </CardContent>
+      </Card>
       
       <Card>
         <CardHeader>
