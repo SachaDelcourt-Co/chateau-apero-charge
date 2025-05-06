@@ -10,13 +10,9 @@ const rateLimitErrors = new Rate('rate_limit_errors');
 const BASE_URL = 'https://dqghjrpeoyqvkvoivfnz.supabase.co';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y';
 
-// Bar credentials for testing
+// Bar credentials for testing - using alex@lesaperosduchateau.be as it's a known valid admin user
 const barCredentials = [
-  { email: 'bar1@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
-  { email: 'bar2@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
-  { email: 'bar3@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
-  { email: 'bar4@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
-  { email: 'bar5@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
+  { email: 'alex@lesaperosduchateau.be', password: 'g7YyT3KhWR84' },
 ];
 
 // Generate a unique ID for this test run to avoid collisions
@@ -36,11 +32,11 @@ export const options = {
   scenarios: {
     bar_operations: {
       executor: 'constant-arrival-rate',
-      rate: 2, // 2 requests per second
+      rate: 1, // 1 request per second (reduced to avoid rate limits)
       timeUnit: '1s',
-      duration: '2m',
-      preAllocatedVUs: 5,
-      maxVUs: 10,
+      duration: '1m',
+      preAllocatedVUs: 3,
+      maxVUs: 5,
     },
   },
   thresholds: {
@@ -80,6 +76,8 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
       result = http.post(url, body ? JSON.stringify(body) : null, fullParams);
     } else if (method === 'PUT') {
       result = http.put(url, body ? JSON.stringify(body) : null, fullParams);
+    } else if (method === 'PATCH') {
+      result = http.patch(url, body ? JSON.stringify(body) : null, fullParams);
     }
     
     // Check for rate limiting
@@ -97,6 +95,148 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
   // If we get here, we've exhausted our retries
   console.log(`Failed after ${maxRetries} retries for ${url}`);
   return result;
+}
+
+// Function to handle the two-step order creation process
+function createOrder(authHeader, cardId, orderItems, totalAmount) {
+  try {
+    // Step 1: Create the order record first
+    const orderData = {
+      card_id: cardId,
+      total_amount: totalAmount,
+      status: 'completed'
+      // Note: created_at is automatically set by the database
+    };
+    
+    const createOrderUrl = `${BASE_URL}/rest/v1/bar_orders`;
+    const createOrderResponse = rateLimitedRequest('POST', createOrderUrl, orderData, {
+      headers: { ...authHeader, 'Prefer': 'return=representation' },
+      name: 'create_order_record'
+    });
+    
+    if (createOrderResponse.status !== 201 && createOrderResponse.status !== 200) {
+      console.error('Failed to create order record:', createOrderResponse.status, createOrderResponse.body);
+      return { success: false };
+    }
+    
+    // Extract the order ID from the response
+    let orderId;
+    try {
+      // Check the response to see if it has a body
+      if (!createOrderResponse.body || createOrderResponse.body === '{}') {
+        // Try to get the order ID from the Location header
+        const locationHeader = createOrderResponse.headers['Location'] || createOrderResponse.headers['location'];
+        if (locationHeader) {
+          // Extract the ID from something like '/rest/v1/bar_orders?id=eq.123'
+          const match = locationHeader.match(/id=eq\.([^&]+)/);
+          if (match && match[1]) {
+            orderId = match[1];
+            console.log(`Extracted order ID from Location header: ${orderId}`);
+          }
+        }
+        
+        // If we still don't have an order ID, query for the most recent order for this card
+        if (!orderId) {
+          console.log('No order ID in response, querying for the latest order');
+          const getOrderUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardId}&order=created_at.desc&limit=1`;
+          const getOrderResponse = rateLimitedRequest('GET', getOrderUrl, null, {
+            headers: authHeader,
+            name: 'get_latest_order'
+          });
+          
+          if (getOrderResponse.status === 200 && getOrderResponse.json().length > 0) {
+            orderId = getOrderResponse.json()[0].id;
+            console.log(`Found latest order ID: ${orderId}`);
+          }
+        }
+      } else {
+        // Try to parse the order ID from the response body as before
+        try {
+          const orderResult = JSON.parse(createOrderResponse.body);
+          if (Array.isArray(orderResult) && orderResult.length > 0) {
+            orderId = orderResult[0].id;
+          } else if (orderResult.id) {
+            orderId = orderResult.id;
+          }
+        } catch (parseError) {
+          console.error('Error parsing order response JSON:', parseError);
+        }
+      }
+      
+      if (!orderId) {
+        console.error('Could not determine order ID from response:', createOrderResponse.status, createOrderResponse.body);
+        return { success: false };
+      }
+    } catch (error) {
+      console.error('Error processing order response:', error, createOrderResponse.body);
+      return { success: false };
+    }
+    
+    // Wait briefly to ensure the order is committed
+    sleep(0.5);
+    
+    // Step 2: Create the order items
+    const orderItemsData = orderItems.map(item => ({
+      order_id: orderId,
+      product_name: item.product_name,
+      price: item.price,
+      quantity: item.quantity,
+      is_deposit: item.is_deposit || false,
+      is_return: item.is_return || false
+    }));
+    
+    // Create items one by one to reduce chances of errors
+    let allItemsCreated = true;
+    for (const item of orderItemsData) {
+      const createItemUrl = `${BASE_URL}/rest/v1/bar_order_items`;
+      const createItemResponse = rateLimitedRequest('POST', createItemUrl, item, {
+        headers: authHeader,
+        name: 'create_order_item'
+      });
+      
+      if (createItemResponse.status !== 201 && createItemResponse.status !== 200) {
+        console.error('Failed to create order item:', createItemResponse.status, createItemResponse.body);
+        allItemsCreated = false;
+      }
+      
+      // Small pause between item creations
+      sleep(0.2);
+    }
+    
+    // Step 3: Update the card balance (as the app does)
+    // Get current card balance
+    const getCardUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=amount`;
+    const getCardResponse = rateLimitedRequest('GET', getCardUrl, null, {
+      headers: authHeader,
+      name: 'get_card_balance'
+    });
+    
+    if (getCardResponse.status === 200 && getCardResponse.json().length > 0) {
+      const cardData = getCardResponse.json()[0];
+      const currentAmount = parseFloat(cardData.amount || '0');
+      const newAmount = (currentAmount - totalAmount).toString();
+      
+      // Update the card balance
+      const updateCardUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}`;
+      const updateCardResponse = rateLimitedRequest('PATCH', updateCardUrl, { amount: newAmount }, {
+        headers: { ...authHeader, 'Prefer': 'return=minimal' },
+        name: 'update_card_balance'
+      });
+      
+      if (updateCardResponse.status !== 204 && updateCardResponse.status !== 200) {
+        console.error('Failed to update card balance:', updateCardResponse.status, updateCardResponse.body);
+      }
+    }
+    
+    return { 
+      success: true,
+      orderId: orderId,
+      allItemsCreated: allItemsCreated
+    };
+  } catch (error) {
+    console.error('Error in order creation process:', error);
+    return { success: false };
+  }
 }
 
 export default function() {
@@ -121,13 +261,17 @@ export default function() {
   
   // Get access token
   const accessToken = loginResponse.json('access_token');
-  const authHeader = { 'Authorization': `Bearer ${accessToken}` };
+  // Include the API key in the auth header
+  const authHeader = { 
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': API_KEY
+  };
   
   // Sleep a random amount to spread out requests
   sleep(Math.random() * 2);
   
-  // Get bar products
-  const productsUrl = `${BASE_URL}/rest/v1/products?select=*`;
+  // Get bar products - Use the correct table name 'bar_products' instead of 'products'
+  const productsUrl = `${BASE_URL}/rest/v1/bar_products?select=*`;
   const productsResponse = rateLimitedRequest('GET', productsUrl, null, {
     headers: authHeader,
     name: 'get_products'
@@ -151,7 +295,7 @@ export default function() {
   const cardId = simulatedCardIds[Math.floor(Math.random() * simulatedCardIds.length)];
   
   // Check if card exists, create if not (this helps with test stability)
-  const cardCheckUrl = `${BASE_URL}/rest/v1/cards?id=eq.${cardId}&select=id,balance`;
+  const cardCheckUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=id,amount`;
   const cardCheckResponse = rateLimitedRequest('GET', cardCheckUrl, null, {
     headers: authHeader,
     name: 'check_card'
@@ -159,9 +303,9 @@ export default function() {
   
   if (cardCheckResponse.json().length === 0) {
     console.log(`Creating test card: ${cardId}`);
-    const createCardResponse = rateLimitedRequest('POST', `${BASE_URL}/rest/v1/cards`, {
+    const createCardResponse = rateLimitedRequest('POST', `${BASE_URL}/rest/v1/table_cards`, {
       id: cardId,
-      balance: 1000,
+      amount: '1000',
       description: 'Test load card'
     }, {
       headers: authHeader,
@@ -173,6 +317,9 @@ export default function() {
       sleep(3);
       return;
     }
+    
+    // Sleep to make sure the card is created before we try to use it
+    sleep(1);
   }
   
   // Random delay
@@ -187,6 +334,11 @@ export default function() {
     const randomProduct = products[Math.floor(Math.random() * products.length)];
     const quantity = Math.floor(Math.random() * 2) + 1;
     
+    // Skip products with null prices to avoid errors
+    if (randomProduct.price === null) {
+      continue;
+    }
+    
     orderItems.push({
       product_name: randomProduct.name,
       price: randomProduct.price,
@@ -198,24 +350,20 @@ export default function() {
     totalAmount += randomProduct.price * quantity;
   }
   
-  console.log(`Creating order for card ${cardId} with ${numItems} items, total: ${totalAmount}`);
+  // Make sure we have at least one item
+  if (orderItems.length === 0) {
+    console.error('No valid products with prices available');
+    sleep(3);
+    return;
+  }
   
-  // Create order
-  const order = {
-    card_id: cardId,
-    total_amount: totalAmount,
-    items: orderItems,
-    status: 'completed',
-    created_by: barCredential.email
-  };
+  console.log(`Creating order for card ${cardId} with ${orderItems.length} items, total: ${totalAmount}`);
   
-  const createOrderResponse = rateLimitedRequest('POST', `${BASE_URL}/rest/v1/orders`, order, {
-    headers: authHeader,
-    name: 'create_order'
-  });
+  // Use the two-step order creation process
+  const orderResult = createOrder(authHeader, cardId, orderItems, totalAmount);
   
-  check(createOrderResponse, { 
-    'order created': (r) => r.status === 201 || r.status === 200
+  check(orderResult, { 
+    'order created': (r) => r.success === true 
   });
   
   // Sleep to allow some time between complete operations

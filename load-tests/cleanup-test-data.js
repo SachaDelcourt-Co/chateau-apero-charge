@@ -2,207 +2,235 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
 
-// Metrics for tracking rate limit errors
+// Create a custom metric to track rate limit errors
 const rateLimitErrors = new Rate('rate_limit_errors');
 
 // Admin credentials for testing
-const adminCredential = {
-  email: 'alex@lesaperosduchateau.be',
-  password: 'g7YyT3KhWR84'
-};
+const ADMIN_EMAIL = 'alex@lesaperosduchateau.be';
+const ADMIN_PASSWORD = 'g7YyT3KhWR84';
 
-// Base URL of the application
+// Define base URL and API key
 const BASE_URL = 'https://dqghjrpeoyqvkvoivfnz.supabase.co';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y';
 
-// Patterns for identifying test data
-const TEST_CARD_ID_PATTERNS = [
-  'simulated-card-%',
-  'nfc-card-%',
-  'nfc-test-%'
-];
+// Define patterns for identifying test data
+const TEST_CARD_PATTERNS = ['simulated-card-%', 'nfc-card-%', 'nfc-test-%'];
 
-// Test configuration
+// k6 options - one user, one iteration
 export const options = {
-  vus: 1,            // Only need one virtual user
-  iterations: 1,     // Run only once
+  vus: 1,
+  iterations: 1,
   thresholds: {
-    'rate_limit_errors': ['rate<0.3'],  // Track rate limit errors separately
+    'rate_limit_errors': ['rate<0.1'], // Track rate limit errors separately
   },
 };
 
-// Helper function for rate-limited API calls with retries
-function rateLimitedRequest(method, url, body, headers, maxRetries = 3) {
+// Function to retry on rate limit
+function rateLimitedRequest(method, url, body = null, params = {}) {
+  const maxRetries = 5;
   let retries = 0;
-  let response;
+  let result;
 
-  while (retries <= maxRetries) {
+  const baseParams = {
+    headers: {
+      'apikey': API_KEY,
+      'Content-Type': 'application/json',
+      ...params.headers
+    },
+    tags: { name: params.name || url }
+  };
+  
+  const fullParams = { ...baseParams, ...params };
+  
+  while (retries < maxRetries) {
     if (retries > 0) {
-      // Exponential backoff with jitter (2^retries + random)
-      const backoffTime = (Math.pow(2, retries) + Math.random()) * 2;
-      console.log(`Rate limited, retrying in ${backoffTime.toFixed(2)}s (attempt ${retries}/${maxRetries})`);
-      sleep(backoffTime);
+      // Exponential backoff: 0.5s, 1s, 2s, 4s, 8s
+      const backoffTime = Math.pow(2, retries - 1) * 500;
+      console.log(`Retry ${retries}/${maxRetries}, backing off for ${backoffTime}ms`);
+      sleep(backoffTime / 1000); // convert ms to seconds for k6 sleep
     }
-
-    if (method.toLowerCase() === 'get') {
-      response = http.get(url, { headers });
-    } else if (method.toLowerCase() === 'post') {
-      response = http.post(url, body, { headers });
-    } else if (method.toLowerCase() === 'patch') {
-      response = http.patch(url, body, { headers });
-    } else if (method.toLowerCase() === 'delete') {
-      response = http.del(url, null, { headers });
+    
+    if (method === 'GET') {
+      result = http.get(url, fullParams);
+    } else if (method === 'POST') {
+      result = http.post(url, body ? JSON.stringify(body) : null, fullParams);
+    } else if (method === 'PUT') {
+      result = http.put(url, body ? JSON.stringify(body) : null, fullParams);
+    } else if (method === 'DELETE') {
+      result = http.del(url, body ? JSON.stringify(body) : null, fullParams);
     }
-
-    // Check if we hit a rate limit
-    if (response.status === 429) {
+    
+    // Check for rate limiting
+    if (result.status === 429) {
+      console.log(`Rate limited on ${url}, attempt ${retries + 1}/${maxRetries}`);
       rateLimitErrors.add(1);
       retries++;
       continue;
     }
-
-    return response;
+    
+    // No rate limiting, return the result
+    return result;
   }
-
-  // Return the last response if we exhausted our retries
-  return response;
+  
+  // If we get here, we've exhausted our retries
+  console.log(`Failed after ${maxRetries} retries for ${url}`);
+  return result;
 }
 
-// Main function
+// Process in batches to avoid hitting API limits
+function processBatch(items, processFn, batchSize = 10) {
+  console.log(`Processing ${items.length} items in batches of ${batchSize}`);
+  
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    console.log(`Processing batch ${Math.floor(i/batchSize) + 1} of ${Math.ceil(items.length/batchSize)}`);
+    
+    batch.forEach(item => {
+      processFn(item);
+      // Small delay between each item in batch
+      sleep(0.2);
+    });
+    
+    // Longer delay between batches
+    if (i + batchSize < items.length) {
+      console.log('Sleeping between batches to avoid rate limits');
+      sleep(2);
+    }
+  }
+}
+
 export default function() {
-  console.log('Starting test data cleanup...');
+  console.log('Starting cleanup of test data');
   
   // 1. Login as admin
-  const loginRes = rateLimitedRequest('post', `${BASE_URL}/auth/v1/token?grant_type=password`, 
-    JSON.stringify({
-      email: adminCredential.email,
-      password: adminCredential.password,
-    }),
-    {
-      'Content-Type': 'application/json',
-      'apikey': API_KEY
-    }
-  );
-  
-  const loginSuccess = check(loginRes, {
-    'admin logged in successfully': (resp) => resp.status === 200,
+  console.log(`Logging in as ${ADMIN_EMAIL}`);
+  const loginResponse = rateLimitedRequest('POST', `${BASE_URL}/auth/v1/token?grant_type=password`, {
+    email: ADMIN_EMAIL,
+    password: ADMIN_PASSWORD
+  }, {
+    headers: { 
+      'apikey': API_KEY,
+      'Prefer': 'return=representation' 
+    },
+    name: 'login'
   });
   
-  if (!loginSuccess) {
-    console.error(`Login failed for admin: ${loginRes.body}`);
+  if (!check(loginResponse, { 'login successful': (r) => r.status === 200 && r.json('access_token') !== undefined })) {
+    console.error('Admin login failed:', loginResponse.status, loginResponse.body);
     return;
   }
   
-  const authToken = JSON.parse(loginRes.body).access_token;
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${authToken}`,
+  const accessToken = loginResponse.json('access_token');
+  // Include the API key in the auth header
+  const authHeader = { 
+    'Authorization': `Bearer ${accessToken}`,
     'apikey': API_KEY
   };
   
-  let allCardIds = [];
+  console.log('Login successful, retrieving test cards');
   
-  // 2. Get all test cards using various patterns
-  for (let pattern of TEST_CARD_ID_PATTERNS) {
-    console.log(`Searching for cards with pattern: ${pattern}`);
+  // 2. Get all test card IDs
+  const allCardIds = [];
+  
+  // Try both tables to find all test cards
+  TEST_CARD_PATTERNS.forEach(pattern => {
+    // Check table_cards
+    const tableCardsUrl = `${BASE_URL}/rest/v1/table_cards?id=like.${pattern}&select=id`;
+    const tableCardsResponse = rateLimitedRequest('GET', tableCardsUrl, null, {
+      headers: authHeader,
+      name: 'get_table_cards'
+    });
     
-    const cardIdsRes = rateLimitedRequest('get', 
-      `${BASE_URL}/rest/v1/cards?id=like.${encodeURIComponent(pattern)}&select=id`,
-      null, headers
-    );
-    
-    if (cardIdsRes.status === 200) {
-      const foundCards = JSON.parse(cardIdsRes.body);
-      allCardIds = allCardIds.concat(foundCards.map(card => card.id));
-      console.log(`Found ${foundCards.length} cards matching pattern '${pattern}'`);
+    if (tableCardsResponse.status === 200) {
+      const tableCards = tableCardsResponse.json();
+      console.log(`Found ${tableCards.length} test cards in table_cards matching ${pattern}`);
+      tableCards.forEach(card => allCardIds.push({ id: card.id, table: 'table_cards' }));
     }
     
-    // Add delay between queries to avoid rate limiting
+    // Check cards backup table
+    const cardsUrl = `${BASE_URL}/rest/v1/cards?id=like.${pattern}&select=id`;
+    const cardsResponse = rateLimitedRequest('GET', cardsUrl, null, {
+      headers: authHeader,
+      name: 'get_cards'
+    });
+    
+    if (cardsResponse.status === 200) {
+      const cards = cardsResponse.json();
+      console.log(`Found ${cards.length} test cards in cards matching ${pattern}`);
+      cards.forEach(card => allCardIds.push({ id: card.id, table: 'cards' }));
+    }
+    
+    // Sleep to avoid rate limits
     sleep(1);
-  }
+  });
   
-  console.log(`Found ${allCardIds.length} total test cards to clean up`);
+  console.log(`Total test cards found: ${allCardIds.length}`);
   
   if (allCardIds.length === 0) {
-    console.log('No test cards found. Cleanup complete.');
+    console.log('No test cards found, nothing to clean up');
     return;
   }
   
-  // Process cards in smaller batches to avoid rate limits
-  const BATCH_SIZE = 5;
-  const batches = [];
-  
-  for (let i = 0; i < allCardIds.length; i += BATCH_SIZE) {
-    batches.push(allCardIds.slice(i, i + BATCH_SIZE));
-  }
-  
-  console.log(`Processing cards in ${batches.length} batches of up to ${BATCH_SIZE} cards each`);
-  
-  // 3. For each batch of cards, perform cleanup
-  for (let [batchIndex, cardBatch] of batches.entries()) {
-    console.log(`Processing batch ${batchIndex + 1}/${batches.length} with ${cardBatch.length} cards`);
+  // 3. Delete all related data for each card
+  processBatch(allCardIds, (cardInfo) => {
+    console.log(`Cleaning up data for card: ${cardInfo.id}`);
     
-    for (let cardId of cardBatch) {
-      console.log(`Cleaning up data for card: ${cardId}`);
-      
-      // 3.1 Delete transactions
-      const deleteTransactionsRes = rateLimitedRequest('delete',
-        `${BASE_URL}/rest/v1/transactions?card_id=eq.${encodeURIComponent(cardId)}`,
-        null,
-        {
-          ...headers,
-          'Prefer': 'return=minimal'
-        }
-      );
-      
-      check(deleteTransactionsRes, {
-        'transactions deleted successfully': (resp) => resp.status === 204 || resp.status === 200,
+    // 3.1 Delete orders
+    if (cardInfo.table === 'table_cards') {
+      // First get order IDs to delete their items
+      const ordersUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardInfo.id}&select=id`;
+      const ordersResponse = rateLimitedRequest('GET', ordersUrl, null, {
+        headers: authHeader,
+        name: 'get_orders'
       });
       
-      // Add short delay between operations
-      sleep(1);
-      
-      // 3.2 Delete orders
-      const deleteOrdersRes = rateLimitedRequest('delete',
-        `${BASE_URL}/rest/v1/orders?card_id=eq.${encodeURIComponent(cardId)}`,
-        null,
-        {
-          ...headers,
-          'Prefer': 'return=minimal'
-        }
-      );
-      
-      check(deleteOrdersRes, {
-        'orders deleted successfully': (resp) => resp.status === 204 || resp.status === 200,
+      if (ordersResponse.status === 200) {
+        const orders = ordersResponse.json();
+        console.log(`Found ${orders.length} orders for card ${cardInfo.id}`);
+        
+        orders.forEach(order => {
+          // Delete order items
+          const orderItemsUrl = `${BASE_URL}/rest/v1/bar_order_items?order_id=eq.${order.id}`;
+          const deleteItemsResponse = rateLimitedRequest('DELETE', orderItemsUrl, null, {
+            headers: authHeader,
+            name: 'delete_order_items'
+          });
+          
+          console.log(`Deleted items for order ${order.id}: ${deleteItemsResponse.status}`);
+          sleep(0.5);
+        });
+        
+        // Now delete the orders
+        const deleteOrdersUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardInfo.id}`;
+        const deleteOrdersResponse = rateLimitedRequest('DELETE', deleteOrdersUrl, null, {
+          headers: authHeader,
+          name: 'delete_orders'
+        });
+        
+        console.log(`Deleted orders for card ${cardInfo.id}: ${deleteOrdersResponse.status}`);
+      }
+    } else {
+      // Try backup orders table
+      const ordersUrl = `${BASE_URL}/rest/v1/orders?card_id=eq.${cardInfo.id}`;
+      const deleteOrdersResponse = rateLimitedRequest('DELETE', ordersUrl, null, {
+        headers: authHeader,
+        name: 'delete_backup_orders'
       });
       
-      // Add short delay between operations
-      sleep(1);
-      
-      // 3.3 Delete card
-      const deleteCardRes = rateLimitedRequest('delete',
-        `${BASE_URL}/rest/v1/cards?id=eq.${encodeURIComponent(cardId)}`,
-        null,
-        {
-          ...headers,
-          'Prefer': 'return=minimal'
-        }
-      );
-      
-      check(deleteCardRes, {
-        'card deleted successfully': (resp) => resp.status === 204 || resp.status === 200,
-      });
-      
-      // Add short delay between cards
-      sleep(1);
+      console.log(`Deleted backup orders for card ${cardInfo.id}: ${deleteOrdersResponse.status}`);
     }
     
-    // Add longer delay between batches
-    if (batchIndex < batches.length - 1) {
-      console.log(`Finished batch ${batchIndex + 1}/${batches.length}. Pausing before next batch...`);
-      sleep(5);
-    }
-  }
+    sleep(1);
+    
+    // 3.2 Delete the card
+    const cardUrl = `${BASE_URL}/rest/v1/${cardInfo.table}?id=eq.${cardInfo.id}`;
+    const deleteCardResponse = rateLimitedRequest('DELETE', cardUrl, null, {
+      headers: authHeader,
+      name: 'delete_card'
+    });
+    
+    console.log(`Deleted card ${cardInfo.id} from ${cardInfo.table}: ${deleteCardResponse.status}`);
+  }, 5); // Process 5 cards at a time
   
-  console.log('Test data cleanup completed successfully!');
+  console.log('Cleanup completed!');
 } 

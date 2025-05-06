@@ -125,7 +125,7 @@ export default function() {
   const cardId = simulatedCardIds[randomIntBetween(0, simulatedCardIds.length - 1)];
   
   // Check if card exists (or create it if needed)
-  const cardRes = rateLimitedRequest('get', `${BASE_URL}/rest/v1/cards?id=eq.${cardId}&select=*`, null, authHeaders);
+  const cardRes = rateLimitedRequest('get', `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=*`, null, authHeaders);
   
   const cardExists = cardRes.status === 200 && JSON.parse(cardRes.body).length > 0;
   
@@ -134,15 +134,15 @@ export default function() {
   
   if (!cardExists) {
     // Create a new card
-    const createCardRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/cards`, 
+    const createCardRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/table_cards`, 
       JSON.stringify({
         id: cardId,
-        balance: 0,
-        created_at: new Date().toISOString(),
-        last_updated: new Date().toISOString()
+        amount: '0',
+        description: 'Test recharge card'
       }),
       {
         'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
         ...authHeaders
       }
     );
@@ -157,34 +157,58 @@ export default function() {
   // 3. Process card recharge
   const rechargeAmount = rechargeAmounts[randomIntBetween(0, rechargeAmounts.length - 1)];
   
-  // Create transaction record
-  const transactionRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/transactions`, 
-    JSON.stringify({
-      card_id: cardId,
-      amount: rechargeAmount,
-      type: 'recharge',
-      created_by: rechargeUser.email,
-      payment_method: randomIntBetween(0, 1) === 0 ? 'cash' : 'card',
-      status: 'completed'
-    }),
-    {
-      'Content-Type': 'application/json',
-      ...authHeaders
-    }
-  );
+  // Let's use the correct "paiements" table instead of "payments"
+  let paymentCreated = false;
   
-  check(transactionRes, {
-    'recharge transaction created successfully': (resp) => resp.status === 201,
-  });
+  try {
+    // Use the "paiements" table which is the correct French spelling
+    const transactionRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/paiements`, 
+      JSON.stringify({
+        amount: rechargeAmount.toString(),
+        id_card: cardId,
+        paid_by_card: randomIntBetween(0, 1) === 1, // randomly true or false
+        created_at: new Date().toISOString()
+      }),
+      {
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+        ...authHeaders
+      }
+    );
+    
+    paymentCreated = transactionRes.status === 201;
+    check(transactionRes, {
+      'recharge transaction created successfully': (resp) => resp.status === 201,
+    });
+    
+    // If the payment creation failed, let's check the response for hints
+    if (!paymentCreated) {
+      console.log(`Payment creation failed with status ${transactionRes.status}: ${transactionRes.body}`);
+    }
+  } catch (error) {
+    console.error('Error creating payment:', error);
+  }
+  
+  // If the payment wasn't created successfully, we'll still proceed with updating the card balance
+  // which still works as seen in previous runs
   
   // Add a short sleep to pace the requests
   sleep(1);
   
-  // 4. Update card balance through a function call or direct update
-  const updateCardRes = rateLimitedRequest('patch', `${BASE_URL}/rest/v1/cards?id=eq.${cardId}`, 
+  // 4. Update card balance
+  // First get current amount
+  const currentCardRes = rateLimitedRequest('get', `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=amount`, null, authHeaders);
+  let currentAmount = 0;
+  
+  if (currentCardRes.status === 200 && JSON.parse(currentCardRes.body).length > 0) {
+    currentAmount = parseFloat(JSON.parse(currentCardRes.body)[0].amount || '0');
+  }
+  
+  const newAmount = (currentAmount + rechargeAmount).toString();
+  
+  const updateCardRes = rateLimitedRequest('patch', `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}`, 
     JSON.stringify({
-      balance: rechargeAmount,  // Note: In real scenario, this would be added to existing balance
-      last_updated: new Date().toISOString()
+      amount: newAmount
     }),
     {
       'Content-Type': 'application/json',
