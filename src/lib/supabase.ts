@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { supabase as integrationSupabase } from "@/integrations/supabase/client";
 
@@ -39,7 +40,7 @@ export async function getCardById(cardNumber: string): Promise<Card | null> {
       // Convert from table_cards format to Card format
       return {
         card_number: data.id,
-        amount: data.amount?.toString(),
+        amount: data.amount?.toString(), // Ensure string type
       };
     }
 
