@@ -6,7 +6,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { supabase } from '@/lib/supabase';
 
 // Initialize Stripe with the public key
-const stripePromise = loadStripe('pk_test_51RBXwoPK5Kb6COYPP4YQqSTKUrScqdkZD0KYx8amXdFISxpulmfyPpHWFx8EzK72Ulo6t94D3s9TeZgc7sDsuuLq00zvPP4z4k');
+const stripePromise = loadStripe('pk_live_51RBXwRAWk9DBMhnhHYkcORHp7CoL5HqSHRSlR1hJX9BFNOof4UFjK44DGaksREIm90E6e9QYWmqsnPflzWAS7HW300YwBI1ubB');
 
 /**
  * Creates a Stripe checkout session
