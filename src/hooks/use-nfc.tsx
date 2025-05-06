@@ -4,9 +4,10 @@ import { toast } from '@/hooks/use-toast';
 interface UseNfcOptions {
   onScan?: (id: string) => void;
   validateId?: (id: string) => boolean;
+  getTotalAmount?: () => number; // Added this option to pass a function that returns the current total
 }
 
-export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
+export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {}) {
   const [isScanning, setIsScanning] = useState(false);
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
@@ -89,6 +90,12 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
   
   const startScan = useCallback(async () => {
     console.log('[NFC Debug] startScan called, isSupported:', isSupported);
+    
+    // Log the current total amount if the function is provided
+    if (getTotalAmount) {
+      const currentTotal = getTotalAmount();
+      console.log('[NFC Debug] Current total amount:', currentTotal);
+    }
     
     if (!isSupported) {
       console.warn('[NFC Debug] Cannot start NFC scan - API not supported');
@@ -334,7 +341,7 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
       
       return false;
     }
-  }, [isSupported, onScan, validateId]);
+  }, [isSupported, onScan, validateId, getTotalAmount]); // Added getTotalAmount to dependencies
   
   const stopScan = useCallback(() => {
     console.log('[NFC Debug] stopScan called by user');
@@ -349,4 +356,4 @@ export function useNfc({ onScan, validateId }: UseNfcOptions = {}) {
     startScan,
     stopScan
   };
-} 
+}
