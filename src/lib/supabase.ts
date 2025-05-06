@@ -4,12 +4,10 @@ import { supabase as integrationSupabase } from "@/integrations/supabase/client"
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
 
-// Re-export the supabase client for compatibility with existing code
-export { supabase };
-
+// Export interfaces and types
 export interface TableCard {
   id: string;
-  amount: string;
+  amount: string; // Keep as string to match the DB schema
   description?: string | null;
 }
 
@@ -205,7 +203,8 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
       .insert({
         card_id: order.card_id,
         total_amount: order.total_amount,
-        status: 'completed'
+        status: 'completed',
+        point_of_sale: 1 // Ensure this is a number to match DB schema
       })
       .select()
       .single();
@@ -236,7 +235,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
     }
 
     // 4. Update the card amount
-    const newAmount = (currentAmount - order.total_amount).toString();
+    const newAmount = (currentAmount - order.total_amount).toFixed(2);
     console.log("Updating card amount from:", currentAmount, "to:", newAmount);
     
     const { error: updateError } = await supabase
