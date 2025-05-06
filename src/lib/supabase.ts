@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
-import { createClient } from '@supabase/supabase-js';
+
+// Re-export supabase for use in other files
+export { supabase };
 
 // Define table card types
 export interface TableCard {
@@ -7,7 +9,6 @@ export interface TableCard {
   amount: number;
   description?: string;
   blocked?: boolean;
-  balance?: number; // For backward compatibility
   recharge_count?: number;
   last_recharge_date?: string;
   last_payment_method?: string;
@@ -32,12 +33,12 @@ export interface OrderItem {
   is_return?: boolean;
 }
 
-// Function to get card balance
+// Function to get card balance (amount is used as balance in the system)
 export const getCardBalance = async (cardId: string) => {
   try {
     const { data, error } = await supabase
       .from('table_cards')
-      .select('balance, blocked')
+      .select('amount, description')
       .eq('id', cardId)
       .single();
 
@@ -46,7 +47,12 @@ export const getCardBalance = async (cardId: string) => {
       throw error;
     }
 
-    return data;
+    // Return data with 'amount' as 'balance' for backward compatibility
+    return {
+      ...data,
+      balance: data.amount,
+      blocked: data.description?.toLowerCase().includes('blocked') || false
+    };
   } catch (error) {
     console.error("Error in getCardBalance:", error);
     throw error;
@@ -74,12 +80,12 @@ export const getTableCardById = async (cardId: string): Promise<TableCard | null
   }
 };
 
-// Function to update card balance
+// Function to update card balance (using amount)
 export const updateCardBalance = async (cardId: string, newBalance: number) => {
   try {
     const { data, error } = await supabase
       .from('table_cards')
-      .update({ balance: newBalance })
+      .update({ amount: newBalance })
       .eq('id', cardId)
       .select();
 
@@ -98,9 +104,10 @@ export const updateCardBalance = async (cardId: string, newBalance: number) => {
 // Function to update table card amount
 export const updateTableCardAmount = async (cardId: string, newAmount: string): Promise<boolean> => {
   try {
+    const amountNumber = parseFloat(newAmount);
     const { error } = await supabase
       .from('table_cards')
-      .update({ amount: newAmount })
+      .update({ amount: amountNumber })
       .eq('id', cardId);
     
     if (error) {
@@ -145,7 +152,7 @@ interface PaymentParams {
 
 export const registerPayment = async ({ cardId, products, total, pointOfSale }: PaymentParams) => {
   try {
-    // 1. Update card balance
+    // 1. Get card data (amount is used as balance)
     const cardData = await getCardBalance(cardId);
     if (!cardData) {
       throw new Error("Card not found");
@@ -160,15 +167,21 @@ export const registerPayment = async ({ cardId, products, total, pointOfSale }: 
       throw new Error("Insufficient balance");
     }
 
+    // Update card amount (which serves as balance)
     await updateCardBalance(cardId, newBalance);
 
     // 2. Register card transaction
     await registerCardTransaction(cardId, total, 'purchase');
 
-    // 3. Register bar order
+    // 3. Register bar order with point_of_sale as number
+    const pointOfSaleNum = parseInt(pointOfSale, 10) || 1;
     const { data: orderData, error: orderError } = await supabase
       .from('bar_orders')
-      .insert([{ card_id: cardId, total_amount: total, point_of_sale: pointOfSale }])
+      .insert({ 
+        card_id: cardId, 
+        total_amount: total, 
+        point_of_sale: pointOfSaleNum 
+      })
       .select()
       .single();
 
@@ -179,10 +192,10 @@ export const registerPayment = async ({ cardId, products, total, pointOfSale }: 
 
     const orderId = orderData.id;
 
-    // 4. Register bar order items
+    // 4. Register bar order items with product_name instead of product_id
     const orderItems = products.map(product => ({
       order_id: orderId,
-      product_id: product.id,
+      product_name: product.name, // Use name instead of product_id
       quantity: product.quantity,
       price: product.price
     }));

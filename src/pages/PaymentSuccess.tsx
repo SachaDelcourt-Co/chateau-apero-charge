@@ -1,3 +1,4 @@
+
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { getCardBalance } from '@/lib/supabase';
 const PaymentSuccess: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const [balance, setBalance] = React.useState<number | null>(null);
 
@@ -33,12 +34,21 @@ const PaymentSuccess: React.FC = () => {
       // Get card ID from URL parameters
       const cardParam = params.get('card');
       if (cardParam) {
-        // Convert to string to fix type error
-        const cardData = await getCardBalance(String(cardParam));
+        try {
+          // Convert to string to fix type error
+          const cardData = await getCardBalance(String(cardParam));
 
-        if (cardData) {
-          setBalance(cardData.balance);
-        } else {
+          if (cardData && cardData.balance !== undefined) {
+            setBalance(cardData.balance);
+          } else {
+            toast({
+              title: "Erreur",
+              description: "Impossible de récupérer le solde de la carte.",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching card balance:", error);
           toast({
             title: "Erreur",
             description: "Impossible de récupérer le solde de la carte.",

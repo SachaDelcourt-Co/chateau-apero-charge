@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { BarProductList } from './BarProductList';
@@ -178,7 +177,8 @@ export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) =
       <div className="w-full md:w-2/5 p-4 bg-gray-50">
         <h2 className="text-xl font-semibold mb-4">Commande</h2>
         <BarOrderSummary
-          order={currentOrder}
+          products={currentOrder.products}
+          total={currentOrder.total}
           onRemoveProduct={removeProductFromOrder}
           onClearOrder={clearOrder}
           onProceedToPayment={() => setShowPaymentForm(true)}

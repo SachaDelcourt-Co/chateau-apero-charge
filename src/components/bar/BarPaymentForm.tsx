@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
       const cardData = await getCardBalance(String(cardId)); 
       
       if (cardData) {
+        // Here we use cardData.balance which is set from cardData.amount in the getCardBalance function
         setCardBalance(cardData.balance);
       } else {
         setCardBalance(null);
