@@ -37,11 +37,15 @@ serve(async (req) => {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       
+      console.log('Processing Stripe webhook: checkout.session.completed');
+      console.log('Session data:', JSON.stringify(session, null, 2));
+      
       // Extract metadata
       const cardId = session.metadata?.cardId;
       const amount = session.metadata?.amount;
       
       if (!cardId || !amount) {
+        console.error('Missing metadata in Stripe session:', session.metadata);
         return new Response('Missing cardId or amount in metadata', { status: 400 });
       }
 

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ChateauBackground from '@/components/ChateauBackground';
@@ -20,13 +19,18 @@ const PaymentSuccess: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [updatingBalance, setUpdatingBalance] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
 
   useEffect(() => {
     // Get parameters from URL if present
     const params = new URLSearchParams(location.search);
     const amountParam = params.get('amount');
     const cardIdParam = params.get('cardId');
-    const sessionIdParam = params.get('session_id');
+    
+    // Check multiple possible parameter names for the session ID
+    // Stripe might use 'session_id', 'sessionId', or other variants
+    const sessionIdParam = params.get('session_id') || params.get('sessionId') || params.get('CHECKOUT_SESSION_ID');
     
     if (amountParam) {
       setAmount(amountParam);
@@ -36,25 +40,39 @@ const PaymentSuccess: React.FC = () => {
       setCardId(cardIdParam);
     }
 
+    // Log the found session ID and URL parameters for debugging
+    console.log('URL parameters:', Object.fromEntries(params.entries()));
+    console.log('Session ID found:', sessionIdParam);
+
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
       // Si nous avons un ID de session, cela signifie que le paiement a été complété
       if (cardIdParam && amountParam) {
         updateCardBalance(cardIdParam, amountParam);
       }
+    } else {
+      // If no session ID was found but we have card ID and amount,
+      // attempt to update the balance anyway - the webhook might have already processed it
+      if (cardIdParam) {
+        fetchCardData(cardIdParam);
+      }
     }
   }, [location]);
 
   // Fonction pour mettre à jour directement le solde de la carte
   const updateCardBalance = async (id: string, rechargeAmount: string) => {
+    console.log(`Attempting to update card balance: Card ID=${id}, Amount=${rechargeAmount}`);
     setUpdatingBalance(true);
     try {
       // Récupérer d'abord le solde actuel
       const currentCard = await getTableCardById(id);
       
       if (!currentCard) {
+        console.error(`Card not found: ${id}`);
         throw new Error("Carte non trouvée");
       }
+      
+      console.log('Current card data:', currentCard);
       
       // Calculer le nouveau solde
       const currentAmount = parseFloat(currentCard.amount || '0');
@@ -67,8 +85,11 @@ const PaymentSuccess: React.FC = () => {
       const updateSuccess = await updateTableCardAmount(id, newAmount);
       
       if (!updateSuccess) {
+        console.error(`Failed to update card amount in Supabase: ${id}`);
         throw new Error("Échec de la mise à jour du solde");
       }
+      
+      console.log(`Card balance updated successfully: ${newAmount}€`);
       
       // Récupérer les données mises à jour
       fetchCardData(id);
@@ -103,6 +124,16 @@ const PaymentSuccess: React.FC = () => {
       
       console.log('Données de carte récupérées:', cardData);
       setCard(cardData);
+
+      // If we didn't find a card with the expected amount and we have retries left,
+      // schedule another fetch after a delay (webhook might still be processing)
+      if (amount && cardData.amount && 
+          parseFloat(cardData.amount) < parseFloat(amount) && 
+          retryCount < MAX_RETRIES) {
+        console.log(`Card amount (${cardData.amount}) doesn't include payment (${amount}). Scheduling retry...`);
+        setRetryCount(prev => prev + 1);
+        setTimeout(() => fetchCardData(id), 3000); // Retry after 3 seconds
+      }
     } catch (error) {
       console.error('Erreur lors de la récupération des détails de la carte:', error);
     } finally {
@@ -118,6 +149,17 @@ const PaymentSuccess: React.FC = () => {
         description: "Récupération des données de la carte...",
       });
       fetchCardData(cardId);
+    }
+  };
+
+  // Add manual update functionality
+  const handleManualUpdate = () => {
+    if (cardId && amount) {
+      toast({
+        title: "Mise à jour manuelle",
+        description: "Tentative de mise à jour du solde..."
+      });
+      updateCardBalance(cardId, amount);
     }
   };
 
@@ -161,6 +203,19 @@ const PaymentSuccess: React.FC = () => {
               Traitez cette carte comme du cash.<br />
               En cas de perte, vous ne serez pas remboursé.
             </p>
+            
+            {!updatingBalance && !loading && retryCount >= MAX_RETRIES && (
+              <div className="bg-amber-600/20 p-3 rounded-lg mt-2">
+                <p className="text-sm">Si votre solde n'a pas été mis à jour, vous pouvez:</p>
+                <Button
+                  variant="outline"
+                  className="bg-transparent text-white border-white hover:bg-white/10 w-full mt-2"
+                  onClick={handleManualUpdate}
+                >
+                  Réessayer la mise à jour
+                </Button>
+              </div>
+            )}
           </div>
           <Button
             className="bg-white text-amber-800 hover:bg-amber-50 w-full"
