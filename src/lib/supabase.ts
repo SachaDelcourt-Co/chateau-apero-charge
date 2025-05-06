@@ -1,16 +1,9 @@
+
 import { createClient } from '@supabase/supabase-js';
+import { supabase as integrationSupabase } from "@/integrations/supabase/client";
 
-// We use the values from the Supabase integration
-const supabaseUrl = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+// We use the client from the integrations directory, which is already configured
+export const supabase = integrationSupabase;
 
 // COMPATIBILITY LAYER - setup RPC endpoints for easier API access
 // This ensures our application can be accessed both via REST API and from our app
@@ -29,9 +22,11 @@ export async function setupApiCompatibility() {
 // Call this when the app starts
 setupApiCompatibility().catch(console.error);
 
+
+// Export interfaces and types
 export interface TableCard {
   id: string;
-  amount: string;
+  amount: string; // Keep as string to match the DB schema
   description?: string | null;
 }
 
@@ -63,7 +58,7 @@ export async function getCardById(cardNumber: string): Promise<Card | null> {
       // Convert from table_cards format to Card format
       return {
         card_number: data.id,
-        amount: data.amount?.toString(),
+        amount: data.amount?.toString(), // Ensure string type
       };
     }
 
@@ -132,6 +127,7 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
 
     console.log('Réponse de Supabase (table_cards):', data);
     
+
     // If no data was found, create the card
     if (!data && id.startsWith('simulated-card-') || id.startsWith('nfc-test-')) {
       console.log('Creating test card for ID:', id);
@@ -154,6 +150,17 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
     }
     
     return data;
+
+    // Ensure the amount is a string
+    if (data) {
+      return {
+        ...data,
+        amount: data.amount?.toString() || "0" // Convert to string
+      };
+    }
+    
+    return null;
+
   } catch (error) {
     console.error('Exception lors de la récupération de la carte (table_cards):', error);
     return null;
@@ -260,12 +267,46 @@ export async function getBarProducts(): Promise<BarProduct[]> {
         console.error('Exception in backup products fetch:', backupError);
         return [];
       }
-    }
+      
+// Cache des produits pour optimiser les performances
+let barProductsCache: BarProduct[] = [];
+let lastFetchTime: number = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
 
-    return data || [];
-  } catch (error) {
-    console.error('Exception lors de la récupération des produits:', error);
-    return [];
+export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
+  const now = Date.now();
+  
+  // Si on force le rafraîchissement ou si le cache est expiré, on récupère les données
+  if (forceRefresh || barProductsCache.length === 0 || (now - lastFetchTime) > CACHE_TTL) {
+    try {
+      console.log(`Récupération des produits depuis Supabase (${forceRefresh ? 'forcé' : 'cache expiré'})`);
+      
+      const { data, error } = await supabase
+        .from('bar_products')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching bar products:', error);
+        // En cas d'erreur, retourner le cache actuel s'il existe
+        return barProductsCache.length > 0 ? barProductsCache : [];
+      }
+
+      // Mettre à jour le cache et l'horodatage
+      barProductsCache = data || [];
+      lastFetchTime = now;
+      
+      console.log(`${barProductsCache.length} produits récupérés et mis en cache`);
+      return barProductsCache;
+    } catch (error) {
+      console.error('Exception lors de la récupération des produits:', error);
+      // En cas d'erreur, retourner le cache actuel s'il existe
+      return barProductsCache.length > 0 ? barProductsCache : [];
+    }
+  } else {
+    console.log(`Utilisation des ${barProductsCache.length} produits en cache`);
+    return barProductsCache;
   }
 }
 
@@ -297,6 +338,8 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
         total_amount: order.total_amount,
         status: 'completed',
         created_by: order.created_by || 'app'
+        point_of_sale: 1 // Ensure this is a number to match DB schema
+
       })
       .select()
       .single();
@@ -353,7 +396,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
     }
 
     // 4. Update the card amount
-    const newAmount = (currentAmount - order.total_amount).toString();
+    const newAmount = (currentAmount - order.total_amount).toFixed(2);
     console.log("Updating card amount from:", currentAmount, "to:", newAmount);
     
     const { error: updateError } = await supabase
@@ -365,6 +408,9 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
       console.error('Error updating card amount:', updateError);
       return { success: false };
     }
+
+    // Supprimer le cache des produits pour forcer un rafraîchissement lors de la prochaine requête
+    barProductsCache = [];
 
     return { success: true, orderId: orderData.id };
   } catch (error) {

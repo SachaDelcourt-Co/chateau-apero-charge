@@ -1,9 +1,8 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY_FINAL') || '', {
   apiVersion: '2022-11-15',
 });
 const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
@@ -38,15 +37,36 @@ serve(async (req) => {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       
+      console.log('Processing Stripe webhook: checkout.session.completed');
+      console.log('Session data:', JSON.stringify(session, null, 2));
+      
       // Extract metadata
       const cardId = session.metadata?.cardId;
       const amount = session.metadata?.amount;
+      const sessionId = session.id;
       
       if (!cardId || !amount) {
+        console.error('Missing metadata in Stripe session:', session.metadata);
         return new Response('Missing cardId or amount in metadata', { status: 400 });
       }
 
       console.log(`Processing payment for card ${cardId} with amount ${amount}`);
+
+      // Check if this transaction has already been processed
+      const { data: existingPayment, error: existingError } = await supabaseClient
+        .from('paiements')
+        .select('id')
+        .eq('stripe_session_id', sessionId)
+        .maybeSingle();
+
+      if (existingPayment) {
+        console.log(`Transaction ${sessionId} has already been processed. Skipping.`);
+        return new Response(JSON.stringify({ 
+          received: true,
+          cardId: cardId,
+          status: 'already_processed'
+        }), { status: 200 });
+      }
 
       // Get the current card details
       const { data: cardData, error: cardError } = await supabaseClient

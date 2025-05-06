@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
@@ -28,8 +29,8 @@ serve(async (req) => {
 
     console.log(`Creating checkout session for card ${cardId} with amount ${amount}`);
 
-    // Initialize Stripe
-    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
+    // Initialize Stripe with the final secret key
+    const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY_FINAL') || '', {
       apiVersion: '2022-11-15',
     });
 
