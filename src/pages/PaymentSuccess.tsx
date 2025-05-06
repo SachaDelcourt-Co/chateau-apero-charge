@@ -32,6 +32,9 @@ const PaymentSuccess: React.FC = () => {
     // Stripe might use 'session_id', 'sessionId', or other variants
     const sessionIdParam = params.get('session_id') || params.get('sessionId') || params.get('CHECKOUT_SESSION_ID');
     
+    // Clean up old localStorage entries
+    cleanupLocalStorage();
+    
     if (amountParam) {
       setAmount(amountParam);
     }
@@ -46,9 +49,32 @@ const PaymentSuccess: React.FC = () => {
 
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
-      // Si nous avons un ID de session, cela signifie que le paiement a été complété
-      if (cardIdParam && amountParam) {
-        updateCardBalance(cardIdParam, amountParam);
+      
+      // Check if this session has already been processed
+      const processedTransactions = JSON.parse(localStorage.getItem('processedTransactions') || '[]');
+      const isAlreadyProcessed = processedTransactions.includes(sessionIdParam);
+      
+      if (isAlreadyProcessed) {
+        console.log(`Transaction ${sessionIdParam} already processed. Skipping balance update.`);
+        toast({
+          title: "Information",
+          description: "Cette transaction a déjà été traitée. Pas de rechargement supplémentaire."
+        });
+        
+        // Still fetch the current card data to display the balance
+        if (cardIdParam) {
+          fetchCardData(cardIdParam);
+        }
+      } else {
+        // Si nous avons un ID de session, cela signifie que le paiement a été complété
+        if (cardIdParam && amountParam) {
+          // Mark this session as processed before updating the balance
+          localStorage.setItem(
+            'processedTransactions', 
+            JSON.stringify([...processedTransactions, sessionIdParam])
+          );
+          updateCardBalance(cardIdParam, amountParam);
+        }
       }
     } else {
       // If no session ID was found but we have card ID and amount,
@@ -62,7 +88,25 @@ const PaymentSuccess: React.FC = () => {
   // Fonction pour mettre à jour directement le solde de la carte
   const updateCardBalance = async (id: string, rechargeAmount: string) => {
     console.log(`Attempting to update card balance: Card ID=${id}, Amount=${rechargeAmount}`);
+    
+    // Generate a unique transaction key for this update
+    const transactionKey = `card_${id}_amount_${rechargeAmount}_time_${Date.now()}`;
+    
+    // Check if we're in an update operation already - prevent concurrent updates
+    const ongoingUpdate = localStorage.getItem('ongoingCardUpdate');
+    if (ongoingUpdate) {
+      console.log('Another update is already in progress. Aborting.');
+      toast({
+        title: "Mise à jour en cours",
+        description: "Une mise à jour est déjà en cours. Veuillez patienter."
+      });
+      return;
+    }
+    
+    // Set the flag that we're updating
+    localStorage.setItem('ongoingCardUpdate', transactionKey);
     setUpdatingBalance(true);
+    
     try {
       // Récupérer d'abord le solde actuel
       const currentCard = await getTableCardById(id);
@@ -91,6 +135,16 @@ const PaymentSuccess: React.FC = () => {
       
       console.log(`Card balance updated successfully: ${newAmount}€`);
       
+      // Record this transaction in local storage to prevent duplicate updates
+      const completedUpdates = JSON.parse(localStorage.getItem('completedCardUpdates') || '[]');
+      completedUpdates.push({
+        cardId: id,
+        amount: rechargeAmount,
+        timestamp: Date.now(),
+        transactionKey
+      });
+      localStorage.setItem('completedCardUpdates', JSON.stringify(completedUpdates));
+      
       // Récupérer les données mises à jour
       fetchCardData(id);
 
@@ -107,6 +161,8 @@ const PaymentSuccess: React.FC = () => {
       });
     } finally {
       setUpdatingBalance(false);
+      // Clear the ongoing update flag
+      localStorage.removeItem('ongoingCardUpdate');
     }
   };
 
@@ -154,12 +210,106 @@ const PaymentSuccess: React.FC = () => {
 
   // Add manual update functionality
   const handleManualUpdate = () => {
-    if (cardId && amount) {
+    if (cardId && amount && sessionId) {
+      // Check if this session has already been manually updated
+      const manuallyUpdatedSessions = JSON.parse(localStorage.getItem('manuallyUpdatedSessions') || '[]');
+      
+      if (manuallyUpdatedSessions.includes(sessionId)) {
+        toast({
+          title: "Action impossible",
+          description: "Cette transaction a déjà été mise à jour manuellement.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       toast({
         title: "Mise à jour manuelle",
         description: "Tentative de mise à jour du solde..."
       });
+      
+      // Add to manually updated sessions
+      localStorage.setItem(
+        'manuallyUpdatedSessions',
+        JSON.stringify([...manuallyUpdatedSessions, sessionId])
+      );
+      
       updateCardBalance(cardId, amount);
+    } else if (cardId && amount) {
+      // No session ID, but we have cardId and amount
+      // Generate a unique ID for this manual update to prevent duplicates
+      const manualUpdateId = `manual_${Date.now()}_${cardId}_${amount}`;
+      const manualUpdates = JSON.parse(localStorage.getItem('manualUpdates') || '[]');
+      
+      if (manualUpdates.some(update => update.cardId === cardId && update.amount === amount)) {
+        toast({
+          title: "Action impossible",
+          description: "Un rechargement manuel a déjà été effectué pour ce montant.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      toast({
+        title: "Mise à jour manuelle",
+        description: "Tentative de mise à jour du solde..."
+      });
+      
+      // Add to manual updates
+      localStorage.setItem(
+        'manualUpdates',
+        JSON.stringify([...manualUpdates, { id: manualUpdateId, cardId, amount }])
+      );
+      
+      updateCardBalance(cardId, amount);
+    }
+  };
+
+  // Function to clean up old localStorage entries to prevent them from growing too large
+  const cleanupLocalStorage = () => {
+    try {
+      // Get the current timestamp
+      const now = Date.now();
+      const ONE_WEEK = 7 * 24 * 60 * 60 * 1000; // One week in milliseconds
+      
+      // Clean up processed transactions - keep only those from the last week
+      const processedTransactions = JSON.parse(localStorage.getItem('processedTransactions') || '[]');
+      const timestampedTransactions = JSON.parse(localStorage.getItem('completedCardUpdates') || '[]');
+      
+      // Filter out transactions older than one week
+      const recentTransactions = timestampedTransactions.filter(tx => 
+        (now - tx.timestamp) < ONE_WEEK
+      );
+      
+      // Limit the number of processedTransactions to the last 50
+      const limitedProcessedTransactions = processedTransactions.slice(-50);
+      
+      // Save back to localStorage
+      localStorage.setItem('completedCardUpdates', JSON.stringify(recentTransactions));
+      localStorage.setItem('processedTransactions', JSON.stringify(limitedProcessedTransactions));
+      
+      // Clean up manual updates too
+      const manualUpdates = JSON.parse(localStorage.getItem('manualUpdates') || '[]');
+      if (manualUpdates.length > 50) {
+        localStorage.setItem('manualUpdates', JSON.stringify(manualUpdates.slice(-50)));
+      }
+      
+      // Clean up manually updated sessions
+      const manuallyUpdatedSessions = JSON.parse(localStorage.getItem('manuallyUpdatedSessions') || '[]');
+      if (manuallyUpdatedSessions.length > 50) {
+        localStorage.setItem('manuallyUpdatedSessions', JSON.stringify(manuallyUpdatedSessions.slice(-50)));
+      }
+      
+      // Always clear any stale ongoing update flags
+      if (localStorage.getItem('ongoingCardUpdate')) {
+        // If the flag is older than 5 minutes, clear it (in case of interrupted updates)
+        const ongoingUpdateTime = parseInt(localStorage.getItem('ongoingCardUpdate')?.split('_time_')[1] || '0');
+        if ((now - ongoingUpdateTime) > 5 * 60 * 1000) {
+          localStorage.removeItem('ongoingCardUpdate');
+        }
+      }
+    } catch (error) {
+      console.error('Error cleaning up localStorage:', error);
     }
   };
 
