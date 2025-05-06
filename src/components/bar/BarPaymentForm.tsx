@@ -1,129 +1,282 @@
-
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "@/hooks/use-toast";
-import { getCardBalance } from '@/lib/supabase';
-import { CreditCardIcon } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { BarOrder, createBarOrder, getTableCardById } from '@/lib/supabase';
+import { toast } from '@/hooks/use-toast';
+import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro, Scan } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useNfc } from '@/hooks/use-nfc';
 
 interface BarPaymentFormProps {
-  onSubmit: (cardId: string) => void;
-  onCancel: () => void;
-  total: number;
-  nfcCardId: string | null;
+  order: BarOrder;
+  onBack: () => void;
+  onComplete: () => void;
 }
 
 export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
-  onSubmit,
-  onCancel,
-  total,
-  nfcCardId
+  order,
+  onBack,
+  onComplete
 }) => {
   const [cardId, setCardId] = useState('');
-  const [cardBalance, setCardBalance] = useState<number | null>(null);
-  const [checkingCard, setCheckingCard] = useState(false);
-  const [isNfcActive, setIsNfcActive] = useState(false);
-
-  // Effect to check card balance when card ID is entered manually or via NFC
-  useEffect(() => {
-    if (nfcCardId) {
-      setCardId(nfcCardId);
-      setIsNfcActive(true);
-    } else {
-      setIsNfcActive(false);
-    }
-  }, [nfcCardId]);
-
-  // Manual card ID check
-  const checkCardBalance = async () => {
-    if (!cardId) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez entrer un numéro de carte",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    try {
-      setCheckingCard(true);
-      // Convert ID to string to fix type issue
-      const cardData = await getCardBalance(String(cardId)); 
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [cardBalance, setCardBalance] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  
+  // Get the current total amount (direct from order props to ensure it's always current)
+  const getCurrentTotal = (): number => {
+    return order.total_amount;
+  };
+  
+  // Initialize NFC hook with a validation function and scan handler
+  const { isScanning, startScan, stopScan, isSupported } = useNfc({
+    // Validate that ID is 8 characters long
+    validateId: (id) => id.length === 8,
+    // Handle scanned ID with a forced refresh before payment
+    onScan: (id) => {
+      console.log("[NFC Scan] Card scanned with ID:", id);
+      // Set card ID immediately for UI feedback
+      setCardId(id);
       
-      if (cardData) {
-        // Here we use cardData.balance which is set from cardData.amount in the getCardBalance function
-        setCardBalance(cardData.balance);
-      } else {
-        setCardBalance(null);
-        toast({
-          title: "Erreur",
-          description: "Carte non trouvée",
-          variant: "destructive"
-        });
-      }
-    } catch (error: any) {
-      console.error("Error checking card balance:", error);
-      setCardBalance(null);
-      toast({
-        title: "Erreur",
-        description: error.message || "Erreur lors de la vérification du solde",
-        variant: "destructive"
-      });
-    } finally {
-      setCheckingCard(false);
-    }
-  };
+      // Force a refresh of the total amount
+      const refreshedTotal = getCurrentTotal();
+      console.log("[NFC Scan] Force refreshed total:", refreshedTotal);
+      
+      // Short delay to ensure all state updates are processed
+      setTimeout(() => {
+        // Get the latest total again after refresh
+        const finalTotal = getCurrentTotal();
+        console.log("[NFC Scan] Final total amount for payment:", finalTotal);
+        
+        // Process payment with the final current total
+        handlePaymentWithId(id);
+      }, 100);
+    },
+    // Provide a callback to get the latest total at scan time
+    getTotalAmount: getCurrentTotal
+  });
 
-  // Handle form submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Convert cardId to string to fix type error
-    onSubmit(String(cardId));
-  };
+  // Log the total amount when the component mounts to aid debugging
+  useEffect(() => {
+    console.log("BarPaymentForm initialized with total amount:", getCurrentTotal());
+  }, []);
 
-  // Update cardId state with proper type handling
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCardId(e.target.value);
+    setErrorMessage(null); // Clear any previous errors
   };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Input
-          type="text"
-          placeholder="Numéro de carte"
-          value={cardId}
-          onChange={handleCardIdChange}
-          disabled={checkingCard || isNfcActive}
-        />
-      </div>
-      
-      <div className="flex items-center space-x-2">
-        <Button 
-          type="button" 
-          variant="secondary" 
-          onClick={checkCardBalance} 
-          disabled={checkingCard || isNfcActive}
-        >
-          <CreditCardIcon className="h-4 w-4 mr-2" />
-          Vérifier le solde
-        </Button>
-        {cardBalance !== null && (
-          <div className="text-sm text-gray-500">
-            Solde: {cardBalance.toFixed(2)}€
-          </div>
-        )}
-      </div>
+  const handlePaymentWithId = async (id: string) => {
+    // Create a synthetic form event
+    const syntheticEvent = {
+      preventDefault: () => {}
+    } as React.FormEvent;
+    
+    // Call the submit handler with the ID already set
+    await handleSubmit(syntheticEvent);
+  };
 
-      <div className="flex justify-between">
-        <Button variant="ghost" onClick={onCancel}>
-          Annuler
-        </Button>
-        <Button type="submit" disabled={checkingCard || !cardId}>
-          Payer {total.toFixed(2)}€
-        </Button>
-      </div>
-    </form>
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsProcessing(true);
+    setErrorMessage(null);
+    
+    // Do one final refresh to get the most current total
+    const currentTotal = getCurrentTotal();
+    console.log("Processing payment with total:", currentTotal);
+
+    try {
+      // Check if card exists and has sufficient balance
+      const card = await getTableCardById(cardId.trim());
+      
+      if (!card) {
+        setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        setIsProcessing(false);
+        return;
+      }
+
+      const cardAmountFloat = parseFloat(card.amount || '0');
+      
+      // Use the current total to compare with card balance
+      if (cardAmountFloat < currentTotal) {
+        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
+        setIsProcessing(false);
+        return;
+      }
+
+      setCardBalance(card.amount);
+
+      // Process the order with the current total amount - get it one more time for absolute certainty
+      const finalTotal = getCurrentTotal();
+      const orderData: BarOrder = {
+        ...order,
+        card_id: cardId.trim(),
+        total_amount: finalTotal, // Use the final total amount
+        items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
+      };
+
+      console.log("Sending order with total:", orderData.total_amount);
+
+      const orderResult = await createBarOrder(orderData);
+
+      if (orderResult.success) {
+        setPaymentSuccess(true);
+        toast({
+          title: "Paiement réussi",
+          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - currentTotal).toFixed(2)}€`
+        });
+      } else {
+        setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  if (paymentSuccess) {
+    const newBalance = parseFloat(cardBalance || '0') - getCurrentTotal();
+    
+    return (
+      <Card className="bg-white/90 shadow-lg">
+        <CardContent className={`${isMobile ? 'p-4' : 'p-8'} flex flex-col items-center`}>
+          <CheckCircle className={`${isMobile ? 'h-12 w-12 mb-3' : 'h-16 w-16 mb-4'} text-green-500`} />
+          <h3 className={`${isMobile ? 'text-xl' : 'text-2xl'} font-semibold mb-2 text-center`}>Paiement réussi!</h3>
+          <p className="text-gray-600 mb-4 sm:mb-6 text-center">
+            La commande a été traitée avec succès.
+          </p>
+          
+          <div className="bg-gray-100 p-3 sm:p-4 rounded-lg w-full max-w-md mb-4 sm:mb-6">
+            <div className="grid grid-cols-2 gap-2 sm:gap-4 text-sm sm:text-base">
+              <div className="text-gray-600">ID de carte:</div>
+              <div className="font-medium">{cardId}</div>
+              
+              <div className="text-gray-600">Ancien solde:</div>
+              <div className="font-medium">{parseFloat(cardBalance || '0').toFixed(2)}€</div>
+              
+              <div className="text-gray-600">Montant payé:</div>
+              <div className="font-medium">{getCurrentTotal().toFixed(2)}€</div>
+              
+              <div className="text-gray-600">Nouveau solde:</div>
+              <div className="font-medium">{newBalance.toFixed(2)}€</div>
+            </div>
+          </div>
+          
+          <Button onClick={onComplete} size={isMobile ? "default" : "lg"}>
+            Nouvelle commande
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-white/90 shadow-lg">
+      <CardContent className={`${isMobile ? 'p-3 sm:p-4' : 'p-6'}`}>
+        <div className="flex items-center mb-4 sm:mb-6">
+          <Button variant="ghost" onClick={onBack} className="mr-2 p-1.5 sm:p-2">
+            <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
+          <h3 className="text-lg sm:text-xl font-semibold">Paiement</h3>
+        </div>
+        
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-8">
+          <div>
+            <h4 className="text-base sm:text-lg font-medium mb-2 sm:mb-3">Récapitulatif</h4>
+            <div className="bg-gray-100 p-3 sm:p-4 rounded-lg mb-4">
+              <div className="space-y-2 text-sm sm:text-base">
+                {order.items.map((item, index) => (
+                  <div key={index} className="flex justify-between">
+                    <span className="truncate pr-2">
+                      {item.product_name} {item.quantity > 1 ? `(x${item.quantity})` : ''}
+                    </span>
+                    <span className={`${item.is_return ? 'text-green-600 font-medium' : ''} whitespace-nowrap`}>
+                      {item.is_return 
+                        ? `-${(item.price * item.quantity).toFixed(2)}€`
+                        : `${(item.price * item.quantity).toFixed(2)}€`}
+                    </span>
+                  </div>
+                ))}
+                <div className="border-t pt-2 mt-2 flex justify-between font-bold">
+                  <span>Total</span>
+                  <span className="flex items-center">
+                    <Euro className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                    {getCurrentTotal().toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div>
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-3 sm:space-y-4">
+                <div>
+                  <Label htmlFor="card-id">ID de la carte</Label>
+                  <div className="relative mt-1">
+                    <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Input 
+                      id="card-id"
+                      value={cardId}
+                      onChange={handleCardIdChange}
+                      placeholder="Entrez l'ID de la carte"
+                      className="pl-10"
+                      disabled={isProcessing}
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <Button
+                  type="button"
+                  onClick={isScanning ? stopScan : startScan}
+                  variant={isScanning ? "destructive" : "outline"}
+                  disabled={isProcessing || !isSupported}
+                  className="w-full"
+                >
+                  <Scan className="h-4 w-4 mr-2" />
+                  {isScanning ? "Arrêter le scan NFC" : "Activer le scan NFC pour payer"}
+                </Button>
+                
+                {isScanning && (
+                  <div className="bg-blue-100 text-blue-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base mt-2">
+                    <span>Scanner votre carte NFC maintenant pour payer {getCurrentTotal().toFixed(2)}€</span>
+                  </div>
+                )}
+                
+                {errorMessage && (
+                  <div className="bg-red-100 text-red-800 p-2 sm:p-3 rounded-md flex items-start text-sm sm:text-base">
+                    <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+                
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  size={isMobile ? "default" : "lg"}
+                  disabled={isProcessing || !cardId.trim()}
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+                      Traitement...
+                    </>
+                  ) : (
+                    "Payer maintenant"
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };

@@ -52,7 +52,6 @@ export type Database = {
           card_id: string | null
           created_at: string | null
           id: string
-          point_of_sale: number | null
           status: string | null
           total_amount: number
         }
@@ -60,7 +59,6 @@ export type Database = {
           card_id?: string | null
           created_at?: string | null
           id?: string
-          point_of_sale?: number | null
           status?: string | null
           total_amount: number
         }
@@ -68,7 +66,6 @@ export type Database = {
           card_id?: string | null
           created_at?: string | null
           id?: string
-          point_of_sale?: number | null
           status?: string | null
           total_amount?: number
         }
@@ -108,44 +105,6 @@ export type Database = {
           price?: number
         }
         Relationships: []
-      }
-      card_transactions: {
-        Row: {
-          amount: number
-          card_id: string
-          created_at: string | null
-          id: string
-          payment_method: string | null
-          point_of_sale: number | null
-          transaction_type: string
-        }
-        Insert: {
-          amount: number
-          card_id: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type: string
-        }
-        Update: {
-          amount?: number
-          card_id?: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "card_transactions_card_id_fkey"
-            columns: ["card_id"]
-            isOneToOne: false
-            referencedRelation: "table_cards"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       paiements: {
         Row: {
@@ -227,25 +186,16 @@ export type Database = {
           amount: number | null
           description: string | null
           id: string
-          last_payment_method: string | null
-          last_recharge_date: string | null
-          recharge_count: number | null
         }
         Insert: {
           amount?: number | null
           description?: string | null
           id: string
-          last_payment_method?: string | null
-          last_recharge_date?: string | null
-          recharge_count?: number | null
         }
         Update: {
           amount?: number | null
           description?: string | null
           id?: string
-          last_payment_method?: string | null
-          last_recharge_date?: string | null
-          recharge_count?: number | null
         }
         Relationships: []
       }

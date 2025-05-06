@@ -21,7 +21,7 @@ const ProtectedRoute = ({ children, requiredRoles }: ProtectedRouteProps) => {
   }, [isLoggedIn, isLoading, navigate]);
 
   if (isLoading) {
-    // Loading screen while authentication is being verified
+    // Afficher un écran de chargement pendant que l'authentification est vérifiée
     return (
       <div className="min-h-screen flex items-center justify-center bg-chateau-gradient">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
@@ -30,17 +30,17 @@ const ProtectedRoute = ({ children, requiredRoles }: ProtectedRouteProps) => {
   }
 
   if (!user) {
-    // Redirect to login page if user is not logged in
+    // Rediriger vers la page de connexion si l'utilisateur n'est pas connecté
     return <Navigate to="/login" replace />;
   }
 
   if (!hasAccess(requiredRoles)) {
     console.log(`Accès refusé: utilisateur avec rôle ${role} essaie d'accéder à une page nécessitant les rôles:`, requiredRoles);
-    // Redirect to error page if user doesn't have required role
+    // Rediriger vers une page d'erreur si l'utilisateur n'a pas le rôle requis
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // User is authenticated and has required role, show content
+  // Si l'utilisateur est authentifié et a le rôle requis, afficher le contenu
   console.log(`Accès autorisé: utilisateur avec rôle ${role} accède à la page`);
   return <>{children}</>;
 };
