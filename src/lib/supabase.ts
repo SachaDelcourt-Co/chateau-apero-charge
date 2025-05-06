@@ -1,10 +1,5 @@
-
+import { supabase } from "@/integrations/supabase/client";
 import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Define table card types
 export interface TableCard {
@@ -455,22 +450,24 @@ const getFinancialStatistics = async (): Promise<FinancialStats> => {
     const transactionsByTime: Array<{timeInterval: string; count: number; amount: number}> = [];
     const timeIntervals = new Map<string, {count: number; amount: number}>();
     
-    timeData.forEach(transaction => {
-      if (!transaction.created_at) return;
-      
-      const date = new Date(transaction.created_at);
-      const hour = date.getHours();
-      const minutes = Math.floor(date.getMinutes() / 30) * 30;
-      const timeKey = `${hour}:${minutes === 0 ? '00' : minutes}`;
-      
-      if (!timeIntervals.has(timeKey)) {
-        timeIntervals.set(timeKey, { count: 0, amount: 0 });
-      }
-      
-      const interval = timeIntervals.get(timeKey)!;
-      interval.count += 1;
-      interval.amount += Number(transaction.amount);
-    });
+    if (timeData && Array.isArray(timeData)) {
+      timeData.forEach(transaction => {
+        if (!transaction.created_at) return;
+        
+        const date = new Date(transaction.created_at);
+        const hour = date.getHours();
+        const minutes = Math.floor(date.getMinutes() / 30) * 30;
+        const timeKey = `${hour}:${minutes === 0 ? '00' : minutes}`;
+        
+        if (!timeIntervals.has(timeKey)) {
+          timeIntervals.set(timeKey, { count: 0, amount: 0 });
+        }
+        
+        const interval = timeIntervals.get(timeKey)!;
+        interval.count += 1;
+        interval.amount += Number(transaction.amount);
+      });
+    }
     
     // Convert to array format
     for (const [timeInterval, data] of timeIntervals.entries()) {
@@ -650,21 +647,23 @@ const getTemporalStatistics = async (): Promise<TemporalStats> => {
     }
     
     // Count transactions by hour
-    transactionsData.forEach(transaction => {
-      if (!transaction.created_at) return;
-      
-      const date = new Date(transaction.created_at);
-      const hour = date.getHours();
-      const hourData = hourCounts.get(hour)!;
-      
-      if (transaction.transaction_type === 'recharge') {
-        hourData.recharges++;
-      } else {
-        hourData.purchases++;
-      }
-      
-      hourCounts.set(hour, hourData);
-    });
+    if (transactionsData && Array.isArray(transactionsData)) {
+      transactionsData.forEach(transaction => {
+        if (!transaction.created_at) return;
+        
+        const date = new Date(transaction.created_at);
+        const hour = date.getHours();
+        const hourData = hourCounts.get(hour)!;
+        
+        if (transaction.transaction_type === 'recharge') {
+          hourData.recharges++;
+        } else {
+          hourData.purchases++;
+        }
+        
+        hourCounts.set(hour, hourData);
+      });
+    }
     
     const rushHours = Array.from(hourCounts.entries())
       .map(([hour, data]) => ({
