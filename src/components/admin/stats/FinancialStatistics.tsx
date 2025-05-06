@@ -45,7 +45,7 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({ data, loading
             {loading ? (
               <Skeleton className="h-8 w-24" />
             ) : (
-              <div className="text-2xl font-bold">{(data?.totalRecharges.total || 0).toFixed(2)}€</div>
+              <div className="text-2xl font-bold">{(data?.totalRecharges?.total || 0).toFixed(2)}€</div>
             )}
           </CardContent>
         </Card>
@@ -77,7 +77,7 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({ data, loading
             {loading ? (
               <Skeleton className="h-8 w-24" />
             ) : (
-              <div className="text-2xl font-bold">{(data?.totalRemainingBalance || 0).toFixed(2)}€</div>
+              <div className="text-2xl font-bold">{(data?.remainingBalance || 0).toFixed(2)}€</div>
             )}
           </CardContent>
         </Card>
@@ -106,15 +106,15 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({ data, loading
               <TableBody>
                 <TableRow>
                   <TableCell className="font-medium">Espèces</TableCell>
-                  <TableCell className="text-right">{(data?.totalRecharges.cash || 0).toFixed(2)}€</TableCell>
+                  <TableCell className="text-right">{(data?.totalRecharges?.cash || 0).toFixed(2)}€</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">SumUp</TableCell>
-                  <TableCell className="text-right">{(data?.totalRecharges.sumup || 0).toFixed(2)}€</TableCell>
+                  <TableCell className="text-right">{(data?.totalRecharges?.sumup || 0).toFixed(2)}€</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="font-medium">Stripe (Bancontact)</TableCell>
-                  <TableCell className="text-right">{(data?.totalRecharges.stripe || 0).toFixed(2)}€</TableCell>
+                  <TableCell className="text-right">{(data?.totalRecharges?.stripe || 0).toFixed(2)}€</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

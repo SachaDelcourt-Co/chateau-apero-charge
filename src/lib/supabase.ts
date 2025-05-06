@@ -5,6 +5,37 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Define table card types
+export interface TableCard {
+  id: string;
+  amount: number;
+  description?: string;
+  blocked?: boolean;
+  balance?: number; // For backward compatibility
+  recharge_count?: number;
+  last_recharge_date?: string;
+  last_payment_method?: string;
+}
+
+// Define bar product types
+export interface BarProduct {
+  id: string;
+  name: string;
+  price: number;
+  category?: string;
+  is_deposit?: boolean;
+  is_return?: boolean;
+}
+
+// Define OrderItem type for BarOrderSummary
+export interface OrderItem {
+  product_name: string;
+  price: number;
+  quantity: number;
+  is_deposit?: boolean;
+  is_return?: boolean;
+}
+
 // Function to get card balance
 export const getCardBalance = async (cardId: string) => {
   try {
@@ -26,6 +57,27 @@ export const getCardBalance = async (cardId: string) => {
   }
 };
 
+// Function to get table card by ID
+export const getTableCardById = async (cardId: string): Promise<TableCard | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('table_cards')
+      .select('*')
+      .eq('id', cardId)
+      .single();
+
+    if (error) {
+      console.error("Error fetching card:", error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in getTableCardById:", error);
+    return null;
+  }
+};
+
 // Function to update card balance
 export const updateCardBalance = async (cardId: string, newBalance: number) => {
   try {
@@ -44,6 +96,26 @@ export const updateCardBalance = async (cardId: string, newBalance: number) => {
   } catch (error) {
     console.error("Error in updateCardBalance:", error);
     throw error;
+  }
+};
+
+// Function to update table card amount
+export const updateTableCardAmount = async (cardId: string, newAmount: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase
+      .from('table_cards')
+      .update({ amount: newAmount })
+      .eq('id', cardId);
+    
+    if (error) {
+      console.error("Error updating card amount:", error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error in updateTableCardAmount:", error);
+    return false;
   }
 };
 
@@ -178,12 +250,25 @@ export interface UserStats {
 
 export interface FinancialStats {
   totalSales: number;
-  totalRechargesByCash: number;
-  totalRechargesBySumup: number;
-  totalRechargesByStripe: number;
+  totalRecharges: {
+    cash: number;
+    sumup: number;
+    stripe: number;
+    total: number;
+  };
   averageSpendPerPerson: number;
   remainingBalance: number;
   salesByPOS: Record<string, number>;
+  transactionsByTime: Array<{
+    timeInterval: string;
+    count: number;
+    amount: number;
+  }>;
+  salesByPointOfSale: Array<{
+    pointOfSale: string;
+    count: number;
+    amount: number;
+  }>;
 }
 
 export interface ProductStats {
@@ -191,10 +276,19 @@ export interface ProductStats {
     name: string;
     quantity: number;
     revenue: number;
+    category?: string;
   }[];
   salesByHour: {
     hour: number;
     sales: Record<string, number>;
+  }[];
+  hourlyProductSales?: {
+    hour: number;
+    products: Array<{
+      name: string;
+      quantity: number;
+      revenue: number;
+    }>;
   }[];
 }
 
@@ -203,6 +297,8 @@ export interface TemporalStats {
     hour: number;
     recharges: number;
     purchases: number;
+    barTransactions?: number;
+    rechargeTransactions?: number;
   }[];
   avgTimeBetweenTransactions: number;
 }
@@ -349,9 +445,12 @@ const getFinancialStatistics = async (): Promise<FinancialStats> => {
     
     return {
       totalSales,
-      totalRechargesByCash,
-      totalRechargesBySumup,
-      totalRechargesByStripe,
+      totalRecharges: {
+        cash: totalRechargesByCash,
+        sumup: totalRechargesBySumup,
+        stripe: totalRechargesByStripe,
+        total: totalRechargesByCash + totalRechargesBySumup + totalRechargesByStripe
+      },
       averageSpendPerPerson,
       remainingBalance,
       salesByPOS
@@ -496,7 +595,10 @@ const getTemporalStatistics = async (): Promise<TemporalStats> => {
       .map(([hour, data]) => ({
         hour,
         recharges: data.recharges,
-        purchases: data.purchases
+        purchases: data.purchases,
+        // Add these for backward compatibility
+        barTransactions: data.purchases,
+        rechargeTransactions: data.recharges
       }))
       .sort((a, b) => (b.recharges + b.purchases) - (a.recharges + a.purchases));
     
@@ -510,13 +612,16 @@ const getTemporalStatistics = async (): Promise<TemporalStats> => {
     
     // Group transactions by card
     const cardTransactions = new Map<string, Date[]>();
-    cardData.forEach(transaction => {
-      const cardId = transaction.card_id;
-      if (!cardTransactions.has(cardId)) {
-        cardTransactions.set(cardId, []);
-      }
-      cardTransactions.get(cardId)!.push(new Date(transaction.created_at));
-    });
+    
+    if (cardData && Array.isArray(cardData)) {
+      cardData.forEach((transaction: any) => {
+        const cardId = transaction.card_id;
+        if (!cardTransactions.has(cardId)) {
+          cardTransactions.set(cardId, []);
+        }
+        cardTransactions.get(cardId)!.push(new Date(transaction.created_at));
+      });
+    }
     
     // Calculate average times
     let totalTimeDiff = 0;

@@ -6,19 +6,18 @@ import { OrderItem } from '@/lib/supabase';
 import { Trash2, MinusCircle, Euro, CreditCard } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { BarOrder } from './BarOrderSystem';
 
 interface BarOrderSummaryProps {
-  orderItems: OrderItem[];
-  total: number;
-  onRemoveItem: (index: number) => void;
-  onClearOrder: () => void;
-  onProceedToPayment: () => void;
+  order: BarOrder;
+  onRemoveProduct: (productId: string) => void;
+  onClearOrder?: () => void;
+  onProceedToPayment?: () => void;
 }
 
 export const BarOrderSummary: React.FC<BarOrderSummaryProps> = ({
-  orderItems,
-  total,
-  onRemoveItem,
+  order,
+  onRemoveProduct,
   onClearOrder,
   onProceedToPayment
 }) => {
@@ -31,7 +30,7 @@ export const BarOrderSummary: React.FC<BarOrderSummaryProps> = ({
         <div className="flex justify-between items-center mb-3 sm:mb-4">
           <h3 className="text-lg sm:text-xl font-semibold">Récapitulatif</h3>
           
-          {orderItems.length > 0 && (
+          {order.products.length > 0 && onClearOrder && (
             <Button 
               variant="outline" 
               size={isMobile ? "sm" : "default"} 
@@ -44,19 +43,19 @@ export const BarOrderSummary: React.FC<BarOrderSummaryProps> = ({
           )}
         </div>
         
-        {orderItems.length === 0 ? (
+        {order.products.length === 0 ? (
           <div className="text-center text-gray-500 py-6 sm:py-10">
             Votre commande est vide
           </div>
         ) : (
           <ScrollArea className={`h-[${scrollHeight}] pr-4`}>
             <ul className="space-y-2 sm:space-y-3">
-              {orderItems.map((item, index) => (
-                <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b pb-2">
+              {order.products.map((item, index) => (
+                <li key={`${item.name}-${index}`} className="flex justify-between items-center border-b pb-2">
                   <div>
                     <div className="flex items-center">
                       <span className={`font-medium ${item.is_return ? 'text-green-600' : ''}`}>
-                        {item.product_name}
+                        {item.name}
                       </span>
                       {item.quantity > 1 && (
                         <span className="ml-2 text-sm bg-gray-200 px-2 py-0.5 rounded-full">
@@ -79,7 +78,7 @@ export const BarOrderSummary: React.FC<BarOrderSummaryProps> = ({
                     variant="ghost" 
                     size="sm" 
                     className="text-gray-500 hover:text-red-600" 
-                    onClick={() => onRemoveItem(index)}
+                    onClick={() => onRemoveProduct(item.id)}
                   >
                     <MinusCircle className="h-4 w-4" />
                   </Button>
@@ -95,19 +94,21 @@ export const BarOrderSummary: React.FC<BarOrderSummaryProps> = ({
           <span className="text-base sm:text-lg font-semibold">Total:</span>
           <span className="text-lg sm:text-xl font-bold flex items-center">
             <Euro className="h-4 w-4 sm:h-5 sm:w-5 mr-1" />
-            {total.toFixed(2)}
+            {order.total.toFixed(2)}
           </span>
         </div>
         
-        <Button 
-          className="w-full" 
-          size={isMobile ? "default" : "lg"} 
-          disabled={orderItems.length === 0}
-          onClick={onProceedToPayment}
-        >
-          <CreditCard className="mr-2 h-5 w-5" />
-          Procéder au paiement
-        </Button>
+        {onProceedToPayment && (
+          <Button 
+            className="w-full" 
+            size={isMobile ? "default" : "lg"} 
+            disabled={order.products.length === 0}
+            onClick={onProceedToPayment}
+          >
+            <CreditCard className="mr-2 h-5 w-5" />
+            Procéder au paiement
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

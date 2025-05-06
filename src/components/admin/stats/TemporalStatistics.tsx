@@ -28,9 +28,9 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({ data, loading }
             <Skeleton className="h-8 w-24" />
           ) : (
             <div className="text-2xl font-bold">
-              {data && data.averageTimeBetweenTransactions > 60 
-                ? `${(data.averageTimeBetweenTransactions / 60).toFixed(1)} heures`
-                : `${Math.round(data?.averageTimeBetweenTransactions || 0)} minutes`}
+              {data && data.avgTimeBetweenTransactions > 60 
+                ? `${(data.avgTimeBetweenTransactions / 60).toFixed(1)} heures`
+                : `${Math.round(data?.avgTimeBetweenTransactions || 0)} minutes`}
             </div>
           )}
         </CardContent>

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { BarProductList } from './BarProductList';
@@ -5,7 +6,7 @@ import { BarOrderSummary } from './BarOrderSummary';
 import { BarPaymentForm } from './BarPaymentForm';
 import { ScanIcon, CreditCardIcon, ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getBarProducts, getCardBalance, registerPayment } from '@/lib/supabase';
+import { getBarProducts, getCardBalance, registerPayment, BarProduct } from '@/lib/supabase';
 import { useNfc } from '@/hooks/use-nfc';
 
 export interface BarOrder {
@@ -14,6 +15,8 @@ export interface BarOrder {
     name: string;
     price: number;
     quantity: number;
+    is_return?: boolean;
+    is_deposit?: boolean;
   }>;
   total: number;
 }
@@ -23,14 +26,14 @@ export interface BarOrderSystemProps {
 }
 
 export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) => {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<BarProduct[]>([]);
   const [currentOrder, setCurrentOrder] = useState<BarOrder>({ products: [], total: 0 });
   const [paymentSuccessful, setPaymentSuccessful] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'scan' | 'manual'>('scan');
   const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const { toast } = useToast();
-  const { isNfcSupported, isNfcEnabled, nfcCardId, startNfcScan, stopNfcScan } = useNfc();
+  const { isScanning, isSupported, lastScannedId, startScan, stopScan } = useNfc();
 
   useEffect(() => {
     loadProducts();
@@ -49,7 +52,7 @@ export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) =
     }
   };
 
-  const addProductToOrder = (product: any) => {
+  const addProductToOrder = (product: BarProduct) => {
     const existingProductIndex = currentOrder.products.findIndex(p => p.id === product.id);
 
     if (existingProductIndex > -1) {
@@ -63,7 +66,13 @@ export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) =
         total: updatedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0)
       });
     } else {
-      const updatedProducts = [...currentOrder.products, { ...product, quantity: 1 }];
+      const updatedProducts = [...currentOrder.products, { 
+        ...product, 
+        quantity: 1, 
+        is_return: product.is_return,
+        is_deposit: product.is_deposit
+      }];
+      
       setCurrentOrder({
         ...currentOrder,
         products: updatedProducts,
@@ -171,6 +180,8 @@ export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) =
         <BarOrderSummary
           order={currentOrder}
           onRemoveProduct={removeProductFromOrder}
+          onClearOrder={clearOrder}
+          onProceedToPayment={() => setShowPaymentForm(true)}
         />
 
         {/* Payment Options */}
@@ -204,21 +215,9 @@ export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) =
               onSubmit={processPayment}
               onCancel={cancelPayment}
               total={currentOrder.total}
-              nfcCardId={nfcCardId}
+              nfcCardId={lastScannedId}
             />
           </div>
-        )}
-
-        {/* Clear Order Button */}
-        {currentOrder.products.length > 0 && !showPaymentForm && (
-          <Button
-            variant="destructive"
-            className="w-full mt-4"
-            onClick={clearOrder}
-            disabled={isPaymentProcessing}
-          >
-            Annuler la commande
-          </Button>
         )}
       </div>
     </div>

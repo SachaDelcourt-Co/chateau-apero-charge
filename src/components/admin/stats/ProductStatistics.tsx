@@ -38,7 +38,7 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({ data, loading }) 
   
   // Prepare data for hourly chart
   const getHourlyChartData = () => {
-    if (!data?.hourlyProductSales) return [];
+    if (!data?.salesByHour) return [];
     
     // Get top 5 products overall
     const topProductNames = data.topProducts
@@ -46,13 +46,12 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({ data, loading }) 
       .map(product => product.name);
     
     // Prepare chart data
-    return data.hourlyProductSales.map(hourData => {
+    return data.salesByHour.map(hourData => {
       const result: any = { hour: hourData.hour };
       
       // Add data for each top product
       topProductNames.forEach(productName => {
-        const product = hourData.products.find(p => p.name === productName);
-        result[productName] = product ? product.quantity : 0;
+        result[productName] = hourData.sales[productName] || 0;
       });
       
       return result;
