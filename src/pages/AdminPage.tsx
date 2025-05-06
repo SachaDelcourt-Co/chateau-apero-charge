@@ -7,7 +7,7 @@ import ChateauLogo from '@/components/ChateauLogo';
 import CardTopup from '@/components/admin/CardTopup';
 import Dashboard from '@/components/admin/Dashboard';
 import UserManagement from '@/components/admin/UserManagement';
-import { LogOut } from 'lucide-react';
+import { LogOut, RefreshCw, Store } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -35,6 +35,11 @@ const AdminPage: React.FC = () => {
     }
   };
 
+  // Function to navigate to the bar page
+  const handleNavigateToBar = () => {
+    navigate('/bar');
+  };
+
   // Function to refresh the dashboard when a card is topped up
   const refreshDashboard = () => {
     setRefreshTrigger(prev => prev + 1);
@@ -53,10 +58,16 @@ const AdminPage: React.FC = () => {
               </div>
             )}
           </div>
-          <Button variant="destructive" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Déconnexion
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleNavigateToBar}>
+              <Store className="h-4 w-4 mr-2" />
+              Accéder au Bar
+            </Button>
+            <Button variant="destructive" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Déconnexion
+            </Button>
+          </div>
         </div>
         
         <div className="bg-white rounded-lg shadow-xl">

@@ -69,12 +69,12 @@ const BarPage: React.FC = () => {
     }
   };
   
-  // Fonction pour rafraîchir manuellement les produits
+  // Function to manually refresh products
   const handleRefreshProducts = async () => {
     try {
       setRefreshing(true);
       
-      // Forcer une nouvelle récupération des produits
+      // Force a new product fetch
       await getBarProducts(true);
       
       toast({

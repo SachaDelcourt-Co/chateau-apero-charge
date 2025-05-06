@@ -1,475 +1,225 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { BarProductList } from './BarProductList';
-import { Input } from '@/components/ui/input';
+import { BarOrderSummary } from './BarOrderSummary';
+import { BarPaymentForm } from './BarPaymentForm';
+import { ScanIcon, CreditCardIcon, ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
-import { toast } from '@/hooks/use-toast';
-import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { getBarProducts, getCardBalance, registerPayment } from '@/lib/supabase';
 import { useNfc } from '@/hooks/use-nfc';
 
-export const BarOrderSystem: React.FC = () => {
-  const [products, setProducts] = useState<BarProduct[]>([]);
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [cardId, setCardId] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const isMobile = useIsMobile();
-  // Store the latest calculated total to ensure consistency
-  const [currentTotal, setCurrentTotal] = useState<number>(0);
-  // Track if order was modified since last scan activation
-  const [orderModifiedAfterScan, setOrderModifiedAfterScan] = useState(false);
-  // Ref to track previous order items to avoid unnecessary scan stops
-  const previousOrderRef = useRef<string>('');
+export interface BarOrder {
+  products: Array<{
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  total: number;
+}
 
-  // Calculate the total order amount
-  const calculateTotal = (): number => {
-    const total = orderItems.reduce((total, item) => {
-      // Calculate per item considering quantity
-      const itemTotal = item.price * item.quantity;
-      // Subtract for returns (caution return), add for everything else
-      return total + (item.is_return ? -itemTotal : itemTotal);
-    }, 0);
-    
-    console.log("[Total Debug] calculateTotal called, result:", total);
-    return total;
-  };
+export interface BarOrderSystemProps {
+  pointOfSale: number;
+}
 
-  // Initialize NFC hook with a validation function and scan handler
-  const { isScanning, startScan, stopScan, isSupported } = useNfc({
-    // Validate that ID is 8 characters long
-    validateId: (id) => id.length === 8,
-    // Handle scanned ID with the EXACT current UI total
-    onScan: (id) => {
-      console.log("[NFC Scan] Card scanned with ID:", id);
-      // Set card ID immediately for UI feedback
-      setCardId(id);
-      
-      // Calculate total directly from order items to ensure it's correct
-      const calculatedTotal = orderItems.reduce((sum, item) => {
-        return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
-      }, 0);
-      
-      // Log both values for debugging
-      console.log("[NFC Scan] State total:", currentTotal);
-      console.log("[NFC Scan] Calculated total:", calculatedTotal);
-      
-      // Use the calculated total to be absolutely sure
-      const finalTotal = calculatedTotal;
-      console.log("[NFC Scan] *** FINAL AMOUNT TO PROCESS:", finalTotal, "€ ***");
-      
-      // Process payment with this amount
-      processPayment(id, finalTotal);
-    }
-  });
+export const BarOrderSystem: React.FC<BarOrderSystemProps> = ({ pointOfSale }) => {
+  const [products, setProducts] = useState([]);
+  const [currentOrder, setCurrentOrder] = useState<BarOrder>({ products: [], total: 0 });
+  const [paymentSuccessful, setPaymentSuccessful] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'scan' | 'manual'>('scan');
+  const [isPaymentProcessing, setIsPaymentProcessing] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const { toast } = useToast();
+  const { isNfcSupported, isNfcEnabled, nfcCardId, startNfcScan, stopNfcScan } = useNfc();
 
-  // Update currentTotal whenever orderItems change
   useEffect(() => {
-    // Calculate the new total and update state
-    const total = calculateTotal();
-    setCurrentTotal(total);
-    
-    // If scanning, update the NFC scanner when the order changes
-    if (isScanning) {
-      // Get current order string to compare
-      const currentOrderString = JSON.stringify(orderItems);
-      
-      // If we have a previous reference and it's different from current order
-      if (previousOrderRef.current && previousOrderRef.current !== currentOrderString) {
-        // Update the reference first
-        previousOrderRef.current = currentOrderString;
-        
-        // Restart the NFC scanner to capture the new total
-        console.log("Order changed, restarting NFC scanner with new total:", total);
-        
-        // First stop the scanner
-        stopScan();
-        
-        // Then restart after a short delay
-        setTimeout(() => {
-          startScan();
-        }, 500);
-      } 
-      // For first time setup, just save the reference
-      else if (!previousOrderRef.current) {
-        previousOrderRef.current = currentOrderString;
-      }
-    }
-  }, [orderItems, isScanning, stopScan, startScan]);
-
-  // Add an effect to track scanning state changes from the useNfc hook
-  useEffect(() => {
-    console.log("[BarOrderSystem] Scanning state changed:", isScanning);
-    
-    // If scanning stopped (and it wasn't due to order modification)
-    if (!isScanning && !orderModifiedAfterScan) {
-      // Check if we have a card ID, which means a card was scanned
-      if (cardId) {
-        console.log("[BarOrderSystem] Scanning stopped after card scan, cardId:", cardId);
-      }
-    }
-  }, [isScanning, orderModifiedAfterScan, cardId]);
-
-  // Load products on component mount
-  useEffect(() => {
-    const loadProducts = async () => {
-      setIsLoading(true);
-      const productData = await getBarProducts();
-      setProducts(productData);
-      setIsLoading(false);
-    };
-    
     loadProducts();
   }, []);
 
-  // Handle adding a product to the order
-  const handleAddProduct = (product: BarProduct) => {
-    setOrderItems(prevItems => {
-      // Check if the product already exists in the order
-      const existingItemIndex = prevItems.findIndex(
-        item => item.product_name === product.name
-      );
-      
-      if (existingItemIndex >= 0) {
-        // Product exists, increment quantity
-        const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex] = {
-          ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + 1
-        };
-        return updatedItems;
-      } else {
-        // Add new product to order
-        return [...prevItems, {
-          product_name: product.name,
-          price: product.price,
-          quantity: 1,
-          is_deposit: product.is_deposit,
-          is_return: product.is_return
-        }];
-      }
-    });
-  };
-
-  // Handle removing a product from the order
-  const handleRemoveItem = (itemIndex: number) => {
-    setOrderItems(prevItems => {
-      const item = prevItems[itemIndex];
-      if (item.quantity > 1) {
-        // Decrement quantity if more than 1
-        const updatedItems = [...prevItems];
-        updatedItems[itemIndex] = {
-          ...updatedItems[itemIndex],
-          quantity: updatedItems[itemIndex].quantity - 1
-        };
-        return updatedItems;
-      } else {
-        // Remove item if quantity is 1
-        return prevItems.filter((_, index) => index !== itemIndex);
-      }
-    });
-  };
-
-  const handleClearOrder = () => {
-    setOrderItems([]);
-    setCardId('');
-    setErrorMessage(null);
-    setCurrentTotal(0);
-  };
-
-  const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setCardId(value);
-    setErrorMessage(null);
-    
-    // Process payment automatically when 8 characters are entered
-    if (value.length === 8) {
-      // Use the current total from state which is always up to date with orderItems
-      processPayment(value, currentTotal);
-    }
-  };
-
-  const processPayment = async (id: string, total: number) => {
-    if (orderItems.length === 0) {
-      setErrorMessage("Commande vide. Veuillez ajouter des produits.");
-      return;
-    }
-
-    setIsProcessing(true);
-    setErrorMessage(null);
-    
-    // Double check total amount - if it's 0 but we have order items, something is wrong
-    if (total === 0 && orderItems.length > 0) {
-      console.error("ERROR: Total amount is 0 but order has items!", orderItems);
-      // Calculate directly as a fallback
-      total = orderItems.reduce((sum, item) => {
-        return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
-      }, 0);
-      console.log("Recalculated total as fallback:", total);
-    }
-    
-    // CRITICAL: Ensure the amount is not zero if we have items
-    if (total <= 0 && orderItems.some(item => !item.is_return)) {
-      console.error("CRITICAL ERROR: Total is zero or negative but has non-return items!");
-      setErrorMessage("Erreur de calcul. Le montant total est incorrect.");
-      setIsProcessing(false);
-      return;
-    }
-    
-    console.log("Processing payment with EXACT total amount:", total);
-
+  const loadProducts = async () => {
     try {
-      // Check if card exists and has sufficient balance
-      const card = await getTableCardById(id.trim());
-      
-      if (!card) {
-        setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
-        setIsProcessing(false);
-        return;
-      }
+      const productList = await getBarProducts();
+      setProducts(productList);
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les produits",
+        variant: "destructive"
+      });
+    }
+  };
 
-      const cardAmountFloat = parseFloat(card.amount || '0');
-      
-      if (cardAmountFloat < total) {
-        // Show toast for insufficient balance - one of the two cases we want to keep
-        toast({
-          title: "Solde insuffisant",
-          description: `La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
-          variant: "destructive"
-        });
-        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
-        setIsProcessing(false);
-        return;
-      }
+  const addProductToOrder = (product: any) => {
+    const existingProductIndex = currentOrder.products.findIndex(p => p.id === product.id);
 
-      // Process the order with the exact total amount
-      const orderData: BarOrder = {
-        card_id: id.trim(),
-        total_amount: total,
-        items: JSON.parse(JSON.stringify(orderItems))
-      };
+    if (existingProductIndex > -1) {
+      const updatedProducts = [...currentOrder.products];
+      updatedProducts[existingProductIndex].quantity += 1;
+      updatedProducts[existingProductIndex].price = product.price;
 
-      console.log("Sending order with total:", total);
+      setCurrentOrder({
+        ...currentOrder,
+        products: updatedProducts,
+        total: updatedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0)
+      });
+    } else {
+      const updatedProducts = [...currentOrder.products, { ...product, quantity: 1 }];
+      setCurrentOrder({
+        ...currentOrder,
+        products: updatedProducts,
+        total: updatedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0)
+      });
+    }
+  };
 
-      const orderResult = await createBarOrder(orderData);
+  const removeProductFromOrder = (productId: string) => {
+    const updatedProducts = currentOrder.products.filter(p => p.id !== productId);
+    setCurrentOrder({
+      ...currentOrder,
+      products: updatedProducts,
+      total: updatedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0)
+    });
+  };
 
-      if (orderResult.success) {
-        const newBalance = (cardAmountFloat - total).toFixed(2);
-        
-        // Remember if we were scanning
-        const wasScanning = isScanning;
-        
-        // First, completely stop scanning if active
-        if (wasScanning) {
-          console.log("Completely stopping NFC scanner before reset");
-          stopScan();
-        }
-        
-        // Show success message with remaining balance - one of the two cases we want to keep
+  const clearOrder = () => {
+    setCurrentOrder({ products: [], total: 0 });
+  };
+
+  const handlePaymentModeChange = (mode: 'scan' | 'manual') => {
+    setPaymentMode(mode);
+    setShowPaymentForm(true);
+  };
+
+  const cancelPayment = () => {
+    setShowPaymentForm(false);
+    setPaymentMode('scan');
+  };
+
+  const resetOrder = () => {
+    clearOrder();
+    setPaymentSuccessful(false);
+    setShowPaymentForm(false);
+    setPaymentMode('scan');
+  };
+
+  const processPayment = async (cardId: string) => {
+    if (!cardId) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez scanner ou entrer un ID de carte valide.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (currentOrder.products.length === 0) {
+      toast({
+        title: "Erreur",
+        description: "Votre commande est vide. Veuillez ajouter des produits.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsPaymentProcessing(true);
+    try {
+      const result = await registerPayment({
+        cardId,
+        products: currentOrder.products,
+        total: currentOrder.total,
+        pointOfSale: String(pointOfSale)
+      });
+
+      if (result?.success) {
         toast({
           title: "Paiement réussi",
-          description: `Solde restant: ${newBalance}€`
+          description: "Le paiement a été effectué avec succès.",
         });
-        
-        // Completely reset all state
-        setOrderItems([]);
-        setCardId('');
-        setCurrentTotal(0);
-        previousOrderRef.current = '';
-        
-        // Restart scanning after a sufficient delay if it was active
-        if (wasScanning) {
-          console.log("Will restart scanner with clean state after delay");
-          setTimeout(() => {
-            console.log("Restarting NFC scanner with fresh state");
-            startScan();
-          }, 800); // Slightly longer delay for better cleanup
-        }
+        setPaymentSuccessful(true);
+        setShowPaymentForm(false);
+        resetOrder();
       } else {
-        setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+        toast({
+          title: "Erreur de paiement",
+          description: result?.message || "Une erreur est survenue lors du paiement.",
+          variant: "destructive"
+        });
       }
     } catch (error) {
-      console.error('Error processing payment:', error);
-      setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
+      console.error("Payment error:", error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur est survenue lors du traitement du paiement.",
+        variant: "destructive"
+      });
     } finally {
-      setIsProcessing(false);
+      setIsPaymentProcessing(false);
     }
   };
-
-  // Handler for NFC scanning button
-  const handleNfcToggle = async () => {
-    try {
-      if (isScanning) {
-        // Stop the scanner
-        console.log("Stopping NFC scanner");
-        stopScan();
-      } else {
-        // Start the scanner
-        console.log("Starting NFC scanner");
-        
-        // Reset any error state
-        setErrorMessage(null);
-        
-        // Set initial order reference 
-        previousOrderRef.current = JSON.stringify(orderItems);
-        
-        // Start scanning
-        await startScan();
-      }
-    } catch (error) {
-      console.error("Error toggling NFC scanner:", error);
-      setErrorMessage("Une erreur est survenue avec le scanner NFC");
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-12 w-12 animate-spin text-amber-500" />
-      </div>
-    );
-  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 w-full h-full">
-      {/* Product selection - Left wider area */}
-      <div className="md:col-span-3 h-full overflow-y-auto pb-20 md:pb-0">
-        <div className="p-3">
-              <BarProductList 
-                products={products} 
-                onAddProduct={handleAddProduct} 
-              />
-        </div>
+    <div className="flex flex-col md:flex-row h-full">
+      {/* Product List Section */}
+      <div className="w-full md:w-3/5 p-4">
+        <h2 className="text-xl font-semibold mb-4">Produits</h2>
+        <BarProductList products={products} onAddProduct={addProductToOrder} />
       </div>
-      
-      {/* Order summary & Payment - Right column */}
-      <div className="md:col-span-1 bg-black/50 h-screen overflow-auto">
-        <Card className="bg-black/30 h-auto rounded-none border-0 flex flex-col">
-          <CardContent className="p-2 sm:p-3 flex flex-col">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold text-white">Récapitulatif</h3>
-              
-              {orderItems.length > 0 && (
-                <button 
-                  className="text-xs text-red-400 hover:text-red-200" 
-                  onClick={handleClearOrder}
-                >
-                  Effacer
-                </button>
-              )}
-            </div>
-            
-            {/* Order items list */}
-            {orderItems.length === 0 ? (
-              <div className="text-center text-gray-300 py-2 text-sm">
-                Commande vide
-              </div>
-            ) : (
-              <div className="mb-2 pr-1 overflow-y-auto max-h-[40vh]">
-                <ul className="space-y-1">
-                  {orderItems.map((item, index) => (
-                    <li key={`${item.product_name}-${index}`} className="flex justify-between items-center border-b border-white/20 pb-1">
-                      <div>
-                        <div className="flex items-center">
-                          <span className={`font-medium text-white text-sm ${item.is_return ? 'text-green-400' : ''}`}>
-                            {item.product_name}
-                          </span>
-                          {item.quantity > 1 && (
-                            <span className="ml-2 text-xs bg-gray-700 px-1.5 py-0.5 rounded-full text-white">
-                              x{item.quantity}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="text-xs text-gray-400">
-                          {item.is_return 
-                            ? `-${(item.price * item.quantity).toFixed(2)}€`
-                            : `${(item.price * item.quantity).toFixed(2)}€`}
-                        </div>
-                      </div>
-                      
-                      <button 
-                        className="text-xs text-gray-400 hover:text-red-400 px-2 py-1" 
-                        onClick={() => handleRemoveItem(index)}
-                      >
-                        -
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            <div className="border-t border-white/20 pt-2 mt-auto">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-base font-semibold text-white">Total:</span>
-                <span className="text-lg font-bold text-white">
-                  {orderItems.length === 0 ? "0.00€" : `${currentTotal.toFixed(2)}€`}
-                </span>
-              </div>
-              
-              <div className="text-white">
-                <label htmlFor="card-id" className="block text-sm font-medium mb-1">
-                  ID de la carte
-                </label>
-                <div className="relative mb-2">
-                  <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input 
-                    id="card-id"
-                    value={cardId}
-                    onChange={handleCardIdChange}
-                    placeholder="00LrJ9bQ"
-                    maxLength={8}
-                    disabled={isProcessing || orderItems.length === 0}
-                    className="w-full pl-9 py-2 rounded-md bg-white/10 border border-white/20 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-                
-                {/* Custom button since the UI component has styling issues */}
-                <button
-                  onClick={handleNfcToggle}
-                  disabled={isProcessing || orderItems.length === 0 || !isSupported}
-                  className={`w-full mb-2 flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white ${
-                    isProcessing || orderItems.length === 0 || !isSupported 
-                      ? "bg-gray-500 cursor-not-allowed opacity-50" 
-                      : isScanning 
-                        ? "bg-green-600 hover:bg-green-700" 
-                        : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  {isScanning ? "Scanner Actif" : "Activer Scanner NFC"}
-                </button>
-                
-                {isScanning && (
-                  <div className="bg-blue-900/50 text-blue-300 p-1.5 rounded-md flex items-start text-xs mt-1 mb-1">
-                    {orderItems.length === 0 ? (
-                      <span>Ajoutez des produits</span>
-                    ) : (
-                      <span>Présentez une carte - <strong>{currentTotal.toFixed(2)}€</strong></span>
-                    )}
-                  </div>
-                )}
-                
-                {isProcessing && (
-                  <div className="mt-1 flex items-center justify-center text-white">
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                    <span className="text-xs">Traitement...</span>
-                  </div>
-                )}
-                
-                {errorMessage && (
-                  <div className="mt-1 bg-red-900/50 text-red-300 p-1.5 rounded-md flex items-start text-xs">
-                    <AlertCircle className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
-                    <span>{errorMessage}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
+      {/* Order Summary and Payment Section */}
+      <div className="w-full md:w-2/5 p-4 bg-gray-50">
+        <h2 className="text-xl font-semibold mb-4">Commande</h2>
+        <BarOrderSummary
+          order={currentOrder}
+          onRemoveProduct={removeProductFromOrder}
+        />
+
+        {/* Payment Options */}
+        {!showPaymentForm && currentOrder.products.length > 0 && (
+          <div className="mt-4">
+            <Button
+              variant="secondary"
+              className="w-full mb-2"
+              onClick={() => handlePaymentModeChange('scan')}
+              disabled={isPaymentProcessing}
+            >
+              <ScanIcon className="h-4 w-4 mr-2" />
+              Payer avec Scan
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handlePaymentModeChange('manual')}
+              disabled={isPaymentProcessing}
+            >
+              <CreditCardIcon className="h-4 w-4 mr-2" />
+              Entrer ID de la carte
+            </Button>
+          </div>
+        )}
+
+        {/* Payment Form */}
+        {showPaymentForm && (
+          <div className="mt-4">
+            <BarPaymentForm
+              onSubmit={processPayment}
+              onCancel={cancelPayment}
+              total={currentOrder.total}
+              nfcCardId={nfcCardId}
+            />
+          </div>
+        )}
+
+        {/* Clear Order Button */}
+        {currentOrder.products.length > 0 && !showPaymentForm && (
+          <Button
+            variant="destructive"
+            className="w-full mt-4"
+            onClick={clearOrder}
+            disabled={isPaymentProcessing}
+          >
+            Annuler la commande
+          </Button>
+        )}
       </div>
     </div>
   );

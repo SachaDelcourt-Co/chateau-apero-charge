@@ -18,7 +18,7 @@ import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "@/hooks/use-auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
-// Sauvegardons l'image du logo
+// Save the logo image
 import "./assets/logo.png";
 
 const queryClient = new QueryClient();

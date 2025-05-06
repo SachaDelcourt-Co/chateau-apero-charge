@@ -1,281 +1,174 @@
 import { createClient } from '@supabase/supabase-js';
 
-// We use the values from the Supabase integration
-const supabaseUrl = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
-const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export interface TableCard {
-  id: string;
-  amount: string | number;
-  description?: string | null;
-  last_payment_method?: string | null;
-  recharge_count?: number | null;
-  last_recharge_date?: string | null;
-}
-
-// For backward compatibility, keep the Card interface but modify the implementation
-export interface Card {
-  card_number: string;
-  qr_code_file?: string | null;
-  url?: string | null;
-  amount?: string | null;
-}
-
-export async function getCardById(cardNumber: string): Promise<Card | null> {
-  console.log(`Recherche de la carte avec numéro: ${cardNumber}`);
-  
-  try {
-    // Try to find the card in table_cards
-    const { data, error } = await supabase
-      .from('table_cards')
-      .select('*')
-      .eq('id', cardNumber)
-      .maybeSingle();
-
-    if (error) {
-      console.error('Error fetching card:', error);
-      return null;
-    }
-    
-    if (data) {
-      // Convert from table_cards format to Card format
-      return {
-        card_number: data.id,
-        amount: data.amount?.toString(),
-      };
-    }
-
-    console.log('Aucune carte trouvée avec ce numéro');
-    return null;
-  } catch (error) {
-    console.error('Exception lors de la récupération de la carte:', error);
-    return null;
-  }
-}
-
-export async function updateCardAmount(cardNumber: string, amount: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('table_cards')
-    .update({ amount })
-    .eq('id', cardNumber);
-
-  if (error) {
-    console.error('Error updating card amount:', error);
-    return false;
-  }
-
-  return true;
-}
-
-// Functions for table_cards
-
-export async function getTableCardById(id: string): Promise<TableCard | null> {
-  console.log(`Recherche de la carte avec ID: ${id}`);
-  
+// Function to get card balance
+export const getCardBalance = async (cardId: string) => {
   try {
     const { data, error } = await supabase
       .from('table_cards')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+      .select('balance, blocked')
+      .eq('id', cardId)
+      .single();
 
     if (error) {
-      console.error('Error fetching card from table_cards:', error);
-      return null;
+      console.error("Error fetching card balance:", error);
+      throw error;
     }
 
-    console.log('Réponse de Supabase (table_cards):', data);
     return data;
   } catch (error) {
-    console.error('Exception lors de la récupération de la carte (table_cards):', error);
-    return null;
+    console.error("Error in getCardBalance:", error);
+    throw error;
   }
-}
+};
 
-export async function updateTableCardAmount(id: string, amount: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('table_cards')
-    .update({ amount })
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error updating table_card amount:', error);
-    return false;
-  }
-
-  return true;
-}
-
-// Bar page specific functions
-export interface BarProduct {
-  id: number;
-  name: string;
-  price: number;
-  category: string | null;
-  is_deposit: boolean;
-  is_return: boolean;
-}
-
-export interface OrderItem {
-  product_name: string;
-  price: number;
-  quantity: number;
-  is_deposit: boolean;
-  is_return: boolean;
-}
-
-export interface BarOrder {
-  id?: string;
-  card_id: string;
-  total_amount: number;
-  created_at?: string;
-  status?: string;
-  items: OrderItem[];
-  point_of_sale?: number;
-}
-
-// Cache des produits pour optimiser les performances
-let barProductsCache: BarProduct[] = [];
-let lastFetchTime: number = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
-
-export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
-  const now = Date.now();
-  
-  // Si on force le rafraîchissement ou si le cache est expiré, on récupère les données
-  if (forceRefresh || barProductsCache.length === 0 || (now - lastFetchTime) > CACHE_TTL) {
-    try {
-      console.log(`Récupération des produits depuis Supabase (${forceRefresh ? 'forcé' : 'cache expiré'})`);
-      
-      const { data, error } = await supabase
-        .from('bar_products')
-        .select('*')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching bar products:', error);
-        // En cas d'erreur, retourner le cache actuel s'il existe
-        return barProductsCache.length > 0 ? barProductsCache : [];
-      }
-
-      // Mettre à jour le cache et l'horodatage
-      barProductsCache = data || [];
-      lastFetchTime = now;
-      
-      console.log(`${barProductsCache.length} produits récupérés et mis en cache`);
-      return barProductsCache;
-    } catch (error) {
-      console.error('Exception lors de la récupération des produits:', error);
-      // En cas d'erreur, retourner le cache actuel s'il existe
-      return barProductsCache.length > 0 ? barProductsCache : [];
-    }
-  } else {
-    console.log(`Utilisation des ${barProductsCache.length} produits en cache`);
-    return barProductsCache;
-  }
-}
-
-export async function createBarOrder(order: BarOrder): Promise<{ success: boolean; orderId?: string }> {
+// Function to update card balance
+export const updateCardBalance = async (cardId: string, newBalance: number) => {
   try {
-    console.log("Processing order:", order);
-    console.log("Total amount to charge:", order.total_amount);
-    
-    // Start a transaction by beginning a single batch
-    // 1. First get the current card amount to make sure it has enough balance
-    const { data: cardData, error: cardError } = await supabase
+    const { data, error } = await supabase
       .from('table_cards')
-      .select('amount')
-      .eq('id', order.card_id)
-      .maybeSingle();
+      .update({ balance: newBalance })
+      .eq('id', cardId)
+      .select();
 
-    if (cardError || !cardData) {
-      console.error('Error fetching card data:', cardError);
-      return { success: false };
+    if (error) {
+      console.error("Error updating card balance:", error);
+      throw error;
     }
 
-    const currentAmount = parseFloat(cardData.amount || '0');
-    if (currentAmount < order.total_amount) {
-      console.error('Insufficient funds:', currentAmount, 'required:', order.total_amount);
-      return { success: false };
+    return data;
+  } catch (error) {
+    console.error("Error in updateCardBalance:", error);
+    throw error;
+  }
+};
+
+// Function to register a card transaction
+export const registerCardTransaction = async (cardId: string, amount: number, transactionType: string, paymentMethod: string | null = null) => {
+  try {
+    const { data, error } = await supabase
+      .from('card_transactions')
+      .insert([{ card_id: cardId, amount: amount, transaction_type: transactionType, payment_method: paymentMethod }])
+      .select();
+
+    if (error) {
+      console.error("Error registering card transaction:", error);
+      throw error;
     }
 
-    // 2. Create the order
+    return data;
+  } catch (error) {
+    console.error("Error in registerCardTransaction:", error);
+    throw error;
+  }
+};
+
+// Function to register a payment
+interface PaymentParams {
+  cardId: string;
+  products: Array<{ id: string; name: string; price: number; quantity: number }>;
+  total: number;
+  pointOfSale: string;
+}
+
+export const registerPayment = async ({ cardId, products, total, pointOfSale }: PaymentParams) => {
+  try {
+    // 1. Update card balance
+    const cardData = await getCardBalance(cardId);
+    if (!cardData) {
+      throw new Error("Card not found");
+    }
+
+    if (cardData.blocked) {
+      throw new Error("Card is blocked");
+    }
+
+    const newBalance = cardData.balance - total;
+    if (newBalance < 0) {
+      throw new Error("Insufficient balance");
+    }
+
+    await updateCardBalance(cardId, newBalance);
+
+    // 2. Register card transaction
+    await registerCardTransaction(cardId, total, 'purchase');
+
+    // 3. Register bar order
     const { data: orderData, error: orderError } = await supabase
       .from('bar_orders')
-      .insert({
-        card_id: order.card_id,
-        total_amount: order.total_amount,
-        status: 'completed'
-      })
+      .insert([{ card_id: cardId, total_amount: total, point_of_sale: pointOfSale }])
       .select()
       .single();
 
     if (orderError) {
-      console.error('Error creating bar order:', orderError);
-      return { success: false };
+      console.error("Error registering bar order:", orderError);
+      throw orderError;
     }
 
-    // 3. Add all the order items
-    const orderItems = order.items.map(item => ({
-      order_id: orderData.id,
-      product_name: item.product_name,
-      price: item.price,
-      quantity: item.quantity,
-      is_deposit: item.is_deposit,
-      is_return: item.is_return
+    const orderId = orderData.id;
+
+    // 4. Register bar order items
+    const orderItems = products.map(product => ({
+      order_id: orderId,
+      product_id: product.id,
+      quantity: product.quantity,
+      price: product.price
     }));
 
-    const { error: itemsError } = await supabase
+    const { error: orderItemsError } = await supabase
       .from('bar_order_items')
       .insert(orderItems);
 
-    if (itemsError) {
-      console.error('Error creating order items:', itemsError);
-      // Even if we fail here, we still want to update the card amount
-      // since the order was created
+    if (orderItemsError) {
+      console.error("Error registering bar order items:", orderItemsError);
+      throw orderItemsError;
     }
 
-    // 4. Update the card amount
-    const newAmount = (currentAmount - order.total_amount).toString();
-    console.log("Updating card amount from:", currentAmount, "to:", newAmount);
-    
-    const { error: updateError } = await supabase
-      .from('table_cards')
-      .update({ amount: newAmount })
-      .eq('id', order.card_id);
-
-    if (updateError) {
-      console.error('Error updating card amount:', updateError);
-      return { success: false };
-    }
-
-    // Supprimer le cache des produits pour forcer un rafraîchissement lors de la prochaine requête
-    barProductsCache = [];
-
-    return { success: true, orderId: orderData.id };
-  } catch (error) {
-    console.error('Exception lors de la création de la commande:', error);
-    return { success: false };
+    return { success: true, message: "Payment registered successfully" };
+  } catch (error: any) {
+    console.error("Error in registerPayment:", error);
+    return { success: false, message: error.message || "Failed to register payment" };
   }
-}
+};
 
-// New statistics functions for admin dashboard
-export interface Statistics {
-  user: UserStats;
-  financial: FinancialStats;
-  product: ProductStats;
-  temporal: TemporalStats;
-}
+// Function to get bar products
+const barProductsCacheKey = 'bar_products';
 
+export const getBarProducts = async (forceRefresh: boolean = false) => {
+  if (!forceRefresh && sessionStorage.getItem(barProductsCacheKey)) {
+    try {
+      const cachedData = sessionStorage.getItem(barProductsCacheKey);
+      return JSON.parse(cachedData || '[]');
+    } catch (error) {
+      console.error("Error parsing cached bar products, fetching from source:", error);
+      sessionStorage.removeItem(barProductsCacheKey);
+    }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('bar_products')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error("Error fetching bar products:", error);
+      throw error;
+    }
+
+    sessionStorage.setItem(barProductsCacheKey, JSON.stringify(data));
+    return data;
+  } catch (error) {
+    console.error("Error in getBarProducts:", error);
+    throw error;
+  }
+};
+
+// Type definitions for our statistics data
 export interface UserStats {
   totalCards: number;
   averageRechargeAmount: number;
@@ -285,67 +178,55 @@ export interface UserStats {
 
 export interface FinancialStats {
   totalSales: number;
-  totalRecharges: {
-    total: number;
-    cash: number;
-    sumup: number;
-    stripe: number;
-  };
+  totalRechargesByCash: number;
+  totalRechargesBySumup: number;
+  totalRechargesByStripe: number;
   averageSpendPerPerson: number;
-  totalRemainingBalance: number;
-  transactionsByTime: {
-    timeInterval: string;
-    count: number;
-    amount: number;
-  }[];
-  salesByPointOfSale: {
-    pointOfSale: number;
-    count: number;
-    amount: number;
-  }[];
+  remainingBalance: number;
+  salesByPOS: Record<string, number>;
 }
 
 export interface ProductStats {
   topProducts: {
     name: string;
-    category: string | null;
     quantity: number;
     revenue: number;
   }[];
-  hourlyProductSales: {
-    hour: string;
-    products: {
-      name: string;
-      quantity: number;
-      revenue: number;
-    }[];
+  salesByHour: {
+    hour: number;
+    sales: Record<string, number>;
   }[];
 }
 
 export interface TemporalStats {
   rushHours: {
-    hour: string;
-    rechargeTransactions: number;
-    barTransactions: number;
+    hour: number;
+    recharges: number;
+    purchases: number;
   }[];
-  averageTimeBetweenTransactions: number;
+  avgTimeBetweenTransactions: number;
 }
 
-// Get all statistics data
-export async function getDashboardStatistics(): Promise<Statistics> {
+export interface Statistics {
+  user: UserStats;
+  financial: FinancialStats;
+  product: ProductStats;
+  temporal: TemporalStats;
+}
+
+// Get dashboard statistics
+export const getDashboardStatistics = async (): Promise<Statistics> => {
   try {
-    console.log('Fetching dashboard statistics...');
-    
-    // Fetch user statistics
+    // 1. User Statistics
     const userStats = await getUserStatistics();
     
-    // Fetch financial statistics
+    // 2. Financial Statistics
     const financialStats = await getFinancialStatistics();
     
-    // Fetch product statistics
+    // 3. Product Statistics
     const productStats = await getProductStatistics();
     
-    // Fetch temporal statistics
+    // 4. Temporal Statistics
     const temporalStats = await getTemporalStatistics();
     
     return {
@@ -355,77 +236,41 @@ export async function getDashboardStatistics(): Promise<Statistics> {
       temporal: temporalStats
     };
   } catch (error) {
-    console.error('Error fetching dashboard statistics:', error);
-    
-    // Return default empty statistics
-    return {
-      user: {
-        totalCards: 0,
-        averageRechargeAmount: 0,
-        cardReusageRate: 0,
-        multipleRechargeCards: 0
-      },
-      financial: {
-        totalSales: 0,
-        totalRecharges: {
-          total: 0,
-          cash: 0,
-          sumup: 0,
-          stripe: 0
-        },
-        averageSpendPerPerson: 0,
-        totalRemainingBalance: 0,
-        transactionsByTime: [],
-        salesByPointOfSale: []
-      },
-      product: {
-        topProducts: [],
-        hourlyProductSales: []
-      },
-      temporal: {
-        rushHours: [],
-        averageTimeBetweenTransactions: 0
-      }
-    };
+    console.error("Error getting dashboard statistics:", error);
+    throw error;
   }
-}
+};
 
 // Get user statistics
-async function getUserStatistics(): Promise<UserStats> {
+const getUserStatistics = async (): Promise<UserStats> => {
   try {
-    // Get total number of cards
+    // Count total cards
     const { count: totalCards, error: countError } = await supabase
       .from('table_cards')
-      .select('*', { count: 'exact', head: true });
-      
+      .select('*', { count: 'exact' });
+    
     if (countError) throw countError;
     
-    // Get cards with multiple recharges
-    const { data: multipleRechargeCardsData, error: rechargeError } = await supabase
-      .from('table_cards')
-      .select('id')
-      .gt('recharge_count', 1);
-      
-    if (rechargeError) throw rechargeError;
-    
-    const multipleRechargeCards = multipleRechargeCardsData?.length || 0;
-    
-    // Get average recharge amount
-    const { data: recharges, error: avgRechargeError } = await supabase
+    // Calculate average recharge amount
+    const { data: rechargeData, error: rechargeError } = await supabase
       .from('card_transactions')
       .select('amount')
       .eq('transaction_type', 'recharge');
-      
-    if (avgRechargeError) throw avgRechargeError;
     
-    let averageRechargeAmount = 0;
-    if (recharges && recharges.length > 0) {
-      const total = recharges.reduce((sum, transaction) => sum + parseFloat(transaction.amount.toString()), 0);
-      averageRechargeAmount = total / recharges.length;
-    }
+    if (rechargeError) throw rechargeError;
     
-    // Calculate card reusage rate (cards with >1 recharge / total cards)
-    const cardReusageRate = totalCards ? (multipleRechargeCards / totalCards) : 0;
+    const totalRechargeAmount = rechargeData.reduce((sum, item) => sum + Number(item.amount), 0);
+    const averageRechargeAmount = rechargeData.length > 0 ? totalRechargeAmount / rechargeData.length : 0;
+    
+    // Calculate card reusage rate
+    const { data: reusageData, error: reusageError } = await supabase
+      .from('table_cards')
+      .select('id, recharge_count');
+    
+    if (reusageError) throw reusageError;
+    
+    const multipleRechargeCards = reusageData.filter(card => card.recharge_count > 1).length;
+    const cardReusageRate = totalCards ? multipleRechargeCards / totalCards : 0;
     
     return {
       totalCards: totalCards || 0,
@@ -434,435 +279,268 @@ async function getUserStatistics(): Promise<UserStats> {
       multipleRechargeCards
     };
   } catch (error) {
-    console.error('Error fetching user statistics:', error);
-    return {
-      totalCards: 0,
-      averageRechargeAmount: 0,
-      cardReusageRate: 0,
-      multipleRechargeCards: 0
-    };
+    console.error("Error getting user statistics:", error);
+    throw error;
   }
-}
+};
 
 // Get financial statistics
-async function getFinancialStatistics(): Promise<FinancialStats> {
+const getFinancialStatistics = async (): Promise<FinancialStats> => {
   try {
-    // Get total sales
+    // Total sales
     const { data: salesData, error: salesError } = await supabase
       .from('bar_orders')
       .select('total_amount');
-      
+    
     if (salesError) throw salesError;
     
-    const totalSales = salesData 
-      ? salesData.reduce((sum, order) => sum + parseFloat(order.total_amount.toString()), 0)
-      : 0;
+    const totalSales = salesData.reduce((sum, item) => sum + Number(item.total_amount), 0);
     
-    // Get recharges by payment method
+    // Recharges by payment method
     const { data: rechargeData, error: rechargeError } = await supabase
       .from('card_transactions')
       .select('amount, payment_method')
       .eq('transaction_type', 'recharge');
-      
+    
     if (rechargeError) throw rechargeError;
     
-    const totalRecharges = {
-      total: 0,
-      cash: 0,
-      sumup: 0,
-      stripe: 0
-    };
-    
-    if (rechargeData) {
-      rechargeData.forEach(transaction => {
-        const amount = parseFloat(transaction.amount.toString());
-        totalRecharges.total += amount;
-        
-        if (transaction.payment_method === 'cash') {
-          totalRecharges.cash += amount;
-        } else if (transaction.payment_method === 'sumup') {
-          totalRecharges.sumup += amount;
-        } else if (transaction.payment_method === 'stripe') {
-          totalRecharges.stripe += amount;
-        }
-      });
-    }
-    
-    // Get average spend per person
-    const { data: distinctUsers, error: distinctUsersError } = await supabase
-      .from('bar_orders')
-      .select('card_id')
-      .is('card_id', 'not.null');
+    const totalRechargesByCash = rechargeData
+      .filter(item => item.payment_method === 'cash')
+      .reduce((sum, item) => sum + Number(item.amount), 0);
       
-    if (distinctUsersError) throw distinctUsersError;
+    const totalRechargesBySumup = rechargeData
+      .filter(item => item.payment_method === 'sumup')
+      .reduce((sum, item) => sum + Number(item.amount), 0);
+      
+    const totalRechargesByStripe = rechargeData
+      .filter(item => item.payment_method === 'stripe')
+      .reduce((sum, item) => sum + Number(item.amount), 0);
     
-    // Count unique card_ids
-    const uniqueCardIds = new Set();
-    distinctUsers?.forEach(order => {
-      if (order.card_id) uniqueCardIds.add(order.card_id);
-    });
-    
-    const averageSpendPerPerson = uniqueCardIds.size > 0 ? totalSales / uniqueCardIds.size : 0;
-    
-    // Get total remaining balance
+    // Average spend per person
     const { data: cardsData, error: cardsError } = await supabase
       .from('table_cards')
-      .select('amount');
-      
+      .select('id');
+    
     if (cardsError) throw cardsError;
     
-    const totalRemainingBalance = cardsData 
-      ? cardsData.reduce((sum, card) => sum + parseFloat(card.amount?.toString() || '0'), 0)
-      : 0;
+    const averageSpendPerPerson = cardsData.length > 0 ? totalSales / cardsData.length : 0;
     
-    // Get transactions by time interval (30 min intervals)
-    const { data: timeData, error: timeError } = await supabase
+    // Remaining balance
+    const { data: balanceData, error: balanceError } = await supabase
+      .from('table_cards')
+      .select('balance');
+    
+    if (balanceError) throw balanceError;
+    
+    const remainingBalance = balanceData.reduce((sum, item) => sum + Number(item.balance), 0);
+    
+    // Sales by POS
+    const { data: posSalesData, error: posError } = await supabase
       .from('bar_orders')
-      .select('created_at, total_amount')
-      .order('created_at', { ascending: true });
-      
-    if (timeError) throw timeError;
+      .select('total_amount, point_of_sale');
     
-    // Group by 30 minute intervals
-    const transactionsByTime = [];
-    if (timeData) {
-      const timeIntervals = new Map();
-      
-      timeData.forEach(order => {
-        const date = new Date(order.created_at || '');
-        // Round to nearest 30 minutes
-        date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
-        date.setSeconds(0);
-        date.setMilliseconds(0);
-        
-        const timeKey = date.toISOString();
-        const displayTime = `${date.getHours()}:${date.getMinutes() === 0 ? '00' : '30'}`;
-        
-        if (!timeIntervals.has(timeKey)) {
-          timeIntervals.set(timeKey, {
-            timeInterval: displayTime,
-            count: 0,
-            amount: 0
-          });
-        }
-        
-        const interval = timeIntervals.get(timeKey);
-        interval.count += 1;
-        interval.amount += parseFloat(order.total_amount.toString());
-      });
-      
-      timeIntervals.forEach(interval => {
-        transactionsByTime.push(interval);
-      });
-      
-      // Sort by time
-      transactionsByTime.sort((a, b) => {
-        const [aHours, aMinutes] = a.timeInterval.split(':').map(Number);
-        const [bHours, bMinutes] = b.timeInterval.split(':').map(Number);
-        
-        if (aHours !== bHours) {
-          return aHours - bHours;
-        }
-        return aMinutes - bMinutes;
-      });
-    }
-    
-    // Get sales by point of sale
-    const { data: posData, error: posError } = await supabase
-      .from('bar_orders')
-      .select('point_of_sale, total_amount');
-      
     if (posError) throw posError;
     
-    const salesByPointOfSale = [];
-    if (posData) {
-      const posSales = new Map();
-      
-      posData.forEach(order => {
-        const pos = order.point_of_sale || 1;
-        
-        if (!posSales.has(pos)) {
-          posSales.set(pos, {
-            pointOfSale: pos,
-            count: 0,
-            amount: 0
-          });
-        }
-        
-        const posStat = posSales.get(pos);
-        posStat.count += 1;
-        posStat.amount += parseFloat(order.total_amount.toString());
-      });
-      
-      posSales.forEach(posStat => {
-        salesByPointOfSale.push(posStat);
-      });
-      
-      // Sort by point of sale
-      salesByPointOfSale.sort((a, b) => a.pointOfSale - b.pointOfSale);
-    }
+    const salesByPOS: Record<string, number> = {};
+    posSalesData.forEach(item => {
+      const pos = String(item.point_of_sale || 1);
+      salesByPOS[pos] = (salesByPOS[pos] || 0) + Number(item.total_amount);
+    });
     
     return {
       totalSales,
-      totalRecharges,
+      totalRechargesByCash,
+      totalRechargesBySumup,
+      totalRechargesByStripe,
       averageSpendPerPerson,
-      totalRemainingBalance,
-      transactionsByTime,
-      salesByPointOfSale
+      remainingBalance,
+      salesByPOS
     };
   } catch (error) {
-    console.error('Error fetching financial statistics:', error);
-    return {
-      totalSales: 0,
-      totalRecharges: {
-        total: 0,
-        cash: 0,
-        sumup: 0,
-        stripe: 0
-      },
-      averageSpendPerPerson: 0,
-      totalRemainingBalance: 0,
-      transactionsByTime: [],
-      salesByPointOfSale: []
-    };
+    console.error("Error getting financial statistics:", error);
+    throw error;
   }
-}
+};
 
 // Get product statistics
-async function getProductStatistics(): Promise<ProductStats> {
+const getProductStatistics = async (): Promise<ProductStats> => {
   try {
-    // Get order items with order created_at
+    // Top products by sales
     const { data: orderItemsData, error: orderItemsError } = await supabase
       .from('bar_order_items')
       .select(`
-        product_name,
-        price,
         quantity,
-        order_id,
+        product_id,
+        price,
         bar_orders!inner(created_at)
       `);
-      
+    
     if (orderItemsError) throw orderItemsError;
     
-    // Get products for categories
+    // Get product names
     const { data: productsData, error: productsError } = await supabase
       .from('bar_products')
-      .select('name, category');
-      
+      .select('id, name');
+    
     if (productsError) throw productsError;
     
-    // Create product name to category map
-    const productCategories = new Map();
-    if (productsData) {
-      productsData.forEach(product => {
-        productCategories.set(product.name, product.category);
-      });
-    }
+    const productMap = new Map();
+    productsData.forEach(product => {
+      productMap.set(product.id, product.name);
+    });
     
-    // Process top products
+    // Calculate top products
     const productStats = new Map();
-    if (orderItemsData) {
-      orderItemsData.forEach(item => {
-        const productName = item.product_name;
-        
-        if (!productStats.has(productName)) {
-          productStats.set(productName, {
-            name: productName,
-            category: productCategories.get(productName) || null,
-            quantity: 0,
-            revenue: 0
-          });
-        }
-        
-        const stats = productStats.get(productName);
-        stats.quantity += item.quantity;
-        stats.revenue += item.price * item.quantity;
-      });
-    }
+    orderItemsData.forEach(item => {
+      const productId = item.product_id;
+      const productName = productMap.get(productId) || `Product ${productId}`;
+      const quantity = item.quantity;
+      const revenue = quantity * item.price;
+      
+      if (!productStats.has(productId)) {
+        productStats.set(productId, {
+          name: productName,
+          quantity: 0,
+          revenue: 0
+        });
+      }
+      
+      const currentStats = productStats.get(productId);
+      currentStats.quantity += quantity;
+      currentStats.revenue += revenue;
+      productStats.set(productId, currentStats);
+    });
     
     const topProducts = Array.from(productStats.values())
-      .sort((a, b) => b.revenue - a.revenue);
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
     
-    // Process hourly product sales
-    const hourlyProductSales = [];
-    if (orderItemsData) {
-      const hourlyData = new Map();
+    // Sales by hour
+    const salesByHour: { hour: number; sales: Record<string, number> }[] = [];
+    const hourlyProductSales = new Map<number, Map<string, number>>();
+    
+    // Parse created_at from orders and group by hour
+    orderItemsData.forEach(item => {
+      const orderDate = new Date(item.bar_orders?.created_at);
+      const hour = orderDate.getHours();
+      const productId = item.product_id;
+      const productName = productMap.get(productId) || `Product ${productId}`;
+      const revenue = item.quantity * item.price;
       
-      orderItemsData.forEach(item => {
-        const createdAt = new Date(item.bar_orders.created_at);
-        const hour = createdAt.getHours();
-        const hourKey = `${hour}:00`;
-        
-        if (!hourlyData.has(hourKey)) {
-          hourlyData.set(hourKey, {
-            hour: hourKey,
-            products: new Map()
-          });
-        }
-        
-        const hourData = hourlyData.get(hourKey);
-        const productName = item.product_name;
-        
-        if (!hourData.products.has(productName)) {
-          hourData.products.set(productName, {
-            name: productName,
-            quantity: 0,
-            revenue: 0
-          });
-        }
-        
-        const productData = hourData.products.get(productName);
-        productData.quantity += item.quantity;
-        productData.revenue += item.price * item.quantity;
+      if (!hourlyProductSales.has(hour)) {
+        hourlyProductSales.set(hour, new Map<string, number>());
+      }
+      
+      const hourData = hourlyProductSales.get(hour)!;
+      hourData.set(productName, (hourData.get(productName) || 0) + revenue);
+    });
+    
+    // Convert to desired format
+    for (let i = 0; i < 24; i++) {
+      const hourData = hourlyProductSales.get(i) || new Map<string, number>();
+      const salesObj: Record<string, number> = {};
+      
+      hourData.forEach((value, key) => {
+        salesObj[key] = value;
       });
       
-      // Convert to array format
-      hourlyData.forEach((hourData, hourKey) => {
-        hourlyProductSales.push({
-          hour: hourKey,
-          products: Array.from(hourData.products.values())
-            .sort((a, b) => b.revenue - a.revenue)
-        });
-      });
-      
-      // Sort by hour
-      hourlyProductSales.sort((a, b) => {
-        const aHour = parseInt(a.hour.split(':')[0]);
-        const bHour = parseInt(b.hour.split(':')[0]);
-        return aHour - bHour;
+      salesByHour.push({
+        hour: i,
+        sales: salesObj
       });
     }
     
     return {
       topProducts,
-      hourlyProductSales
+      salesByHour
     };
   } catch (error) {
-    console.error('Error fetching product statistics:', error);
-    return {
-      topProducts: [],
-      hourlyProductSales: []
-    };
+    console.error("Error getting product statistics:", error);
+    throw error;
   }
-}
+};
 
 // Get temporal statistics
-async function getTemporalStatistics(): Promise<TemporalStats> {
+const getTemporalStatistics = async (): Promise<TemporalStats> => {
   try {
-    // Get rush hours (transactions per hour)
-    const { data: barTransactions, error: barError } = await supabase
-      .from('bar_orders')
-      .select('created_at');
-      
-    if (barError) throw barError;
-    
-    const { data: rechargeTransactions, error: rechargeError } = await supabase
+    // Rush hours data
+    const { data: transactionsData, error: transactionsError } = await supabase
       .from('card_transactions')
-      .select('created_at')
-      .eq('transaction_type', 'recharge');
-      
-    if (rechargeError) throw rechargeError;
+      .select('created_at, transaction_type');
     
-    const rushHours = [];
-    if (barTransactions && rechargeTransactions) {
-      const hourData = new Map();
-      
-      // Process bar transactions
-      barTransactions.forEach(transaction => {
-        const date = new Date(transaction.created_at);
-        const hour = date.getHours();
-        const hourKey = `${hour}:00`;
-        
-        if (!hourData.has(hourKey)) {
-          hourData.set(hourKey, {
-            hour: hourKey,
-            barTransactions: 0,
-            rechargeTransactions: 0
-          });
-        }
-        
-        hourData.get(hourKey).barTransactions += 1;
-      });
-      
-      // Process recharge transactions
-      rechargeTransactions.forEach(transaction => {
-        const date = new Date(transaction.created_at);
-        const hour = date.getHours();
-        const hourKey = `${hour}:00`;
-        
-        if (!hourData.has(hourKey)) {
-          hourData.set(hourKey, {
-            hour: hourKey,
-            barTransactions: 0,
-            rechargeTransactions: 0
-          });
-        }
-        
-        hourData.get(hourKey).rechargeTransactions += 1;
-      });
-      
-      // Convert to array and sort by hour
-      hourData.forEach(data => {
-        rushHours.push(data);
-      });
-      
-      rushHours.sort((a, b) => {
-        const aHour = parseInt(a.hour.split(':')[0]);
-        const bHour = parseInt(b.hour.split(':')[0]);
-        return aHour - bHour;
-      });
+    if (transactionsError) throw transactionsError;
+    
+    const hourCounts = new Map<number, { recharges: number; purchases: number }>();
+    
+    // Initialize all hours
+    for (let i = 0; i < 24; i++) {
+      hourCounts.set(i, { recharges: 0, purchases: 0 });
     }
+    
+    // Count transactions by hour
+    transactionsData.forEach(transaction => {
+      const date = new Date(transaction.created_at);
+      const hour = date.getHours();
+      const hourData = hourCounts.get(hour)!;
+      
+      if (transaction.transaction_type === 'recharge') {
+        hourData.recharges++;
+      } else {
+        hourData.purchases++;
+      }
+      
+      hourCounts.set(hour, hourData);
+    });
+    
+    const rushHours = Array.from(hourCounts.entries())
+      .map(([hour, data]) => ({
+        hour,
+        recharges: data.recharges,
+        purchases: data.purchases
+      }))
+      .sort((a, b) => (b.recharges + b.purchases) - (a.recharges + a.purchases));
     
     // Calculate average time between transactions per card
-    let averageTimeBetweenTransactions = 0;
-    if (barTransactions) {
-      // Group transactions by card_id
-      const cardTransactions = new Map();
-      
-      barTransactions.forEach(transaction => {
-        const cardId = transaction.card_id;
-        
-        if (cardId && !cardTransactions.has(cardId)) {
-          cardTransactions.set(cardId, []);
-        }
-        
-        if (cardId) {
-          cardTransactions.get(cardId).push(new Date(transaction.created_at));
-        }
-      });
-      
-      // Calculate average time between transactions for each card
-      let totalTimeDiff = 0;
-      let totalTransactionPairs = 0;
-      
-      cardTransactions.forEach(transactions => {
-        if (transactions.length > 1) {
-          // Sort by time
-          transactions.sort((a, b) => a.getTime() - b.getTime());
-          
-          for (let i = 1; i < transactions.length; i++) {
-            const timeDiff = transactions[i].getTime() - transactions[i-1].getTime();
-            totalTimeDiff += timeDiff;
-            totalTransactionPairs++;
-          }
-        }
-      });
-      
-      // Calculate average time difference in minutes
-      if (totalTransactionPairs > 0) {
-        averageTimeBetweenTransactions = totalTimeDiff / totalTransactionPairs / (1000 * 60); // Convert to minutes
+    const { data: cardData, error: cardError } = await supabase
+      .from('card_transactions')
+      .select('card_id, created_at')
+      .order('created_at', { ascending: true });
+    
+    if (cardError) throw cardError;
+    
+    // Group transactions by card
+    const cardTransactions = new Map<string, Date[]>();
+    cardData.forEach(transaction => {
+      const cardId = transaction.card_id;
+      if (!cardTransactions.has(cardId)) {
+        cardTransactions.set(cardId, []);
       }
-    }
+      cardTransactions.get(cardId)!.push(new Date(transaction.created_at));
+    });
+    
+    // Calculate average times
+    let totalTimeDiff = 0;
+    let totalPairs = 0;
+    
+    cardTransactions.forEach(transactions => {
+      if (transactions.length < 2) return;
+      
+      for (let i = 1; i < transactions.length; i++) {
+        const timeDiff = transactions[i].getTime() - transactions[i-1].getTime();
+        totalTimeDiff += timeDiff;
+        totalPairs++;
+      }
+    });
+    
+    // Convert milliseconds to minutes
+    const avgTimeBetweenTransactions = totalPairs ? totalTimeDiff / totalPairs / (1000 * 60) : 0;
     
     return {
       rushHours,
-      averageTimeBetweenTransactions
+      avgTimeBetweenTransactions
     };
   } catch (error) {
-    console.error('Error fetching temporal statistics:', error);
-    return {
-      rushHours: [],
-      averageTimeBetweenTransactions: 0
-    };
+    console.error("Error getting temporal statistics:", error);
+    throw error;
   }
-}
+};
