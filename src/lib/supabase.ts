@@ -133,7 +133,7 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
     console.log('Réponse de Supabase (table_cards):', data);
     
     // If no data was found, create the card
-    if (!data && id.startsWith('simulated-card-') || id.startsWith('nfc-test-')) {
+    if (!data && (id.startsWith('simulated-card-') || id.startsWith('nfc-test-'))) {
       console.log('Creating test card for ID:', id);
       const { data: newCard, error: createError } = await supabase
         .from('table_cards')
@@ -174,7 +174,7 @@ export async function updateTableCardAmount(id: string, amount: string): Promise
       try {
         const { error: altError } = await supabase
           .from('cards')
-          .update({ balance: parseFloat(amount) })
+          .update({ balance: amount })
           .eq('id', id);
           
         if (altError) {
@@ -224,7 +224,7 @@ export interface BarOrder {
   created_by?: string;
 }
 
-export async function getBarProducts(): Promise<BarProduct[]> {
+export async function getBarProducts(forceRefresh = false): Promise<BarProduct[]> {
   try {
     // First try the bar_products table directly
     const { data, error } = await supabase
@@ -296,7 +296,8 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
         card_id: order.card_id,
         total_amount: order.total_amount,
         status: 'completed',
-        created_by: order.created_by || 'app'
+        created_by: order.created_by || 'app',
+        point_of_sale: 1 // Set a default value for point_of_sale
       })
       .select()
       .single();
@@ -323,7 +324,7 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
         }
         
         // Success with backup table
-        const newAmount = (currentAmount - order.total_amount).toString();
+        const newAmount = (currentAmount - order.total_amount).toFixed(2);
         await updateTableCardAmount(order.card_id, newAmount);
         return { success: true, orderId: altData.id };
       } catch (backupError) {
@@ -353,16 +354,12 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
     }
 
     // 4. Update the card amount
-    const newAmount = (currentAmount - order.total_amount).toString();
+    const newAmount = (currentAmount - order.total_amount).toFixed(2);
     console.log("Updating card amount from:", currentAmount, "to:", newAmount);
     
-    const { error: updateError } = await supabase
-      .from('table_cards')
-      .update({ amount: newAmount })
-      .eq('id', order.card_id);
-
-    if (updateError) {
-      console.error('Error updating card amount:', updateError);
+    const updateResult = await updateTableCardAmount(order.card_id, newAmount);
+    if (!updateResult) {
+      console.error('Error updating card amount');
       return { success: false };
     }
 
