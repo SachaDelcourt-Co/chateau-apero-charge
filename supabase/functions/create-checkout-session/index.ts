@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
 
@@ -33,69 +34,32 @@ serve(async (req) => {
       apiVersion: '2022-11-15',
     });
 
-    // Rate limit handling variables
-    const maxRetries = 5;
-    let retryCount = 0;
-    let session;
-
-    // Implement exponential backoff retry logic
-    while (retryCount <= maxRetries) {
-      try {
-        // Create the checkout session
-        session = await stripe.checkout.sessions.create({
-          payment_method_types: paymentMethods, // Use the provided payment methods or default to card
-          line_items: [
-            {
-              price_data: {
-                currency: 'eur',
-                product_data: {
-                  name: 'Rechargement de carte',
-                  description: `Rechargement de la carte ${cardId}`,
-                },
-                unit_amount: Math.round(amount * 100), // Convert euros to cents
-              },
-              quantity: 1,
+    // Create the checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: paymentMethods, // Use the provided payment methods or default to card
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: 'Rechargement de carte',
+              description: `Rechargement de la carte ${cardId}`,
             },
-          ],
-          mode: 'payment',
-          success_url: `${req.headers.get('origin')}/payment-success?cardId=${cardId}&amount=${amount}&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${req.headers.get('origin')}/payment/${cardId}`,
-          metadata: {
-            cardId: cardId,
-            amount: amount.toString()
-          }
-        });
-        
-        // If we get here, the request was successful
-        console.log(`Checkout session created with ID: ${session.id}`);
-        break;
-      } catch (stripeError) {
-        // Check if it's a rate limit error
-        if (
-          stripeError.type === 'StripeRateLimitError' || 
-          stripeError.code === 'rate_limit' ||
-          stripeError.statusCode === 429
-        ) {
-          retryCount++;
-          
-          // If we've exhausted our retries, throw the error
-          if (retryCount > maxRetries) {
-            console.error(`Rate limit hit, max retries (${maxRetries}) exceeded.`);
-            throw stripeError;
-          }
-          
-          // Calculate backoff time (exponential with jitter)
-          const sleepTime = Math.min(Math.pow(2, retryCount) * 500 + Math.random() * 500, 10000);
-          console.log(`Rate limit hit, retrying in ${sleepTime}ms (attempt ${retryCount}/${maxRetries})...`);
-          
-          // Sleep for the backoff time
-          await new Promise(resolve => setTimeout(resolve, sleepTime));
-        } else {
-          // For non-rate-limit errors, throw immediately
-          throw stripeError;
-        }
+            unit_amount: Math.round(amount * 100), // Convert euros to cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${req.headers.get('origin')}/payment-success?cardId=${cardId}&amount=${amount}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${req.headers.get('origin')}/payment/${cardId}`,
+      metadata: {
+        cardId: cardId,
+        amount: amount.toString()
       }
-    }
+    });
+
+    console.log(`Checkout session created with ID: ${session.id}`);
 
     // Return the session ID
     return new Response(

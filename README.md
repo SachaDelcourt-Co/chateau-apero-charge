@@ -70,6 +70,7 @@ npm run dev
 │ │ └── stripe-webhook/ # Stripe webhook handler
 └── public/ # Public assets
 
+
 ## 🔄 User Flows
 
 ### Customer Flow
@@ -124,104 +125,6 @@ The system implements role-based access control with different user types:
 - **Admin**: Full access to all features
 - **Bar**: Access to the bar ordering system
 - **Recharge**: Access to manual card recharge functionality
-
-## 📝 Testing Rate Limit Handling
-
-The application includes comprehensive rate limit handling with exponential backoff for all API operations. This ensures that the application can gracefully handle rate limits imposed by the Supabase API.
-
-### How to test rate limit handling
-
-1. Install dependencies:
-   ```
-   npm install
-   ```
-
-2. Run the tests:
-   ```
-   npm test
-   ```
-
-### Implementation of rate limit tests
-
-The application properly handles rate limit errors (HTTP 429) with exponential backoff retry logic. Our tests verify that:
-
-1. When rate limit errors occur, the application retries the operation with increasing delays
-2. After successful retry, the operation completes as expected
-3. If maximum retries are exceeded, the application shows an appropriate error message
-
-Here's how we've implemented reliable testing for rate limits:
-
-```typescript
-// Example test for handling rate limit errors with exponential backoff
-it('should handle rate limit errors with exponential backoff', async () => {
-  // Mock the API function to simulate rate limit errors
-  let callCount = 0;
-  vi.mocked(apiFunction).mockImplementation(async () => {
-    callCount++;
-    if (callCount <= 2) {
-      // Fail with rate limit for first 2 calls
-      return Promise.reject({ status: 429, message: 'Too many requests' });
-    } else {
-      // Succeed on third call
-      return Promise.resolve({ success: true });
-    }
-  });
-
-  // Perform the operation that will trigger the API call
-  await performOperation();
-
-  // Verify first call was made
-  expect(apiFunction).toHaveBeenCalledTimes(1);
-
-  // Advance timer to trigger first retry
-  await vi.advanceTimersByTime(1100); // Just past 1000ms backoff
-
-  // Verify second call was made
-  expect(apiFunction).toHaveBeenCalledTimes(2);
-
-  // Advance timer to trigger second retry
-  await vi.advanceTimersByTime(2100); // Just past 2000ms backoff
-
-  // Verify third call was made and succeeded
-  expect(apiFunction).toHaveBeenCalledTimes(3);
-  
-  // Verify success message or state
-  expect(successIndicator).toBeTruthy();
-});
-```
-
-### Key testing techniques
-
-1. **Fake timers**: Use `vi.useFakeTimers()` to control time advancement in tests
-2. **Controlled API mocks**: Implement mocks that return different responses based on call count
-3. **Timer advancement**: Use `vi.advanceTimersByTime()` to trigger retry logic
-4. **Assertion at each step**: Verify the correct behavior after each timer advancement
-
-### Areas with rate limit handling
-
-The following operations include rate limit handling with exponential backoff:
-
-- **Bar payment processing**: When creating bar orders during high traffic
-- **Card topup operations**: When recharging cards from the admin interface
-- **Stripe webhook handling**: When processing Stripe events
-- **Product operations**: When creating or updating multiple products
-
-### Common issues and fixes
-
-If you encounter issues when testing rate limit handling:
-
-1. **Timer advancement**: Make sure to use `vi.advanceTimersByTime()` with enough time to trigger the retry logic
-2. **Mock implementation**: Your mocks should track call counts properly
-3. **Component rendering**: Use `act()` when updating component state in tests
-4. **Browser APIs**: Mock browser APIs that aren't available in the test environment
-
-### Testing in real environments
-
-For manual testing:
-
-1. **Concurrent requests**: Open multiple browser tabs and perform the same operation simultaneously
-2. **Network throttling**: Use browser dev tools to simulate slow network connections
-3. **Supabase limits**: Be aware of actual Supabase rate limits in production environments
 
 ## 🤝 Contributing
 

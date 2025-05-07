@@ -82,176 +82,87 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     
-    if (!cardId.trim() || !amount.trim() || isNaN(parseFloat(amount))) {
+    if (!cardId || !amount) {
       toast({
-        title: "Données invalides",
-        description: "Veuillez vérifier les informations saisies",
+        title: "Champs requis",
+        description: "Veuillez entrer un numéro de carte et un montant",
         variant: "destructive"
       });
-      setIsLoading(false);
       return;
     }
 
-    // Rate limit handling variables
-    const maxRetries = 5;
-    let retryCount = 0;
-    let shouldRetry = false;
-
-    do {
-      // If this is a retry, add an exponential backoff delay
-      if (retryCount > 0) {
-        const backoffTime = Math.min(2 ** retryCount * 500, 10000); // 500ms, 1s, 2s, 4s, 8s up to max 10s
-        console.log(`Rate limit hit. Retry ${retryCount}/${maxRetries} after ${backoffTime}ms backoff`);
-        
-        // Show a toast for the retry
-        toast({
-          title: "Serveur occupé",
-          description: `Nouvelle tentative dans ${backoffTime/1000} secondes (${retryCount}/${maxRetries})`,
-          variant: "destructive"
-        });
-        
-        // Wait for the backoff time
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
-      }
+    setIsLoading(true);
+    setSuccess(false);
     
-      try {
-        // Récupérer la carte
-        let tableCard = await getTableCardById(cardId);
+    try {
+      // Vérifier dans table_cards
+      let tableCard = await getTableCardById(cardId);
+      
+      if (tableCard) {
+        // Carte trouvée dans table_cards
+        const currentAmountValue = tableCard.amount?.toString() || '0';
+        setCurrentAmount(currentAmountValue);
         
-        if (tableCard) {
-          // Carte trouvée dans table_cards
-          const currentAmountValue = tableCard.amount?.toString() || '0';
-          setCurrentAmount(currentAmountValue);
-          
-          // Calculer le nouveau montant en additionnant l'ancien montant et le montant de recharge
-          const newAmount = (parseFloat(currentAmountValue) + parseFloat(amount)).toString();
-          
-          // Mettre à jour le montant
-          const success = await updateTableCardAmount(cardId, newAmount);
-          
-          if (success) {
-            // Ajouter l'enregistrement dans la table paiements
-            const { error } = await supabase
-              .from('paiements')
-              .insert({
-                id_card: cardId,
-                amount: parseFloat(amount),
-                paid_by_card: paidByCard
-              });
-            
-            if (error) {
-              // Check for rate limit errors
-              if (error.code === '429' || error.message?.includes('rate limit')) {
-                console.log('Rate limit error on payment logging, will retry');
-                shouldRetry = true;
-                retryCount++;
-                continue; // Skip the rest of this iteration and retry
-              } else {
-                console.error('Error logging payment:', error);
-                toast({
-                  title: "Attention",
-                  description: "La carte a été rechargée mais l'historique n'a pas pu être enregistré",
-                  variant: "destructive"
-                });
-              }
-            }
-            
-            setSuccess(true);
-            toast({
-              title: "Carte rechargée",
-              description: `La carte ${cardId} a été rechargée de ${amount}€`,
+        // Calculer le nouveau montant en additionnant l'ancien montant et le montant de recharge
+        const newAmount = (parseFloat(currentAmountValue) + parseFloat(amount)).toString();
+        
+        // Mettre à jour le montant
+        const success = await updateTableCardAmount(cardId, newAmount);
+        
+        if (success) {
+          // Ajouter l'enregistrement dans la table paiements
+          const { error } = await supabase
+            .from('paiements')
+            .insert({
+              id_card: cardId,
+              amount: parseFloat(amount),
+              paid_by_card: paidByCard
             });
-            
-            // Call the onSuccess callback if provided
-            if (onSuccess) {
-              onSuccess();
-            }
-            
-            // Operation completed successfully
-            shouldRetry = false;
-          } else {
-            // Check if this is likely a rate limit error
-            console.log('Failed to update card amount, checking if rate limited');
-            
-            // Try to get the card again to see if we're rate limited
-            try {
-              const checkCard = await getTableCardById(cardId);
-              if (!checkCard) {
-                // If we can't even get the card now, it's likely a rate limit
-                shouldRetry = true;
-                retryCount++;
-                console.log('Potential rate limit detected, will retry');
-              } else {
-                // Some other error occurred
-                toast({
-                  title: "Erreur",
-                  description: "Erreur lors de la mise à jour du montant",
-                  variant: "destructive"
-                });
-                shouldRetry = false;
-              }
-            } catch (checkError: any) {
-              // If this second request fails with a rate limit, retry
-              if (checkError.status === 429 || checkError.message?.includes('rate limit')) {
-                shouldRetry = true;
-                retryCount++;
-                console.log('Rate limit confirmed, will retry');
-              } else {
-                toast({
-                  title: "Erreur",
-                  description: "Erreur lors de la mise à jour du montant",
-                  variant: "destructive"
-                });
-                shouldRetry = false;
-              }
-            }
-          }
-        } else {
-          // Check if this is a rate limit error
-          if (retryCount < 2) { // Try at least once more for card not found
-            shouldRetry = true;
-            retryCount++;
-            console.log('Card not found, might be rate limited. Will retry');
-          } else {
+          
+          if (error) {
+            console.error('Error logging payment:', error);
             toast({
-              title: "Carte non trouvée",
-              description: "Aucune carte trouvée avec cet identifiant",
+              title: "Attention",
+              description: "La carte a été rechargée mais l'historique n'a pas pu être enregistré",
               variant: "destructive"
             });
-            shouldRetry = false;
           }
-        }
-      } catch (error: any) {
-        console.error("Erreur lors de la recharge:", error);
-        
-        // Check if error is a rate limit error
-        if (error.status === 429 || error.code === '429' || error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
-          console.log('Rate limit error detected, will retry');
-          shouldRetry = true;
-          retryCount++;
+          
+          setSuccess(true);
+          toast({
+            title: "Carte rechargée",
+            description: `La carte ${cardId} a été rechargée de ${amount}€`,
+          });
+          
+          // Call the onSuccess callback if provided
+          if (onSuccess) {
+            onSuccess();
+          }
         } else {
           toast({
             title: "Erreur",
-            description: "Une erreur est survenue lors de la recharge",
+            description: "Erreur lors de la mise à jour du montant",
             variant: "destructive"
           });
-          shouldRetry = false;
         }
+      } else {
+        toast({
+          title: "Carte non trouvée",
+          description: "Aucune carte trouvée avec cet identifiant",
+          variant: "destructive"
+        });
       }
-    } while (shouldRetry && retryCount <= maxRetries);
-    
-    // If we exited due to max retries
-    if (retryCount > maxRetries) {
+    } catch (error) {
+      console.error("Erreur lors de la recharge:", error);
       toast({
-        title: "Service temporairement indisponible",
-        description: "Le serveur est actuellement surchargé. Veuillez réessayer dans quelques instants.",
+        title: "Erreur",
+        description: "Une erreur est survenue lors de la recharge",
         variant: "destructive"
       });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleReset = () => {

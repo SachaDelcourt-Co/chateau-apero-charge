@@ -89,98 +89,55 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     const currentTotal = getCurrentTotal();
     console.log("Processing payment with total:", currentTotal);
 
-    // Rate limit handling variables
-    const maxRetries = 5;
-    let retryCount = 0;
-    let shouldRetry = false;
-
-    do {
-      // If this is a retry, add an exponential backoff delay
-      if (retryCount > 0) {
-        const backoffTime = Math.min(2 ** retryCount * 500, 10000); // 500ms, 1s, 2s, 4s, 8s up to max 10s
-        console.log(`Rate limit hit. Retry ${retryCount}/${maxRetries} after ${backoffTime}ms backoff`);
-        setErrorMessage(`Trop de requêtes. Nouvelle tentative dans ${backoffTime/1000} secondes... (${retryCount}/${maxRetries})`);
-        
-        // Wait for the backoff time
-        await new Promise(resolve => setTimeout(resolve, backoffTime));
+    try {
+      // Check if card exists and has sufficient balance
+      const card = await getTableCardById(cardId.trim());
+      
+      if (!card) {
+        setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        setIsProcessing(false);
+        return;
       }
 
-      try {
-        // Check if card exists and has sufficient balance
-        const card = await getTableCardById(cardId.trim());
-        
-        if (!card) {
-          setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
-          setIsProcessing(false);
-          return;
-        }
-
-        const cardAmountFloat = parseFloat(card.amount || '0');
-        
-        // Use the current total to compare with card balance
-        if (cardAmountFloat < currentTotal) {
-          setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
-          setIsProcessing(false);
-          return;
-        }
-
-        setCardBalance(card.amount);
-
-        // Process the order with the current total amount - get it one more time for absolute certainty
-        const finalTotal = getCurrentTotal();
-        const orderData: BarOrder = {
-          ...order,
-          card_id: cardId.trim(),
-          total_amount: finalTotal, // Use the final total amount
-          items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
-        };
-
-        console.log("Sending order with total:", orderData.total_amount);
-
-        const orderResult = await createBarOrder(orderData);
-
-        if (orderResult.success) {
-          setPaymentSuccess(true);
-          toast({
-            title: "Paiement réussi",
-            description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - currentTotal).toFixed(2)}€`
-          });
-          // Operation successful, no need to retry
-          shouldRetry = false;
-        } else {
-          // Check if we encountered a rate limit error from the response
-          const response = orderResult as any; // Use any to access potential error properties
-          if (response.statusCode === 429 || response.message?.includes('rate limit')) {
-            shouldRetry = true;
-            retryCount++;
-            console.log('Rate limit detected in order result, will retry');
-          } else {
-            // Some other error
-            setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
-            shouldRetry = false;
-          }
-        }
-      } catch (error) {
-        console.error('Error processing payment:', error);
-        
-        // Check if error is a rate limit error
-        if (error?.status === 429 || error?.message?.includes('rate limit') || error?.message?.includes('too many requests')) {
-          console.log('Rate limit error detected, will retry');
-          shouldRetry = true;
-          retryCount++;
-        } else {
-          setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
-          shouldRetry = false;
-        }
+      const cardAmountFloat = parseFloat(card.amount || '0');
+      
+      // Use the current total to compare with card balance
+      if (cardAmountFloat < currentTotal) {
+        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
+        setIsProcessing(false);
+        return;
       }
-    } while (shouldRetry && retryCount <= maxRetries);
 
-    // If we exited the loop due to max retries
-    if (retryCount > maxRetries) {
-      setErrorMessage("Le service est momentanément surchargé. Veuillez réessayer dans quelques instants.");
+      setCardBalance(card.amount);
+
+      // Process the order with the current total amount - get it one more time for absolute certainty
+      const finalTotal = getCurrentTotal();
+      const orderData: BarOrder = {
+        ...order,
+        card_id: cardId.trim(),
+        total_amount: finalTotal, // Use the final total amount
+        items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
+      };
+
+      console.log("Sending order with total:", orderData.total_amount);
+
+      const orderResult = await createBarOrder(orderData);
+
+      if (orderResult.success) {
+        setPaymentSuccess(true);
+        toast({
+          title: "Paiement réussi",
+          description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - currentTotal).toFixed(2)}€`
+        });
+      } else {
+        setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+      }
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
+    } finally {
+      setIsProcessing(false);
     }
-    
-    setIsProcessing(false);
   };
 
   if (paymentSuccess) {
