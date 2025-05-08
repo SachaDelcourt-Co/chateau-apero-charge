@@ -172,6 +172,17 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     setSuccess(false);
     setCurrentAmount(null);
     setCardInfo(null);
+    
+    // Reset NFC scanning state
+    if (isScanning) {
+      stopScan();
+      // Use setTimeout to ensure scan is properly stopped before restarting
+      setTimeout(() => {
+        startScan();
+      }, 100);
+    } else {
+      startScan();
+    }
   };
 
   return (
