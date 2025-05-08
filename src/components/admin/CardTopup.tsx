@@ -40,6 +40,8 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         title: "Carte détectée",
         description: `ID de carte: ${id}`,
       });
+
+      stopScan();
     }
   });
 

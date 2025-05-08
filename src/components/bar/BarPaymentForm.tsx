@@ -60,6 +60,17 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
     getTotalAmount: getCurrentTotal
   });
 
+  // Function to reset NFC scanner with appropriate logging
+  const resetScan = (reason: string) => {
+    if (isScanning) {
+      console.log(`Resetting NFC scanner after ${reason}`);
+      stopScan();
+      setTimeout(() => {
+        startScan();
+      }, 500);
+    }
+  };
+
   // Log the total amount when the component mounts to aid debugging
   useEffect(() => {
     console.log("BarPaymentForm initialized with total amount:", getCurrentTotal());
@@ -95,6 +106,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
       
       if (!card) {
         setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        resetScan("card not found error");
         setIsProcessing(false);
         return;
       }
@@ -104,6 +116,7 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
       // Use the current total to compare with card balance
       if (cardAmountFloat < currentTotal) {
         setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
+        resetScan("insufficient balance error");
         setIsProcessing(false);
         return;
       }
@@ -131,10 +144,12 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
         });
       } else {
         setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+        resetScan("order processing error");
       }
     } catch (error) {
       console.error('Error processing payment:', error);
       setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
+      resetScan("payment processing error");
     } finally {
       setIsProcessing(false);
     }
