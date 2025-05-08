@@ -15,6 +15,7 @@ This application provides a complete solution for managing cashless payments at 
 - **Refund System**: Process refund requests with proper tracking
 - **Admin Dashboard**: System statistics, transaction data, and management tools
 - **Role-based Access**: Different interfaces for admin, bar staff, and recharge staff
+- **Load Testing**: Comprehensive load testing suite to ensure performance under scale
 
 ## 🛠️ Technology Stack
 
@@ -25,6 +26,8 @@ This application provides a complete solution for managing cashless payments at 
 - **Backend**: Supabase for database, authentication, and serverless functions
 - **Payment Processing**: Stripe integration
 - **Card Integration**: Web NFC API for contactless card reading
+- **Load Testing**: K6 for performance and scalability testing
+- **Testing**: Vitest for unit and integration testing
 
 ## 🚀 Getting Started
 
@@ -37,6 +40,7 @@ This application provides a complete solution for managing cashless payments at 
   - Android device with Chrome browser (version 89+)
   - NFC-enabled hardware
   - NFC cards with 8-character IDs
+- K6 (optional, for load testing) - [Install K6](https://k6.io/docs/get-started/installation/)
 
 ### Installation
 
@@ -55,23 +59,35 @@ npm run dev
 ```
 
 ## 🏗️ Project Structure
-## 🏗️ Project Structure
 
 ```
 ├── src/                     # Source code
-│   ├── api/                # API integrations
-│   ├── assets/             # Static assets
-│   ├── components/         # Reusable UI components
-│   ├── hooks/              # Custom React hooks
-│   │   └── use-nfc.tsx     # NFC card scanning hook
-│   ├── lib/                # Utility functions and helpers
-│   ├── pages/              # Application pages
-│   └── integrations/       # Third-party integrations
-├── supabase/               # Supabase configuration and edge functions
-│   ├── functions/          # Serverless edge functions
+│   ├── api/                 # API integrations
+│   ├── assets/              # Static assets
+│   ├── components/          # Reusable UI components
+│   │   ├── admin/           # Admin interface components
+│   │   │   └── __tests__/   # Tests for admin components
+│   │   ├── bar/             # Bar interface components
+│   │   │   └── __tests__/   # Tests for bar components
+│   ├── hooks/               # Custom React hooks
+│   │   └── use-nfc.tsx      # NFC card scanning hook
+│   ├── __mocks__/           # Mock files for testing
+│   ├── lib/                 # Utility functions and helpers
+│   ├── pages/               # Application pages
+│   └── integrations/        # Third-party integrations
+├── supabase/                # Supabase configuration and edge functions
+│   ├── functions/           # Serverless edge functions
 │   │   ├── create-checkout-session/  # Stripe checkout creation
-│   │   └── stripe-webhook/           # Stripe webhook handler
-└── public/                 # Public assets
+│   │   ├── stripe-webhook/           # Stripe webhook handler
+│   │   └── __tests__/               # Edge function tests
+├── load-tests/              # K6 load testing suite
+│   ├── bar-operations.js    # Bar payment flow tests
+│   ├── card-recharges.js    # Card recharge flow tests
+│   ├── nfc-operations.js    # NFC scanning performance tests
+│   ├── mixed-operations.js  # Mixed workload testing
+│   ├── cleanup-test-data.js # Test data cleanup utilities
+│   └── results/             # Test results output directory
+└── public/                  # Public assets
 ```
 
 
@@ -130,21 +146,71 @@ The system implements role-based access control with different user types:
 - **Bar**: Access to the bar ordering system
 - **Recharge**: Access to manual card recharge functionality
 
+## 📝 Testing Infrastructure
+
+### Unit and Integration Tests
+
+The application includes comprehensive tests for critical components:
+
+```bash
+# Run unit and integration tests
+npm test
+```
+
+Key test files:
+- `src/components/admin/__tests__/CardTopup.test.tsx` - Tests for the card topup component
+- `src/components/bar/__tests__/BarPaymentForm.test.tsx` - Tests for the bar payment form
+- `supabase/functions/__tests__/stripe-webhook.test.ts` - Tests for the Stripe webhook handler
+
+### Load Testing Suite
+
+The project includes a comprehensive load testing suite built with K6 to simulate real-world usage patterns and ensure the system performs well under load.
+
+To run the load tests:
+
+```bash
+# Install K6 if you haven't already
+# https://k6.io/docs/get-started/installation/
+
+# Navigate to the load-tests directory
+cd load-tests
+
+# Run individual test scenarios
+k6 run --out json=results/bar-results.json bar-operations.js
+k6 run --out json=results/card-results.json card-recharges.js
+k6 run --out json=results/nfc-results.json nfc-operations.js
+k6 run --out json=results/mixed-results.json mixed-operations.js
+
+# Clean up test data after load testing
+k6 run cleanup-test-data.js
+```
+
+#### Load Test Scenarios
+
+The load testing suite includes the following scenarios:
+
+1. **Bar Operations** (`bar-operations.js`): Simulates bartenders processing orders
+2. **Card Recharges** (`card-recharges.js`): Simulates the recharge flow for prepaid cards
+3. **NFC Operations** (`nfc-operations.js`): Tests NFC card scanning performance
+4. **Mixed Operations** (`mixed-operations.js`): Simulates real-world mixed workloads
+
+Each test scenario includes progressive load patterns:
+- **Low Load**: Gradual ramp-up to a small number of concurrent users
+- **Medium Load**: Moderate traffic simulation
+- **High Load**: Heavy traffic to test system boundaries
+- **Extreme Load**: Stress testing to identify breaking points
+
+#### Key Load Testing Features
+
+- **Rate Limit Handling**: All tests include exponential backoff retry logic for API rate limits
+- **Realistic Patterns**: Simulates realistic user behavior with weighted distributions
+- **Comprehensive Metrics**: Tracks response times, success rates, and error patterns
+- **Test Data Cleanup**: Utilities to clean up test data after load testing
+- **Custom Metrics**: Custom K6 metrics for detailed performance analysis
+
 ## 📝 Testing Rate Limit Handling
 
 The application includes comprehensive rate limit handling with exponential backoff for all API operations. This ensures that the application can gracefully handle rate limits imposed by the Supabase API.
-
-### How to test rate limit handling
-
-1. Install dependencies:
-   ```
-   npm install
-   ```
-
-2. Run the tests:
-   ```
-   npm test
-   ```
 
 ### Implementation of rate limit tests
 
@@ -211,23 +277,6 @@ The following operations include rate limit handling with exponential backoff:
 - **Stripe webhook handling**: When processing Stripe events
 - **Product operations**: When creating or updating multiple products
 
-### Common issues and fixes
-
-If you encounter issues when testing rate limit handling:
-
-1. **Timer advancement**: Make sure to use `vi.advanceTimersByTime()` with enough time to trigger the retry logic
-2. **Mock implementation**: Your mocks should track call counts properly
-3. **Component rendering**: Use `act()` when updating component state in tests
-4. **Browser APIs**: Mock browser APIs that aren't available in the test environment
-
-### Testing in real environments
-
-For manual testing:
-
-1. **Concurrent requests**: Open multiple browser tabs and perform the same operation simultaneously
-2. **Network throttling**: Use browser dev tools to simulate slow network connections
-3. **Supabase limits**: Be aware of actual Supabase rate limits in production environments
-
 ## 🤝 Contributing
 
 Please read our contribution guidelines before submitting pull requests.
@@ -241,3 +290,4 @@ Please read our contribution guidelines before submitting pull requests.
 - [Supabase Documentation](https://supabase.io/docs)
 - [Stripe Documentation](https://stripe.com/docs)
 - [React Documentation](https://reactjs.org/docs)
+- [K6 Documentation](https://k6.io/docs/)
