@@ -1,22 +1,36 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
+/// <reference types="vitest" />
+/// <reference types="vite/client" />
+
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react-swc';
+import { resolve } from 'path';
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-  },
-  plugins: [
-    react(),
-    mode === 'development' &&
-    componentTagger(),
-  ].filter(Boolean),
+export default defineConfig({
+  plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': resolve(__dirname, './src'),
     },
   },
-}));
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
+    testTimeout: 60000, // Increase timeout to 60 seconds for rate limit tests
+    include: ['**/__tests__/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    deps: {
+      optimizer: {
+        web: {
+          include: [
+            '@radix-ui/**',
+            'class-variance-authority',
+            'clsx',
+            'tailwind-merge',
+          ]
+        }
+      }
+    },
+    css: false,
+  },
+}); 

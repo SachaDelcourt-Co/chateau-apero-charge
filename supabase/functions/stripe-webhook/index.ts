@@ -52,32 +52,67 @@ serve(async (req) => {
 
       console.log(`Processing payment for card ${cardId} with amount ${amount}`);
 
-      // Check if this transaction has already been processed
-      const { data: existingPayment, error: existingError } = await supabaseClient
-        .from('paiements')
-        .select('id')
-        .eq('stripe_session_id', sessionId)
-        .maybeSingle();
+      // Rate limit handling variables
+      const maxRetries = 5;
+      let retryCount = 0;
 
-      if (existingPayment) {
-        console.log(`Transaction ${sessionId} has already been processed. Skipping.`);
-        return new Response(JSON.stringify({ 
-          received: true,
-          cardId: cardId,
-          status: 'already_processed'
-        }), { status: 200 });
-      }
+      // Function to perform database operations with retry
+      const performDatabaseOperationWithRetry = async (operation: () => Promise<any>) => {
+        while (retryCount <= maxRetries) {
+          try {
+            return await operation();
+          } catch (error) {
+            // Check if it's a rate limit error
+            if (error.code === '429' || error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
+              retryCount++;
+              
+              // If we've exhausted our retries, throw the error
+              if (retryCount > maxRetries) {
+                console.error(`Rate limit hit, max retries (${maxRetries}) exceeded.`);
+                throw error;
+              }
+              
+              // Calculate backoff time (exponential with jitter)
+              const sleepTime = Math.min(Math.pow(2, retryCount) * 500 + Math.random() * 500, 10000);
+              console.log(`Rate limit hit, retrying in ${sleepTime}ms (attempt ${retryCount}/${maxRetries})...`);
+              
+              // Sleep for the backoff time
+              await new Promise(resolve => setTimeout(resolve, sleepTime));
+            } else {
+              // For non-rate-limit errors, throw immediately
+              throw error;
+            }
+          }
+        }
+      };
 
-      // Get the current card details
-      const { data: cardData, error: cardError } = await supabaseClient
-        .from('table_cards')
-        .select('amount')
-        .eq('id', cardId)
-        .single();
+      // Check if this transaction has already been processed with retry
+      const existingPayment = await performDatabaseOperationWithRetry(async () => {
+        const { data, error } = await supabaseClient
+          .from('paiements')
+          .select('id')
+          .eq('stripe_session_id', sessionId)
+          .maybeSingle();
+          
+        if (error) throw error;
+        return data;
+      });
 
-      if (cardError || !cardData) {
-        console.error('Error fetching card data:', cardError);
-        return new Response(`Error fetching card data: ${cardError?.message || 'Card not found'}`, { status: 400 });
+      // Get the current card details with retry
+      const cardData = await performDatabaseOperationWithRetry(async () => {
+        const { data, error } = await supabaseClient
+          .from('table_cards')
+          .select('amount')
+          .eq('id', cardId)
+          .single();
+          
+        if (error) throw error;
+        return data;
+      });
+
+      if (!cardData) {
+        console.error('Error fetching card data: Card not found');
+        return new Response('Error fetching card data: Card not found', { status: 400 });
       }
 
       // Calculate new amount - ensure proper addition with toFixed(2)
@@ -88,33 +123,31 @@ serve(async (req) => {
 
       console.log(`Card ${cardId} current balance: ${currentAmount}, recharge: ${rechargeAmount}, new balance: ${newAmount}`);
 
-      // Update the card amount
-      const { error: updateError } = await supabaseClient
-        .from('table_cards')
-        .update({ amount: newAmount })
-        .eq('id', cardId);
-
-      if (updateError) {
-        console.error('Error updating card amount:', updateError);
-        return new Response(`Error updating card amount: ${updateError.message}`, { status: 400 });
-      }
+      // Update the card amount with retry
+      await performDatabaseOperationWithRetry(async () => {
+        const { error } = await supabaseClient
+          .from('table_cards')
+          .update({ amount: newAmount })
+          .eq('id', cardId);
+          
+        if (error) throw error;
+      });
 
       console.log(`Successfully updated card ${cardId} balance to ${newAmount}`);
 
-      // Log the payment in the paiements table
-      const { error: paymentError } = await supabaseClient
-        .from('paiements')
-        .insert({
-          id_card: cardId,
-          amount: rechargeAmount,
-          paid_by_card: true,
-          stripe_session_id: session.id
-        });
-
-      if (paymentError) {
-        console.error('Error logging payment:', paymentError);
-        // We don't return an error here because the card has been successfully recharged
-      }
+      // Log the payment in the paiements table with retry
+      await performDatabaseOperationWithRetry(async () => {
+        const { error } = await supabaseClient
+          .from('paiements')
+          .insert({
+            id_card: cardId,
+            amount: rechargeAmount,
+            paid_by_card: true,
+            stripe_session_id: session.id
+          });
+          
+        if (error) throw error;
+      });
 
       return new Response(JSON.stringify({ 
         received: true,
