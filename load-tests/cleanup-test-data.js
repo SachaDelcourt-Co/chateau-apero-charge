@@ -14,7 +14,7 @@ const BASE_URL = 'https://dqghjrpeoyqvkvoivfnz.supabase.co';
 const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y';
 
 // Define patterns for identifying test data
-const TEST_CARD_PATTERNS = ['simulated-card-%', 'nfc-card-%', 'nfc-test-%'];
+const TEST_CARD_PATTERNS = ['simulated-card-%', 'nfc-card-%', 'nfc-test-%', 'simulated-card-_', 'nfc-test-_'];
 
 // k6 options - one user, one iteration
 export const options = {
@@ -132,7 +132,33 @@ export default function() {
   // 2. Get all test card IDs
   const allCardIds = [];
   
-  // Try both tables to find all test cards
+  // Try to get all cards first to check for patterns manually
+  const allCardsResponse = rateLimitedRequest('GET', `${BASE_URL}/rest/v1/table_cards?select=id`, null, {
+    headers: authHeader,
+    name: 'get_all_cards'
+  });
+  
+  if (allCardsResponse.status === 200) {
+    const allCards = allCardsResponse.json();
+    console.log(`Total cards in the database: ${allCards.length}`);
+    
+    // Identify test cards by checking patterns
+    const testCards = allCards.filter(card => 
+      card.id.includes('simulated') || 
+      card.id.includes('nfc-test') || 
+      card.id.includes('test') ||
+      card.id.match(/^simulated-card-\d+$/) ||
+      card.id.match(/^nfc-test-\d+$/)
+    );
+    
+    console.log(`Found ${testCards.length} test cards by pattern matching`);
+    testCards.forEach(card => {
+      allCardIds.push({ id: card.id, table: 'table_cards' });
+      console.log(`-> Test card identified: ${card.id}`);
+    });
+  }
+  
+  // Also try the pattern-based search as before
   TEST_CARD_PATTERNS.forEach(pattern => {
     // Check table_cards
     const tableCardsUrl = `${BASE_URL}/rest/v1/table_cards?id=like.${pattern}&select=id`;
@@ -144,7 +170,13 @@ export default function() {
     if (tableCardsResponse.status === 200) {
       const tableCards = tableCardsResponse.json();
       console.log(`Found ${tableCards.length} test cards in table_cards matching ${pattern}`);
-      tableCards.forEach(card => allCardIds.push({ id: card.id, table: 'table_cards' }));
+      tableCards.forEach(card => {
+        // Check if this card ID is already in our list
+        if (!allCardIds.some(c => c.id === card.id)) {
+          allCardIds.push({ id: card.id, table: 'table_cards' });
+          console.log(`-> Added test card: ${card.id}`);
+        }
+      });
     }
     
     // Check cards backup table
@@ -157,12 +189,28 @@ export default function() {
     if (cardsResponse.status === 200) {
       const cards = cardsResponse.json();
       console.log(`Found ${cards.length} test cards in cards matching ${pattern}`);
-      cards.forEach(card => allCardIds.push({ id: card.id, table: 'cards' }));
+      cards.forEach(card => {
+        // Check if this card ID is already in our list
+        if (!allCardIds.some(c => c.id === card.id)) {
+          allCardIds.push({ id: card.id, table: 'cards' });
+          console.log(`-> Added test card: ${card.id}`);
+        }
+      });
     }
     
     // Sleep to avoid rate limits
     sleep(1);
   });
+  
+  // Also try to find cards created by the mixed-operations.js test directly by ID format
+  for (let i = 1; i <= 100; i++) {
+    const cardId = `simulated-card-${i}`;
+    // Check if this card ID is already in our list
+    if (!allCardIds.some(c => c.id === cardId)) {
+      allCardIds.push({ id: cardId, table: 'table_cards' });
+      console.log(`-> Added potential test card: ${cardId}`);
+    }
+  }
   
   console.log(`Total test cards found: ${allCardIds.length}`);
   
@@ -175,7 +223,27 @@ export default function() {
   processBatch(allCardIds, (cardInfo) => {
     console.log(`Cleaning up data for card: ${cardInfo.id}`);
     
-    // 3.1 Delete orders
+    // 3.1 Delete card transactions
+    const transactionsUrl = `${BASE_URL}/rest/v1/card_transactions?card_id=eq.${cardInfo.id}`;
+    const deleteTransactionsResponse = rateLimitedRequest('DELETE', transactionsUrl, null, {
+      headers: authHeader,
+      name: 'delete_transactions'
+    });
+    
+    console.log(`Deleted transactions for card ${cardInfo.id}: ${deleteTransactionsResponse.status}`);
+    sleep(0.5);
+    
+    // 3.2 Delete payments
+    const paymentsUrl = `${BASE_URL}/rest/v1/paiements?id_card=eq.${cardInfo.id}`;
+    const deletePaymentsResponse = rateLimitedRequest('DELETE', paymentsUrl, null, {
+      headers: authHeader,
+      name: 'delete_payments'
+    });
+    
+    console.log(`Deleted payments for card ${cardInfo.id}: ${deletePaymentsResponse.status}`);
+    sleep(0.5);
+    
+    // 3.3 Delete orders
     if (cardInfo.table === 'table_cards') {
       // First get order IDs to delete their items
       const ordersUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardInfo.id}&select=id`;
@@ -222,7 +290,7 @@ export default function() {
     
     sleep(1);
     
-    // 3.2 Delete the card
+    // 3.4 Delete the card
     const cardUrl = `${BASE_URL}/rest/v1/${cardInfo.table}?id=eq.${cardInfo.id}`;
     const deleteCardResponse = rateLimitedRequest('DELETE', cardUrl, null, {
       headers: authHeader,
@@ -230,7 +298,17 @@ export default function() {
     });
     
     console.log(`Deleted card ${cardInfo.id} from ${cardInfo.table}: ${deleteCardResponse.status}`);
-  }, 5); // Process 5 cards at a time
+    
+    // Also try to delete from the other table just to be sure
+    const otherTable = cardInfo.table === 'table_cards' ? 'cards' : 'table_cards';
+    const otherCardUrl = `${BASE_URL}/rest/v1/${otherTable}?id=eq.${cardInfo.id}`;
+    const deleteOtherCardResponse = rateLimitedRequest('DELETE', otherCardUrl, null, {
+      headers: authHeader,
+      name: 'delete_other_card'
+    });
+    
+    console.log(`Attempted to delete card ${cardInfo.id} from ${otherTable}: ${deleteOtherCardResponse.status}`);
+  }, 3); // Process 3 cards at a time to be more careful
   
   console.log('Cleanup completed!');
 } 
