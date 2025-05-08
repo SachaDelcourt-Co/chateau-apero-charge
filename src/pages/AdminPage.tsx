@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,22 +47,22 @@ const AdminPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="w-full max-w-6xl mx-auto p-4">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 w-full">
             <ChateauLogo />
             {email && (
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 mt-2 sm:mt-0">
                 Connecté en tant que: <span className="font-medium">{email}</span>
               </div>
             )}
           </div>
-          <div className="flex items-center space-x-3">
-            <Button variant="outline" onClick={goToBarPage}>
-              <Beer className="h-4 w-4 mr-2" />
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={goToBarPage} className="text-xs sm:text-sm">
+              <Beer className="h-4 w-4 mr-1 sm:mr-2" />
               Accès Bar
             </Button>
-            <Button variant="destructive" onClick={handleLogout}>
-              <LogOut className="h-4 w-4 mr-2" />
+            <Button variant="destructive" onClick={handleLogout} className="text-xs sm:text-sm">
+              <LogOut className="h-4 w-4 mr-1 sm:mr-2" />
               Déconnexion
             </Button>
           </div>
