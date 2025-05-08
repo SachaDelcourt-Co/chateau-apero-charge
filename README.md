@@ -42,7 +42,7 @@ This application provides a complete solution for managing cashless payments at 
 
 ```bash
 # Clone the repository
-git clone [repository-url]
+git clone git@github.com:SachaDelcourt-Co/chateau-apero-charge.git
 
 # Navigate to the project directory
 cd chateau-apero-charge
@@ -55,20 +55,25 @@ npm run dev
 ```
 
 ## 🏗️ Project Structure
-├── src/ # Source code
-│ ├── api/ # API integrations
-│ ├── assets/ # Static assets
-│ ├── components/ # Reusable UI components
-│ ├── hooks/ # Custom React hooks
-│ │   └── use-nfc.tsx # NFC card scanning hook
-│ ├── lib/ # Utility functions and helpers
-│ ├── pages/ # Application pages
-│ └── integrations/ # Third-party integrations
-├── supabase/ # Supabase configuration and edge functions
-│ ├── functions/ # Serverless edge functions
-│ │ ├── create-checkout-session/ # Stripe checkout creation
-│ │ └── stripe-webhook/ # Stripe webhook handler
-└── public/ # Public assets
+## 🏗️ Project Structure
+
+```
+├── src/                     # Source code
+│   ├── api/                # API integrations
+│   ├── assets/             # Static assets
+│   ├── components/         # Reusable UI components
+│   ├── hooks/              # Custom React hooks
+│   │   └── use-nfc.tsx     # NFC card scanning hook
+│   ├── lib/                # Utility functions and helpers
+│   ├── pages/              # Application pages
+│   └── integrations/       # Third-party integrations
+├── supabase/               # Supabase configuration and edge functions
+│   ├── functions/          # Serverless edge functions
+│   │   ├── create-checkout-session/  # Stripe checkout creation
+│   │   └── stripe-webhook/           # Stripe webhook handler
+└── public/                 # Public assets
+```
+
 
 ## 🔄 User Flows
 
