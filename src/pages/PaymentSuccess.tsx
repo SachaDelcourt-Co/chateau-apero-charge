@@ -23,66 +23,80 @@ const PaymentSuccess: React.FC = () => {
   const MAX_RETRIES = 3;
 
   useEffect(() => {
-    // Get parameters from URL if present
-    const params = new URLSearchParams(location.search);
-    const amountParam = params.get('amount');
-    const cardIdParam = params.get('cardId');
-    
-    // Check multiple possible parameter names for the session ID
-    // Stripe might use 'session_id', 'sessionId', or other variants
-    const sessionIdParam = params.get('session_id') || params.get('sessionId') || params.get('CHECKOUT_SESSION_ID');
-    
-    // Clean up old localStorage entries
-    cleanupLocalStorage();
-    
-    if (amountParam) {
-      setAmount(amountParam);
-    }
-    
-    if (cardIdParam) {
-      setCardId(cardIdParam);
-    }
-
-    // Log the found session ID and URL parameters for debugging
-    console.log('URL parameters:', Object.fromEntries(params.entries()));
-    console.log('Session ID found:', sessionIdParam);
-
-    if (sessionIdParam) {
-      setSessionId(sessionIdParam);
+    // Create an async function inside the effect
+    const processPayment = async () => {
+      // Get parameters from URL if present
+      const params = new URLSearchParams(location.search);
+      const amountParam = params.get('amount');
+      const cardIdParam = params.get('cardId');
       
-      // Check if this session has already been processed
-      const processedTransactions = JSON.parse(localStorage.getItem('processedTransactions') || '[]');
-      const isAlreadyProcessed = processedTransactions.includes(sessionIdParam);
+      // Check multiple possible parameter names for the session ID
+      // Stripe might use 'session_id', 'sessionId', or other variants
+      const sessionIdParam = params.get('session_id') || params.get('sessionId') || params.get('CHECKOUT_SESSION_ID');
       
-      if (isAlreadyProcessed) {
-        console.log(`Transaction ${sessionIdParam} already processed. Skipping balance update.`);
-        toast({
-          title: "Information",
-          description: "Cette transaction a déjà été traitée. Pas de rechargement supplémentaire."
-        });
+      // Clean up old localStorage entries
+      cleanupLocalStorage();
+      
+      if (amountParam) {
+        setAmount(amountParam);
+      }
+      
+      if (cardIdParam) {
+        setCardId(cardIdParam);
+      }
+
+      // Log the found session ID and URL parameters for debugging
+      console.log('URL parameters:', Object.fromEntries(params.entries()));
+      console.log('Session ID found:', sessionIdParam);
+
+      if (sessionIdParam) {
+        setSessionId(sessionIdParam);
         
-        // Still fetch the current card data to display the balance
+        // Check if this session has already been processed
+        const processedTransactions = JSON.parse(localStorage.getItem('processedTransactions') || '[]');
+        const isAlreadyProcessed = processedTransactions.includes(sessionIdParam);
+        
+        if (isAlreadyProcessed) {
+          console.log(`Transaction ${sessionIdParam} already processed. Skipping balance update.`);
+          toast({
+            title: "Information",
+            description: "Cette transaction a déjà été traitée. Pas de rechargement supplémentaire."
+          });
+          
+          // Still fetch the current card data to display the balance
+          if (cardIdParam) {
+            fetchCardData(cardIdParam);
+          }
+        } else {
+          // Si nous avons un ID de session, cela signifie que le paiement a été complété
+          if (cardIdParam && amountParam) {
+            // Mark this session as processed before updating the balance
+            localStorage.setItem(
+              'processedTransactions', 
+              JSON.stringify([...processedTransactions, sessionIdParam])
+            );
+            
+            // Update the balance and get back the new balance
+            const newBalance = await updateCardBalance(cardIdParam, amountParam);
+            
+            // Only fetch card data if the update didn't return a balance (failed)
+            if (newBalance === null) {
+              fetchCardData(cardIdParam);
+            }
+            // Otherwise we already have the latest balance from the update operation
+          }
+        }
+      } else {
+        // If no session ID was found but we have card ID and amount,
+        // attempt to update the balance anyway - the webhook might have already processed it
         if (cardIdParam) {
           fetchCardData(cardIdParam);
         }
-      } else {
-        // Si nous avons un ID de session, cela signifie que le paiement a été complété
-        if (cardIdParam && amountParam) {
-          // Mark this session as processed before updating the balance
-          localStorage.setItem(
-            'processedTransactions', 
-            JSON.stringify([...processedTransactions, sessionIdParam])
-          );
-          updateCardBalance(cardIdParam, amountParam);
-        }
       }
-    } else {
-      // If no session ID was found but we have card ID and amount,
-      // attempt to update the balance anyway - the webhook might have already processed it
-      if (cardIdParam) {
-        fetchCardData(cardIdParam);
-      }
-    }
+    };
+    
+    // Call the async function
+    processPayment();
   }, [location]);
 
   // Fonction pour mettre à jour directement le solde de la carte
@@ -145,13 +159,23 @@ const PaymentSuccess: React.FC = () => {
       });
       localStorage.setItem('completedCardUpdates', JSON.stringify(completedUpdates));
       
-      // Récupérer les données mises à jour
-      fetchCardData(id);
+      // IMPORTANT: Add a delay before fetching updated data to allow consistency
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Manually update the card data with our known new value
+      // instead of immediately fetching possibly stale data
+      setCard({
+        id: id,
+        amount: newAmount,
+        description: currentCard.description
+      });
 
       toast({
         title: "Solde mis à jour",
         description: `Votre carte a été rechargée de ${rechargeAmount}€`,
       });
+      
+      return newAmount; // Return the new amount so we know what it is
     } catch (error) {
       console.error('Erreur lors de la mise à jour du solde:', error);
       toast({
@@ -164,13 +188,27 @@ const PaymentSuccess: React.FC = () => {
       // Clear the ongoing update flag
       localStorage.removeItem('ongoingCardUpdate');
     }
+    
+    return null; // Return null if the update failed
   };
 
-  const fetchCardData = async (id: string) => {
+  const fetchCardData = async (id: string, knownNewBalance = null) => {
     setLoading(true);
     try {
-      // Ajout d'un petit délai pour s'assurer que la mise à jour a été effectuée
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // If we have a known new balance from a recent update, use it directly
+      if (knownNewBalance !== null) {
+        console.log(`Using known new balance: ${knownNewBalance}€ instead of fetching`);
+        // Create a card object with the known balance
+        setCard({
+          id: id,
+          amount: knownNewBalance.toString(),
+          description: card?.description || null
+        });
+        return;
+      }
+
+      // If we don't have a known balance, add a delay before fetching to allow for consistency
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       const cardData = await getTableCardById(id);
       
@@ -204,7 +242,9 @@ const PaymentSuccess: React.FC = () => {
         title: "Rafraîchissement en cours",
         description: "Récupération des données de la carte...",
       });
-      fetchCardData(cardId);
+      
+      // Add a longer delay for manual refresh to ensure we get the latest data
+      setTimeout(() => fetchCardData(cardId), 2000);
     }
   };
 
