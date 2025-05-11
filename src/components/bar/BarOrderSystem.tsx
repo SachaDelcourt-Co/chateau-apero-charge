@@ -8,6 +8,7 @@ import { toast } from '@/hooks/use-toast';
 import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNfc } from '@/hooks/use-nfc';
+import { logger } from '@/lib/logger';
 
 export const BarOrderSystem: React.FC = () => {
   const [products, setProducts] = useState<BarProduct[]>([]);
@@ -23,6 +24,11 @@ export const BarOrderSystem: React.FC = () => {
   const [orderModifiedAfterScan, setOrderModifiedAfterScan] = useState(false);
   // Ref to track previous order items to avoid unnecessary scan stops
   const previousOrderRef = useRef<string>('');
+
+  // Log that the component initialized
+  useEffect(() => {
+    logger.info('BarOrderSystem component initialized');
+  }, []);
 
   // Calculate the total order amount
   const calculateTotal = (): number => {
@@ -205,6 +211,7 @@ export const BarOrderSystem: React.FC = () => {
   const processPayment = async (id: string, total: number) => {
     if (orderItems.length === 0) {
       setErrorMessage("Commande vide. Veuillez ajouter des produits.");
+      logger.warn('Payment attempted with empty order');
       return;
     }
 
@@ -213,45 +220,71 @@ export const BarOrderSystem: React.FC = () => {
     
     // Double check total amount - if it's 0 but we have order items, something is wrong
     if (total === 0 && orderItems.length > 0) {
-      console.error("ERROR: Total amount is 0 but order has items!", orderItems);
+      const error = "ERROR: Total amount is 0 but order has items!";
+      logger.error(error, { orderItems });
+      
       // Calculate directly as a fallback
       total = orderItems.reduce((sum, item) => {
         return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
       }, 0);
-      console.log("Recalculated total as fallback:", total);
+      logger.info('Recalculated total as fallback:', total);
     }
     
     // CRITICAL: Ensure the amount is not zero if we have items
     if (total <= 0 && orderItems.some(item => !item.is_return)) {
-      console.error("CRITICAL ERROR: Total is zero or negative but has non-return items!");
+      const error = "CRITICAL ERROR: Total is zero or negative but has non-return items!";
+      logger.error(error, { 
+        total, 
+        orderItems: orderItems.filter(item => !item.is_return) 
+      });
       setErrorMessage("Erreur de calcul. Le montant total est incorrect.");
       setIsProcessing(false);
       return;
     }
     
-    console.log("Processing payment with EXACT total amount:", total);
+    logger.payment('payment_started', { 
+      cardId: id, 
+      total, 
+      items: orderItems.map(item => ({ 
+        name: item.product_name,
+        price: item.price,
+        quantity: item.quantity,
+        isReturn: item.is_return
+      }))
+    });
 
     try {
       // Check if card exists and has sufficient balance
       const card = await getTableCardById(id.trim());
       
       if (!card) {
-        setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        const errorMsg = "Carte non trouvée. Veuillez vérifier l'ID de la carte.";
+        logger.error('Card not found during payment', { cardId: id });
+        setErrorMessage(errorMsg);
         resetScan("card not found error");
         setIsProcessing(false);
         return;
       }
 
       const cardAmountFloat = parseFloat(card.amount || '0');
+      logger.payment('card_validated', { cardId: id, balance: cardAmountFloat, total });
       
       if (cardAmountFloat < total) {
         // Show toast for insufficient balance - one of the two cases we want to keep
+        const errorMsg = `Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`;
+        logger.payment('insufficient_balance', { 
+          cardId: id, 
+          balance: cardAmountFloat, 
+          required: total,
+          difference: total - cardAmountFloat
+        });
+        
         toast({
           title: "Solde insuffisant",
           description: `La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
           variant: "destructive"
         });
-        setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`);
+        setErrorMessage(errorMsg);
         resetScan("insufficient balance error");
         setIsProcessing(false);
         return;
@@ -264,19 +297,26 @@ export const BarOrderSystem: React.FC = () => {
         items: JSON.parse(JSON.stringify(orderItems))
       };
 
-      console.log("Sending order with total:", total);
+      logger.payment('submitting_order', { cardId: id, total, itemCount: orderItems.length });
 
       const orderResult = await createBarOrder(orderData);
 
       if (orderResult.success) {
         const newBalance = (cardAmountFloat - total).toFixed(2);
+        logger.payment('payment_success', { 
+          cardId: id, 
+          previousBalance: cardAmountFloat,
+          amount: total,
+          newBalance: parseFloat(newBalance),
+          orderId: orderResult.orderId
+        });
         
         // Remember if we were scanning
         const wasScanning = isScanning;
         
         // First, completely stop scanning if active
         if (wasScanning) {
-          console.log("Completely stopping NFC scanner before reset");
+          logger.nfc("Completely stopping NFC scanner before reset");
           stopScan();
         }
         
@@ -294,18 +334,20 @@ export const BarOrderSystem: React.FC = () => {
         
         // Restart scanning after a sufficient delay if it was active
         if (wasScanning) {
-          console.log("Will restart scanner with clean state after delay");
+          logger.nfc("Will restart scanner with clean state after delay");
           setTimeout(() => {
-            console.log("Restarting NFC scanner with fresh state");
+            logger.nfc("Restarting NFC scanner with fresh state");
             startScan();
           }, 800); // Slightly longer delay for better cleanup
         }
       } else {
-        setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+        const errorMsg = "Erreur lors du traitement de la commande. Veuillez réessayer.";
+        logger.error('Order processing failed', { cardId: id, total, error: orderResult });
+        setErrorMessage(errorMsg);
         resetScan("order processing error");
       }
     } catch (error) {
-      console.error('Error processing payment:', error);
+      logger.error('Error processing payment:', error, { cardId: id, total });
       setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
       resetScan("payment processing error");
     } finally {

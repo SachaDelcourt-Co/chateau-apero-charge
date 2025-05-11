@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { toast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 
 interface UseNfcOptions {
   onScan?: (id: string) => void;
@@ -18,9 +19,9 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   useEffect(() => {
     // Add more detailed logging for debugging
     const hasNDEFReader = 'NDEFReader' in window;
-    console.log('[NFC Debug] NDEFReader in window:', hasNDEFReader);
-    console.log('[NFC Debug] Window object:', Object.keys(window).filter(k => k.includes('NFC') || k.includes('NDEF')));
-    console.log('[NFC Debug] Current environment:', {
+    logger.nfc('NDEFReader in window:', hasNDEFReader);
+    logger.nfc('Window object:', Object.keys(window).filter(k => k.includes('NFC') || k.includes('NDEF')));
+    logger.nfc('Current environment:', {
       isSecureContext: window.isSecureContext,
       userAgent: navigator.userAgent,
       platform: navigator.platform
@@ -30,7 +31,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
     
     // If not supported, provide some context why
     if (!hasNDEFReader) {
-      console.warn('[NFC Debug] Web NFC API is not supported in this browser. Chrome for Android (version 89+) over HTTPS is required.');
+      logger.warn('Web NFC API is not supported in this browser. Chrome for Android (version 89+) over HTTPS is required.');
     }
   }, []);
   
@@ -43,15 +44,15 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
 
   // Internal function to stop scanning to avoid code duplication
   const stopScanInternal = () => {
-    console.log('[NFC Debug] stopScanInternal called');
+    logger.nfc('stopScanInternal called');
     
     // Safely abort the controller if it exists
     if (nfcAbortController.current) {
       try {
         nfcAbortController.current.abort();
-        console.log('[NFC Debug] AbortController aborted successfully');
+        logger.nfc('AbortController aborted successfully');
       } catch (error) {
-        console.error('[NFC Debug] Error aborting controller:', error);
+        logger.error('Error aborting NFC controller:', error);
       }
       nfcAbortController.current = null;
     }
@@ -89,16 +90,16 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   };
   
   const startScan = useCallback(async () => {
-    console.log('[NFC Debug] startScan called, isSupported:', isSupported);
+    logger.nfc('startScan called, isSupported:', isSupported);
     
     // Log the current total amount if the function is provided
     if (getTotalAmount) {
       const currentTotal = getTotalAmount();
-      console.log('[NFC Debug] Current total amount:', currentTotal);
+      logger.nfc('Current total amount:', currentTotal);
     }
     
     if (!isSupported) {
-      console.warn('[NFC Debug] Cannot start NFC scan - API not supported');
+      logger.warn('Cannot start NFC scan - API not supported');
       toast({
         title: "NFC non supporté",
         description: "Votre navigateur ne supporte pas la lecture NFC. Utilisez Chrome sur Android en HTTPS.",
@@ -118,25 +119,25 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       nfcAbortController.current = new AbortController();
       const signal = nfcAbortController.current.signal;
       
-      console.log('[NFC Debug] Creating NDEFReader instance');
+      logger.nfc('Creating NDEFReader instance');
       // @ts-ignore - TypeScript might not have NDEFReader in its types yet
       const reader = new NDEFReader();
       nfcReaderRef.current = reader;
       
       // Add error listener first before starting the scan
       reader.addEventListener("error", (error: any) => {
-        console.error("[NFC Debug] NFC reading error:", error);
+        logger.error("NFC reading error:", error);
         stopScanInternal();
       });
       
       // Add reading listener
       reader.addEventListener("reading", ({ message, serialNumber }: any) => {
         try {
-          console.log('[NFC Debug] NFC Reading event triggered', { serialNumber });
+          logger.nfc('Reading event triggered', { serialNumber });
           
           // First priority: Try to read from NDEF message records
           if (message && message.records) {
-            console.log("[NFC Debug] NFC message records:", message.records);
+            logger.nfc("Message records:", message.records);
             
             for (const record of message.records) {
               let extractedId = null;
@@ -152,13 +153,13 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                   text = text.substring(1);
                 }
                 
-                console.log("[NFC Debug] Decoded text from NFC:", text);
+                logger.nfc("Decoded text from NFC:", text);
                 extractedId = extractIdFromText(text);
               } 
               else if (record.recordType === "url") {
                 const textDecoder = new TextDecoder();
                 const url = textDecoder.decode(record.data);
-                console.log("[NFC Debug] Decoded URL from NFC:", url);
+                logger.nfc("Decoded URL from NFC:", url);
                 
                 // Try to extract ID from URL (it might be in the path or as a parameter)
                 const urlMatch = url.match(/[a-zA-Z0-9]{8}/);
@@ -170,13 +171,13 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 // For unknown types, try to decode as plain text
                 const textDecoder = new TextDecoder();
                 const data = textDecoder.decode(record.data);
-                console.log("[NFC Debug] Decoded unknown data from NFC:", data);
+                logger.nfc("Decoded unknown data from NFC:", data);
                 extractedId = extractIdFromText(data);
               }
               
               // If we found a valid ID, use it
               if (extractedId && (!validateId || validateId(extractedId))) {
-                console.log("[NFC Debug] Valid ID extracted from NFC payload:", extractedId);
+                logger.nfc("Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 
                 // Temporarily pause scanning but don't stop completely
@@ -185,14 +186,20 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 if (currentController) {
                   try {
                     currentController.abort();
-                    console.log("[NFC Debug] NFC scanning temporarily paused after card read");
+                    logger.nfc("NFC scanning temporarily paused after card read");
                   } catch (error) {
-                    console.error('[NFC Debug] Error pausing NFC scan:', error);
+                    logger.error('Error pausing NFC scan:', error);
                   }
                 }
                 
                 // Call onScan with the extracted ID if provided
                 if (onScan) {
+                  // Log the payment attempt
+                  logger.payment('nfc_scan_payment_attempt', {
+                    cardId: extractedId,
+                    total: getTotalAmount ? getTotalAmount() : 'unknown'
+                  });
+                  
                   onScan(extractedId);
                 }
                 
@@ -201,7 +208,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                   try {
                     // Only restart if we're still in scanning mode
                     if (isScanning) {
-                      console.log("[NFC Debug] Restarting scan after card read");
+                      logger.nfc("Restarting scan after card read");
                       
                       // IMPORTANT: Stop completely first to ensure proper cleanup
                       stopScanInternal();
@@ -219,17 +226,17 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                       
                       // Add minimal error handler
                       newReader.addEventListener("error", (err: any) => {
-                        console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                        logger.error("NFC reading error in restarted scan:", err);
                         stopScanInternal();
                       });
                       
                       // Start the scan with the fresh reader
                       await newReader.scan({ signal });
                       setIsScanning(true);
-                      console.log('[NFC Debug] NFC scanning successfully restarted');
+                      logger.nfc('NFC scanning successfully restarted');
                     }
                   } catch (error) {
-                    console.error("[NFC Debug] Error restarting NFC scan:", error);
+                    logger.error("Error restarting NFC scan:", error);
                     stopScanInternal(); // Ensure we clean up
                   }
                 }, 2000); // Wait 2 seconds before restarting scan
@@ -241,11 +248,11 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
           
           // Second priority: Try with serialNumber as fallback
           if (serialNumber) {
-            console.log("[NFC Debug] NFC serial number:", serialNumber);
+            logger.nfc("NFC serial number:", serialNumber);
             // Try to extract ID from serial number
             const id = serialNumber.substring(0, 8);
             if (!validateId || validateId(id)) {
-              console.log("[NFC Debug] Using serial number as ID:", id);
+              logger.nfc("Using serial number as ID:", id);
               setLastScannedId(id);
               
               // Temporarily pause scanning but don't stop completely
@@ -254,10 +261,18 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               if (currentController) {
                 try {
                   currentController.abort();
-                  console.log("[NFC Debug] NFC scanning temporarily paused after card read");
+                  logger.nfc("NFC scanning temporarily paused after card read");
                 } catch (error) {
-                  console.error('[NFC Debug] Error pausing NFC scan:', error);
+                  logger.error('Error pausing NFC scan:', error);
                 }
+              }
+              
+              // Log the payment attempt
+              if (onScan) {
+                logger.payment('nfc_serial_payment_attempt', {
+                  cardId: id,
+                  total: getTotalAmount ? getTotalAmount() : 'unknown'
+                });
               }
               
               // Call onScan with the ID if provided
@@ -270,7 +285,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 try {
                   // Only restart if we're still in scanning mode
                   if (isScanning) {
-                    console.log("[NFC Debug] Restarting scan after card read");
+                    logger.nfc("Restarting scan after card read");
                     
                     // IMPORTANT: Stop completely first to ensure proper cleanup
                     stopScanInternal();
@@ -288,17 +303,17 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                     
                     // Add minimal error handler
                     newReader.addEventListener("error", (err: any) => {
-                      console.error("[NFC Debug] NFC reading error in restarted scan:", err);
+                      logger.error("NFC reading error in restarted scan:", err);
                       stopScanInternal();
                     });
                     
                     // Start the scan with the fresh reader
                     await newReader.scan({ signal });
                     setIsScanning(true);
-                    console.log('[NFC Debug] NFC scanning successfully restarted');
+                    logger.nfc('NFC scanning successfully restarted');
                   }
                 } catch (error) {
-                  console.error("[NFC Debug] Error restarting NFC scan:", error);
+                  logger.error("Error restarting NFC scan:", error);
                   stopScanInternal(); // Ensure we clean up
                 }
               }, 2000); // Wait 2 seconds before restarting scan
@@ -308,10 +323,10 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
           }
           
           // If we made it here, we couldn't find a valid ID
-          console.warn("[NFC Debug] No valid ID found in NFC tag");
+          logger.warn("No valid ID found in NFC tag");
           throw new Error("Format de carte non valide");
         } catch (error) {
-          console.error("[NFC Debug] Error reading NFC card:", error);
+          logger.error("Error reading NFC card:", error);
           toast({
             title: "Erreur de lecture",
             description: "La carte n'est pas au format attendu",
@@ -320,23 +335,23 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
         }
       });
       
-      console.log('[NFC Debug] Calling reader.scan() with signal');
+      logger.nfc('Calling reader.scan() with signal');
       // Now start the scan after setting up listeners
       await reader.scan({ signal });
       setIsScanning(true);
       
-      console.log('[NFC Debug] NFC scan started successfully');
+      logger.nfc('NFC scan started successfully');
       
       return true;
     } catch (error) {
-      console.error("[NFC Debug] Error starting NFC scan:", error);
+      logger.error("Error starting NFC scan:", error);
       stopScanInternal();
       
       // Provide user feedback
       if ((error as Error)?.message?.includes("aborted")) {
-        console.log("[NFC Debug] Scan was aborted by user or system");
+        logger.nfc("Scan was aborted by user or system");
       } else {
-        console.error("[NFC Debug] NFC error:", (error as Error)?.message);
+        logger.error("NFC error:", (error as Error)?.message);
       }
       
       return false;
@@ -344,7 +359,7 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   }, [isSupported, onScan, validateId, getTotalAmount]); // Added getTotalAmount to dependencies
   
   const stopScan = useCallback(() => {
-    console.log('[NFC Debug] stopScan called by user');
+    logger.nfc('stopScan called by user');
     stopScanInternal();
     return true;
   }, []);
