@@ -194,11 +194,20 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 
                 // Call onScan with the extracted ID if provided
                 if (onScan) {
-                  // Log the payment attempt
-                  logger.payment('nfc_scan_payment_attempt', {
-                    cardId: extractedId,
-                    total: getTotalAmount ? getTotalAmount() : 'unknown'
-                  });
+                  // Check if we're in a payment or recharge context based on the total amount
+                  if (getTotalAmount) {
+                    // Payment context
+                    logger.payment('nfc_scan_payment_attempt', {
+                      cardId: extractedId,
+                      total: getTotalAmount() || 'unknown'
+                    });
+                  } else {
+                    // Likely a recharge context if no total amount function is provided
+                    logger.recharge('recharge_scan_attempt', {
+                      cardId: extractedId,
+                      timestamp: new Date().toISOString()
+                    });
+                  }
                   
                   onScan(extractedId);
                 }

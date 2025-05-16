@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CreditCard, CheckCircle, Scan, Info } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Scan, Info, Check } from "lucide-react";
 import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useNfc } from '@/hooks/use-nfc';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { logger } from '@/lib/logger';
 
 interface CardTopupProps {
   onSuccess?: () => void;
@@ -275,6 +276,190 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     }
   };
 
+  // Reset the success message after 3 seconds
+  useEffect(() => {
+    let timer: number;
+    if (success) {
+      timer = window.setTimeout(() => {
+        setSuccess(false);
+      }, 3000);
+    }
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [success]);
+  
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      // Stop scanning if active when component unmounts
+      if (isScanning) {
+        stopScan();
+      }
+    };
+  }, [isScanning, stopScan]);
+
+  // Format input to allow only numbers and a decimal point
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    
+    // Only allow numbers and a single decimal point
+    const regex = /^(\d+)?\.?(\d{0,2})?$/;
+    if (regex.test(value) || value === '') {
+      setAmount(value);
+    }
+  };
+
+  // Handle card ID input changes
+  const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const id = e.target.value;
+    setCardId(id);
+    
+    // Auto-fetch card info if ID is 8 characters
+    if (id.length === 8) {
+      fetchCardInfo(id);
+    } else {
+      setCurrentAmount(null);
+    }
+  };
+
+  // Fetch card information function
+  const fetchCardInfo = useCallback(async (id: string) => {
+    if (!id || id.length !== 8) return;
+    
+    setIsLoading(true);
+    
+    try {
+      logger.recharge('recharge_card_validated', { cardId: id });
+      
+      // Get card information from the database
+      const card = await getTableCardById(id);
+      
+      if (!card) {
+        toast({
+          title: "Carte non trouvée",
+          description: "Aucune carte avec cet identifiant n'a été trouvée.",
+          variant: "destructive"
+        });
+        setCurrentAmount(null);
+        logger.recharge('recharge_card_validated', { 
+          cardId: id, 
+          success: false,
+          error: 'Card not found'
+        });
+      } else {
+        setCurrentAmount(card.amount || '0');
+        logger.recharge('recharge_card_validated', { 
+          cardId: id, 
+          currentBalance: card.amount,
+          success: true
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching card:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de récupérer les informations de la carte.",
+        variant: "destructive"
+      });
+      setCurrentAmount(null);
+      logger.recharge('recharge_card_validated', { 
+        cardId: id, 
+        success: false,
+        error: String(error)
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Process the topup
+  const processTopup = async () => {
+    if (!cardId || cardId.length !== 8) {
+      toast({
+        title: "ID de carte invalide",
+        description: "Veuillez saisir un ID de carte valide (8 caractères).",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({
+        title: "Montant invalide",
+        description: "Veuillez saisir un montant valide supérieur à 0.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Log the start of the topup process
+      logger.recharge('recharge_topup_attempt', {
+        cardId,
+        amount: parseFloat(amount),
+        currentBalance: currentAmount
+      });
+      
+      // Calculate new amount
+      const amountFloat = parseFloat(amount);
+      const currentAmountFloat = parseFloat(currentAmount || '0');
+      const newAmount = (currentAmountFloat + amountFloat).toFixed(2);
+      
+      // Get the card first to verify it exists
+      const card = await getTableCardById(cardId);
+      
+      if (!card) {
+        throw new Error("Card not found");
+      }
+      
+      // Update the card balance
+      const updateResult = await updateTableCardAmount(cardId, newAmount);
+      
+      if (!updateResult) {
+        throw new Error("Failed to update card balance");
+      }
+      
+      // Show success message
+      setSuccess(true);
+      setCurrentAmount(newAmount);
+      
+      toast({
+        title: "Recharge réussie",
+        description: `La carte a été rechargée de ${amount}€. Nouveau solde: ${newAmount}€`,
+      });
+      
+      // Log the successful recharge
+      logger.recharge('recharge_success', {
+        cardId,
+        amount: amountFloat,
+        previousBalance: currentAmountFloat,
+        newBalance: parseFloat(newAmount)
+      });
+      
+      // Reset amount field
+      setAmount('');
+    } catch (error) {
+      console.error('Error processing topup:', error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur est survenue lors de la recharge de la carte.",
+        variant: "destructive"
+      });
+      
+      // Log the error
+      logger.recharge('recharge_error', {
+        cardId,
+        amount: parseFloat(amount),
+        error: String(error)
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <Card>
       <CardContent className="pt-6">
@@ -294,7 +479,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
             <Button onClick={handleReset}>Recharger une autre carte</Button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={processTopup} className="space-y-4">
             {/* NFC Scan Button - Prominent placement */}
             {isSupported !== null && (
               <div className="flex justify-center mb-4">
@@ -327,10 +512,11 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                 <Input
                   id="card-id"
                   value={cardId}
-                  onChange={(e) => setCardId(e.target.value)}
+                  onChange={handleCardIdChange}
                   placeholder="Entrez le numéro de la carte"
                   className="pl-10"
                   disabled={isLoading}
+                  maxLength={8}
                 />
               </div>
               <div className="flex justify-between items-center mt-1">
@@ -373,9 +559,9 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                 step="0.01"
                 min="0"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={handleAmountChange}
                 placeholder="Montant à recharger"
-                disabled={isLoading}
+                disabled={isLoading || !cardId}
               />
             </div>
             
@@ -399,15 +585,18 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading || !cardInfo}
+              disabled={isLoading || !cardInfo || !amount || parseFloat(amount) <= 0}
             >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Chargement...
+                  Traitement...
                 </>
               ) : (
-                "Recharger la carte"
+                <>
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Recharger la carte
+                </>
               )}
             </Button>
           </form>

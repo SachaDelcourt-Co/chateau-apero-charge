@@ -36,6 +36,17 @@ export type PaymentEventType =
   | 'cash_transaction_insufficient_funds'
   | 'cash_transaction_success';
 
+// Define recharge event types
+export type RechargeEventType =
+  | 'recharge_started'
+  | 'recharge_card_validated'
+  | 'recharge_scan_attempt'
+  | 'recharge_success'
+  | 'recharge_error'
+  | 'recharge_pending'
+  | 'recharge_cancelled'
+  | 'recharge_topup_attempt';
+
 // Create a centralized logger with the ability to log to both console and Sentry
 export const logger = {
   // Regular logging methods that go to console and in production to Sentry
@@ -172,8 +183,57 @@ export const logger = {
     return { event, data, timestamp: new Date().toISOString() };
   },
   
+  // Recharge tracking logs - for card recharge operations
+  recharge: (event: RechargeEventType, data: Record<string, any>) => {
+    log.info(`[RECHARGE] ${event}`, data);
+    
+    // Log recharge events to Sentry breadcrumbs
+    Sentry.addBreadcrumb({
+      category: 'recharge',
+      message: `${event} ${JSON.stringify(data)}`,
+      level: 'info',
+    });
+    
+    // Capture important recharge events in Sentry
+    const importantEvents: RechargeEventType[] = [
+      'recharge_success',
+      'recharge_error'
+    ];
+    
+    if (importantEvents.includes(event)) {
+      Sentry.captureMessage(`Recharge Event: ${event}`, {
+        level: 'info',
+        extra: { rechargeData: data }
+      });
+    }
+    
+    // Persist recharge logs to localStorage with enhanced timestamp
+    try {
+      const rechargeLogs = JSON.parse(localStorage.getItem('recharge_logs') || '[]');
+      const timestamp = new Date();
+      rechargeLogs.push({
+        timestamp: timestamp.toISOString(),
+        formattedTime: timestamp.toLocaleTimeString(),
+        event,
+        data,
+      });
+      
+      // Keep only the last 50 recharge logs
+      if (rechargeLogs.length > 50) {
+        rechargeLogs.shift();
+      }
+      
+      localStorage.setItem('recharge_logs', JSON.stringify(rechargeLogs));
+    } catch (error) {
+      // Ignore localStorage errors
+    }
+    
+    // Return the event data for chaining if needed
+    return { event, data, timestamp: new Date().toISOString() };
+  },
+  
   // Helper function to get all locally stored logs for troubleshooting
-  getLogs: (type: 'nfc' | 'payment' | 'all' = 'all') => {
+  getLogs: (type: 'nfc' | 'payment' | 'recharge' | 'all' = 'all') => {
     try {
       if (type === 'nfc' || type === 'all') {
         const nfcLogs = JSON.parse(localStorage.getItem('nfc_logs') || '[]');
@@ -185,10 +245,16 @@ export const logger = {
         if (type === 'payment') return paymentLogs;
       }
       
+      if (type === 'recharge' || type === 'all') {
+        const rechargeLogs = JSON.parse(localStorage.getItem('recharge_logs') || '[]');
+        if (type === 'recharge') return rechargeLogs;
+      }
+      
       if (type === 'all') {
         return {
           nfc: JSON.parse(localStorage.getItem('nfc_logs') || '[]'),
           payment: JSON.parse(localStorage.getItem('payment_logs') || '[]'),
+          recharge: JSON.parse(localStorage.getItem('recharge_logs') || '[]'),
         };
       }
     } catch (error) {
@@ -199,7 +265,7 @@ export const logger = {
   },
   
   // Helper to clear logs (mainly for development and testing)
-  clearLogs: (type: 'nfc' | 'payment' | 'all' = 'all') => {
+  clearLogs: (type: 'nfc' | 'payment' | 'recharge' | 'all' = 'all') => {
     try {
       if (type === 'nfc' || type === 'all') {
         localStorage.removeItem('nfc_logs');
@@ -207,6 +273,10 @@ export const logger = {
       
       if (type === 'payment' || type === 'all') {
         localStorage.removeItem('payment_logs');
+      }
+      
+      if (type === 'recharge' || type === 'all') {
+        localStorage.removeItem('recharge_logs');
       }
       
       return { success: true };

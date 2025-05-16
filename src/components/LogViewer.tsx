@@ -6,10 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { logger } from '@/lib/logger';
 import { Download, Share, Copy, X, Trash } from 'lucide-react';
 
-type LogTab = 'nfc' | 'payment' | 'all';
+type LogTab = 'nfc' | 'payment' | 'recharge' | 'all';
 
 export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [logs, setLogs] = useState<any>({ nfc: [], payment: [] });
+  const [logs, setLogs] = useState<any>({ nfc: [], payment: [], recharge: [] });
   const [activeTab, setActiveTab] = useState<LogTab>('nfc');
   
   // Load logs when dialog opens
@@ -32,7 +32,7 @@ export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange:
     // Use formattedTime if available, otherwise format timestamp
     const time = entry.formattedTime || new Date(entry.timestamp).toLocaleTimeString();
     
-    // For payment logs
+    // For payment logs or recharge logs (they have similar structure)
     if ('event' in entry) {
       return `[${time}] ${entry.event}: ${JSON.stringify(entry.data, null, 2)}`;
     }
@@ -107,7 +107,18 @@ export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange:
     }
   };
   
-  const currentLogs = activeTab === 'nfc' ? logs.nfc : (activeTab === 'payment' ? logs.payment : logs);
+  const getActiveTabContent = () => {
+    switch(activeTab) {
+      case 'nfc':
+        return logs.nfc;
+      case 'payment':
+        return logs.payment;
+      case 'recharge':
+        return logs.recharge;
+      default:
+        return logs;
+    }
+  };
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,6 +135,7 @@ export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange:
             <TabsList>
               <TabsTrigger value="nfc">NFC ({logs.nfc?.length || 0})</TabsTrigger>
               <TabsTrigger value="payment">Paiements ({logs.payment?.length || 0})</TabsTrigger>
+              <TabsTrigger value="recharge">Recharges ({logs.recharge?.length || 0})</TabsTrigger>
             </TabsList>
             
             <div className="flex gap-1">
@@ -162,6 +174,20 @@ export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange:
                 ))
               ) : (
                 <div className="text-center py-4 text-gray-500">No payment logs found</div>
+              )}
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="recharge" className="flex-grow mt-0">
+            <ScrollArea className="h-[300px] border rounded-md p-2 bg-gray-50 dark:bg-gray-900 text-xs font-mono">
+              {logs.recharge && logs.recharge.length > 0 ? (
+                logs.recharge.map((entry: any, i: number) => (
+                  <div key={i} className="py-1 border-b border-gray-200 dark:border-gray-800 last:border-0">
+                    {formatLogEntry(entry)}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-4 text-gray-500">No recharge logs found</div>
               )}
             </ScrollArea>
           </TabsContent>
