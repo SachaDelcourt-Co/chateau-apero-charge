@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +16,7 @@ import RefundPage from "./pages/RefundPage";
 import Unauthorized from "./pages/Unauthorized";
 import { AuthProvider } from "@/hooks/use-auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { DebugPanel } from "@/components/DebugPanel";
 
 // Sauvegardons l'image du logo
 import "./assets/logo.png";
@@ -24,6 +24,9 @@ import "./assets/logo.png";
 const queryClient = new QueryClient();
 
 const App = () => {
+  // Only include debug panel in production to respect your debugging requirements
+  const isProduction = import.meta.env.PROD;
+  
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -65,6 +68,9 @@ const App = () => {
               <Route path="/unauthorized" element={<Unauthorized />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
+            
+            {/* Debug panel only shown in production mode */}
+            {isProduction && <DebugPanel />}
           </AuthProvider>
         </BrowserRouter>
       </TooltipProvider>
