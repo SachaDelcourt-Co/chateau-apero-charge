@@ -1,21 +1,72 @@
-
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import ChateauLogo from '@/components/ChateauLogo';
 import CardTopup from '@/components/admin/CardTopup';
-import { Home, LogOut } from 'lucide-react';
+import { Home, LogOut, History } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { NfcDebugger } from '@/components/NfcDebugger';
 import { NfcTest } from '@/components/NfcTest';
+import { logger } from '@/lib/logger';
+
+// Transaction history component to show recent recharges
+const RecentTransactions = () => {
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    // Get recent recharge logs from localStorage
+    const rechargeLogs = logger.getLogs('recharge');
+    
+    // Filter for successful recharges only and sort by timestamp (newest first)
+    const successfulRecharges = Array.isArray(rechargeLogs) 
+      ? rechargeLogs
+        .filter(log => log.event === 'recharge_success')
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+        .slice(0, 5) // Get only the 5 most recent
+      : [];
+    
+    setTransactions(successfulRecharges);
+  }, []);
+
+  if (transactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-6 bg-gray-50 p-3 sm:p-4 rounded-lg border border-gray-200">
+      <div className="flex items-center mb-3">
+        <History className="h-4 w-4 mr-2 text-gray-600" />
+        <h3 className="text-sm sm:text-base font-medium">Recharges récentes</h3>
+      </div>
+      <div className="space-y-2">
+        {transactions.map((tx, index) => (
+          <div key={index} className="bg-white p-2 rounded-md border border-gray-100 text-xs sm:text-sm">
+            <div className="flex justify-between">
+              <span>Carte: <strong>{tx.data.cardId}</strong></span>
+              <span className="text-green-600">{tx.data.amount}€</span>
+            </div>
+            <div className="flex justify-between text-gray-500">
+              <span>{tx.formattedTime}</span>
+              <span>Nouveau solde: {tx.data.newBalance.toFixed(2)}€</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const RechargePage: React.FC = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { signOut, email, isLoggedIn } = useAuth();
   const { toast } = useToast();
+  
+  // Trigger component refresh when a recharge happens
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Check if we're in development mode
   const isDevelopment = import.meta.env.MODE === 'development';
@@ -46,6 +97,11 @@ const RechargePage: React.FC = () => {
         variant: "destructive"
       });
     }
+  };
+
+  // Callback when recharge is successful - refresh recent transactions
+  const handleRechargeSuccess = () => {
+    setRefreshTrigger(prev => prev + 1);
   };
 
   return (
@@ -91,8 +147,13 @@ const RechargePage: React.FC = () => {
           </h1>
           
           <div className="mt-2 sm:mt-4">
-            <CardTopup />
+            <CardTopup onSuccess={handleRechargeSuccess} />
           </div>
+        </div>
+        
+        {/* Transaction history display - updates when refreshTrigger changes */}
+        <div key={refreshTrigger}>
+          <RecentTransactions />
         </div>
         
         {/* Show NFC debugger only in development mode */}

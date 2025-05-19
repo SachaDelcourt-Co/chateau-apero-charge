@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CreditCard, CheckCircle, Scan, Info, Check } from "lucide-react";
+import { Loader2, CreditCard, CheckCircle, Scan, Info, Check, AlertCircle } from "lucide-react";
 import { getTableCardById, updateTableCardAmount } from '@/lib/supabase';
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,19 +12,27 @@ import { useNfc } from '@/hooks/use-nfc';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { logger } from '@/lib/logger';
 
+// Define state types for better type safety
+type RechargeStatus = 'idle' | 'checking' | 'processing' | 'success' | 'error';
+
 interface CardTopupProps {
   onSuccess?: () => void;
 }
 
 const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
+  // Basic form state
   const [cardId, setCardId] = useState('');
   const [amount, setAmount] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingCard, setIsCheckingCard] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [currentAmount, setCurrentAmount] = useState<string | null>(null);
   const [paidByCard, setPaidByCard] = useState(false);
+
+  // Advanced state management
+  const [status, setStatus] = useState<RechargeStatus>('idle');
   const [cardInfo, setCardInfo] = useState<any>(null);
+  const [currentAmount, setCurrentAmount] = useState<string | null>(null);
+  const [originalBalance, setOriginalBalance] = useState<number | null>(null);
+  const [transactionId, setTransactionId] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  
   const { toast } = useToast();
   
   // Initialize NFC hook with a validation function and scan handler
@@ -35,6 +43,13 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     onScan: (id) => {
       console.log('[CardTopup] NFC card scanned with ID:', id);
       setCardId(id);
+      
+      // Log the NFC scan attempt for recharging
+      logger.recharge('recharge_scan_attempt', { 
+        cardId: id, 
+        timestamp: new Date().toISOString() 
+      });
+      
       checkCardBalance(id);
       // Optional: toast to indicate successful scan
       toast({
@@ -61,42 +76,114 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     console.log('[CardTopup] NFC isSupported:', isSupported);
   }, [isSupported]);
 
+  // Generate a unique transaction ID for tracking
+  const generateTransactionId = useCallback(() => {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    return `tx-${timestamp}-${random}`;
+  }, []);
+
+  // Unified card balance checking function that logs recharge attempts
   const checkCardBalance = async (id: string) => {
     if (!id || id.length !== 8) return;
     
-    setIsCheckingCard(true);
+    setStatus('checking');
+    
     try {
+      // Log card validation attempt
+      logger.recharge('recharge_card_validated', { cardId: id });
+      
       const card = await getTableCardById(id);
       if (card) {
         setCardInfo(card);
         setCurrentAmount(card.amount?.toString() || '0');
+        setOriginalBalance(parseFloat(card.amount?.toString() || '0'));
+        
+        // Log successful card validation
+        logger.recharge('recharge_card_validated', { 
+          cardId: id, 
+          currentBalance: card.amount,
+          success: true
+        });
+        
+        setStatus('idle');
       } else {
         setCardInfo(null);
         setCurrentAmount(null);
+        setOriginalBalance(null);
+        setErrorMessage('Aucune carte avec cet identifiant n\'a été trouvée.');
+        setStatus('error');
+        
+        // Log failed card validation
+        logger.recharge('recharge_card_validated', { 
+          cardId: id, 
+          success: false,
+          error: 'Card not found'
+        });
+        
+        toast({
+          title: "Carte non trouvée",
+          description: "Aucune carte avec cet identifiant n'a été trouvée.",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Error checking card:', error);
       setCardInfo(null);
       setCurrentAmount(null);
-    } finally {
-      setIsCheckingCard(false);
+      setOriginalBalance(null);
+      setErrorMessage('Impossible de récupérer les informations de la carte.');
+      setStatus('error');
+      
+      // Log error during card validation
+      logger.recharge('recharge_card_validated', { 
+        cardId: id, 
+        success: false,
+        error: String(error)
+      });
+      
+      toast({
+        title: "Erreur",
+        description: "Impossible de récupérer les informations de la carte.",
+        variant: "destructive"
+      });
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
+  // Process the recharge with retry logic for rate limiting
+  const processTopup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     
-    if (!cardId.trim() || !amount.trim() || isNaN(parseFloat(amount))) {
+    if (!cardId || cardId.length !== 8) {
       toast({
-        title: "Données invalides",
-        description: "Veuillez vérifier les informations saisies",
+        title: "ID de carte invalide",
+        description: "Veuillez saisir un ID de carte valide (8 caractères).",
         variant: "destructive"
       });
-      setIsLoading(false);
       return;
     }
-
+    
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({
+        title: "Montant invalide",
+        description: "Veuillez saisir un montant valide supérieur à 0.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setStatus('processing');
+    const txId = generateTransactionId();
+    setTransactionId(txId);
+    
+    // Log the start of the topup process
+    logger.recharge('recharge_topup_attempt', {
+      cardId,
+      amount: parseFloat(amount),
+      currentBalance: currentAmount,
+      transactionId: txId
+    });
+    
     // Rate limit handling variables
     const maxRetries = 5;
     let retryCount = 0;
@@ -107,6 +194,14 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
       if (retryCount > 0) {
         const backoffTime = Math.min(2 ** retryCount * 500, 10000); // 500ms, 1s, 2s, 4s, 8s up to max 10s
         console.log(`Rate limit hit. Retry ${retryCount}/${maxRetries} after ${backoffTime}ms backoff`);
+        
+        logger.recharge('recharge_retry', {
+          cardId,
+          attempt: retryCount,
+          maxRetries,
+          backoffTime,
+          transactionId: txId
+        });
         
         // Show a toast for the retry
         toast({
@@ -126,46 +221,78 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         if (tableCard) {
           // Carte trouvée dans table_cards
           const currentAmountValue = tableCard.amount?.toString() || '0';
-          setCurrentAmount(currentAmountValue);
+          
+          // Store the original balance for display
+          const currentAmountFloat = parseFloat(currentAmountValue);
+          setOriginalBalance(currentAmountFloat);
           
           // Calculer le nouveau montant en additionnant l'ancien montant et le montant de recharge
-          const newAmount = (parseFloat(currentAmountValue) + parseFloat(amount)).toString();
+          const amountFloat = parseFloat(amount);
+          const newAmount = (currentAmountFloat + amountFloat).toString();
           
           // Mettre à jour le montant
           const success = await updateTableCardAmount(cardId, newAmount);
           
           if (success) {
-            // Ajouter l'enregistrement dans la table paiements
-            const { error } = await supabase
-              .from('paiements')
-              .insert({
-                id_card: cardId,
-                amount: parseFloat(amount),
-                paid_by_card: paidByCard
-              });
-            
-            if (error) {
-              // Check for rate limit errors
-              if (error.code === '429' || error.message?.includes('rate limit')) {
-                console.log('Rate limit error on payment logging, will retry');
-                shouldRetry = true;
-                retryCount++;
-                continue; // Skip the rest of this iteration and retry
-              } else {
-                console.error('Error logging payment:', error);
-                toast({
-                  title: "Attention",
-                  description: "La carte a été rechargée mais l'historique n'a pas pu être enregistré",
-                  variant: "destructive"
+            // Add transaction to payments table if required
+            if (paidByCard) {
+              // Ajouter l'enregistrement dans la table paiements
+              const { error } = await supabase
+                .from('paiements')
+                .insert({
+                  id_card: cardId,
+                  amount: amountFloat,
+                  paid_by_card: paidByCard,
+                  transaction_id: txId
                 });
+              
+              if (error) {
+                // Check for rate limit errors
+                if (error.code === '429' || error.message?.includes('rate limit')) {
+                  console.log('Rate limit error on payment logging, will retry');
+                  
+                  logger.recharge('recharge_rate_limited', {
+                    cardId,
+                    stage: 'payment_logging',
+                    error: error.message,
+                    transactionId: txId
+                  });
+                  
+                  shouldRetry = true;
+                  retryCount++;
+                  continue; // Skip the rest of this iteration and retry
+                } else {
+                  console.error('Error logging payment:', error);
+                  logger.recharge('recharge_payment_log_error', {
+                    cardId,
+                    error: error.message,
+                    transactionId: txId
+                  });
+                  
+                  toast({
+                    title: "Attention",
+                    description: "La carte a été rechargée mais l'historique n'a pas pu être enregistré",
+                    variant: "destructive"
+                  });
+                }
               }
             }
             
-            setSuccess(true);
+            // Log the successful recharge
+            logger.recharge('recharge_success', {
+              cardId,
+              amount: amountFloat,
+              previousBalance: currentAmountFloat,
+              newBalance: parseFloat(newAmount),
+              transactionId: txId
+            });
+            
+            setStatus('success');
+            setCurrentAmount(newAmount);
 
             toast({
               title: "Carte rechargée",
-              description: `La carte ${cardId} a été rechargée de ${amount}€`,
+              description: `La carte ${cardId} a été rechargée de ${amount}€. Nouveau solde: ${parseFloat(newAmount).toFixed(2)}€`,
             });
 
             // Call the onSuccess callback if provided
@@ -173,11 +300,20 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               onSuccess();
             }
             
+            // Reset amount field but keep the card ID
+            setAmount('');
+            
             // Operation completed successfully
             shouldRetry = false;
           } else {
             // Check if this is likely a rate limit error
             console.log('Failed to update card amount, checking if rate limited');
+            
+            logger.recharge('recharge_update_failed', {
+              cardId,
+              checking_rate_limit: true,
+              transactionId: txId
+            });
             
             // Try to get the card again to see if we're rate limited
             try {
@@ -186,9 +322,25 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                 // If we can't even get the card now, it's likely a rate limit
                 shouldRetry = true;
                 retryCount++;
+                logger.recharge('recharge_rate_limited', {
+                  cardId,
+                  stage: 'card_update',
+                  detected: 'card_not_found_after_update',
+                  transactionId: txId
+                });
                 console.log('Potential rate limit detected, will retry');
               } else {
                 // Some other error occurred
+                logger.recharge('recharge_error', {
+                  cardId,
+                  amount: amountFloat,
+                  error: "Failed to update card balance but card exists",
+                  transactionId: txId
+                });
+                
+                setErrorMessage("Erreur lors de la mise à jour du montant");
+                setStatus('error');
+                
                 toast({
                   title: "Erreur",
                   description: "Erreur lors de la mise à jour du montant",
@@ -201,8 +353,26 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               if (checkError.status === 429 || checkError.message?.includes('rate limit')) {
                 shouldRetry = true;
                 retryCount++;
+                
+                logger.recharge('recharge_rate_limited', {
+                  cardId,
+                  stage: 'card_check_after_update',
+                  error: String(checkError),
+                  transactionId: txId
+                });
+                
                 console.log('Rate limit confirmed, will retry');
               } else {
+                logger.recharge('recharge_error', {
+                  cardId,
+                  amount: parseFloat(amount),
+                  error: String(checkError),
+                  transactionId: txId
+                });
+                
+                setErrorMessage("Erreur lors de la mise à jour du montant");
+                setStatus('error');
+                
                 toast({
                   title: "Erreur",
                   description: "Erreur lors de la mise à jour du montant",
@@ -213,6 +383,17 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
             }
           }
         } else {
+          // Card not found
+          logger.recharge('recharge_error', {
+            cardId,
+            amount: parseFloat(amount),
+            error: "Card not found",
+            transactionId: txId
+          });
+          
+          setErrorMessage("Aucune carte trouvée avec cet identifiant");
+          setStatus('error');
+          
           // Check if this is a rate limit error
           if (retryCount < 2) { // Try at least once more for card not found
             shouldRetry = true;
@@ -229,13 +410,31 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
         }
       } catch (error: any) {
         console.error("Erreur lors de la recharge:", error);
+        
+        logger.recharge('recharge_error', {
+          cardId,
+          amount: parseFloat(amount),
+          error: String(error),
+          transactionId: txId
+        });
           
-          // Check if error is a rate limit error
-          if (error.status === 429 || error.code === '429' || error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
-            console.log('Rate limit error detected, will retry');
-            shouldRetry = true;
-            retryCount++;        
+        // Check if error is a rate limit error
+        if (error.status === 429 || error.code === '429' || error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
+          console.log('Rate limit error detected, will retry');
+          
+          logger.recharge('recharge_rate_limited', {
+            cardId,
+            stage: 'general_operation',
+            error: String(error),
+            transactionId: txId
+          });
+          
+          shouldRetry = true;
+          retryCount++;        
         } else {
+          setErrorMessage(String(error) || "Une erreur est survenue lors de la recharge");
+          setStatus('error');
+          
           toast({
             title: "Erreur",
             description: "Une erreur est survenue lors de la recharge",
@@ -248,22 +447,37 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     
     // If we exited due to max retries
     if (retryCount > maxRetries) {
+      logger.recharge('recharge_max_retries_exceeded', {
+        cardId,
+        amount: parseFloat(amount),
+        transactionId: txId
+      });
+      
+      setErrorMessage("Le serveur est actuellement surchargé. Veuillez réessayer dans quelques instants.");
+      setStatus('error');
+      
       toast({
         title: "Service temporairement indisponible",
         description: "Le serveur est actuellement surchargé. Veuillez réessayer dans quelques instants.",
         variant: "destructive"
       });
     }
-    setIsLoading(false);
+    
+    // If we're still in processing state, ensure we go back to idle
+    if (status === 'processing') {
+      setStatus('idle');
+    }
   };
 
   const handleReset = () => {
     setCardId('');
     setAmount('');
     setPaidByCard(false);
-    setSuccess(false);
+    setStatus('idle');
     setCurrentAmount(null);
     setCardInfo(null);
+    setOriginalBalance(null);
+    setErrorMessage('');
     // Reset NFC scanning state
     if (isScanning) {
       stopScan();
@@ -276,18 +490,18 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     }
   };
 
-  // Reset the success message after 3 seconds
+  // Reset the success message after 5 seconds
   useEffect(() => {
     let timer: number;
-    if (success) {
+    if (status === 'success') {
       timer = window.setTimeout(() => {
-        setSuccess(false);
-      }, 3000);
+        setStatus('idle');
+      }, 5000);
     }
     return () => {
       clearTimeout(timer);
     };
-  }, [success]);
+  }, [status]);
   
   // Clean up on component unmount
   useEffect(() => {
@@ -310,175 +524,68 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
     }
   };
 
-  // Handle card ID input changes
+  // Handle card ID input changes with improved validation
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const id = e.target.value;
     setCardId(id);
     
-    // Auto-fetch card info if ID is 8 characters
+    // Reset error state when user is typing
+    if (status === 'error') {
+      setStatus('idle');
+      setErrorMessage('');
+    }
+    
+    // Automatically check card if ID is 8 characters
     if (id.length === 8) {
-      fetchCardInfo(id);
+      checkCardBalance(id);
     } else {
+      // Clear card info if ID is not valid
+      setCardInfo(null);
       setCurrentAmount(null);
+      setOriginalBalance(null);
     }
   };
 
-  // Fetch card information function
-  const fetchCardInfo = useCallback(async (id: string) => {
-    if (!id || id.length !== 8) return;
-    
-    setIsLoading(true);
-    
-    try {
-      logger.recharge('recharge_card_validated', { cardId: id });
-      
-      // Get card information from the database
-      const card = await getTableCardById(id);
-      
-      if (!card) {
-        toast({
-          title: "Carte non trouvée",
-          description: "Aucune carte avec cet identifiant n'a été trouvée.",
-          variant: "destructive"
-        });
-        setCurrentAmount(null);
-        logger.recharge('recharge_card_validated', { 
-          cardId: id, 
-          success: false,
-          error: 'Card not found'
-        });
-      } else {
-        setCurrentAmount(card.amount || '0');
-        logger.recharge('recharge_card_validated', { 
-          cardId: id, 
-          currentBalance: card.amount,
-          success: true
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching card:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de récupérer les informations de la carte.",
-        variant: "destructive"
-      });
-      setCurrentAmount(null);
-      logger.recharge('recharge_card_validated', { 
-        cardId: id, 
-        success: false,
-        error: String(error)
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Process the topup
-  const processTopup = async () => {
-    if (!cardId || cardId.length !== 8) {
-      toast({
-        title: "ID de carte invalide",
-        description: "Veuillez saisir un ID de carte valide (8 caractères).",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (!amount || parseFloat(amount) <= 0) {
-      toast({
-        title: "Montant invalide",
-        description: "Veuillez saisir un montant valide supérieur à 0.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      // Log the start of the topup process
-      logger.recharge('recharge_topup_attempt', {
-        cardId,
-        amount: parseFloat(amount),
-        currentBalance: currentAmount
-      });
-      
-      // Calculate new amount
-      const amountFloat = parseFloat(amount);
-      const currentAmountFloat = parseFloat(currentAmount || '0');
-      const newAmount = (currentAmountFloat + amountFloat).toFixed(2);
-      
-      // Get the card first to verify it exists
-      const card = await getTableCardById(cardId);
-      
-      if (!card) {
-        throw new Error("Card not found");
-      }
-      
-      // Update the card balance
-      const updateResult = await updateTableCardAmount(cardId, newAmount);
-      
-      if (!updateResult) {
-        throw new Error("Failed to update card balance");
-      }
-      
-      // Show success message
-      setSuccess(true);
-      setCurrentAmount(newAmount);
-      
-      toast({
-        title: "Recharge réussie",
-        description: `La carte a été rechargée de ${amount}€. Nouveau solde: ${newAmount}€`,
-      });
-      
-      // Log the successful recharge
-      logger.recharge('recharge_success', {
-        cardId,
-        amount: amountFloat,
-        previousBalance: currentAmountFloat,
-        newBalance: parseFloat(newAmount)
-      });
-      
-      // Reset amount field
-      setAmount('');
-    } catch (error) {
-      console.error('Error processing topup:', error);
-      toast({
-        title: "Erreur",
-        description: "Une erreur est survenue lors de la recharge de la carte.",
-        variant: "destructive"
-      });
-      
-      // Log the error
-      logger.recharge('recharge_error', {
-        cardId,
-        amount: parseFloat(amount),
-        error: String(error)
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <h2 className="text-xl font-semibold mb-4">Recharger une carte</h2>
-        
-        {success ? (
+  // Render different content based on the current status
+  const renderContent = () => {
+    switch (status) {
+      case 'success':
+        return (
           <div className="flex flex-col items-center py-6">
             <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
             <p className="mb-2">Carte rechargée avec succès!</p>
             <p className="mb-4">
               <span className="font-medium">Numéro de carte:</span> {cardId}<br />
-              <span className="font-medium">Ancien solde:</span> {currentAmount}€<br />
+              <span className="font-medium">Ancien solde:</span> {originalBalance?.toFixed(2)}€<br />
               <span className="font-medium">Montant ajouté:</span> {amount}€<br />
-              <span className="font-medium">Nouveau solde:</span> {parseFloat(currentAmount || '0') + parseFloat(amount)}€<br />
-              <span className="font-medium">Payé par carte:</span> {paidByCard ? 'Oui' : 'Non'}
+              <span className="font-medium">Nouveau solde:</span> {currentAmount ? parseFloat(currentAmount).toFixed(2) : '0.00'}€<br />
+              <span className="font-medium">Payé par carte:</span> {paidByCard ? 'Oui' : 'Non'}<br />
+              <span className="font-medium">ID de transaction:</span> <span className="text-xs">{transactionId}</span>
             </p>
             <Button onClick={handleReset}>Recharger une autre carte</Button>
           </div>
-        ) : (
+        );
+        
+      case 'error':
+        return (
+          <div className="flex flex-col items-center py-6">
+            <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+            <p className="text-red-600 font-semibold mb-2">Erreur lors de la recharge</p>
+            <p className="text-center mb-4">{errorMessage}</p>
+            <div className="flex space-x-4">
+              <Button variant="outline" onClick={handleReset}>Recommencer</Button>
+              {cardInfo && (
+                <Button onClick={() => {
+                  setStatus('idle');
+                  setErrorMessage('');
+                }}>Réessayer</Button>
+              )}
+            </div>
+          </div>
+        );
+        
+      default:
+        return (
           <form onSubmit={processTopup} className="space-y-4">
             {/* NFC Scan Button - Prominent placement */}
             {isSupported !== null && (
@@ -488,7 +595,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                   onClick={isScanning ? stopScan : startScan}
                   variant={isScanning ? "destructive" : "default"}
                   size="lg"
-                  disabled={isSupported === false}
+                  disabled={isSupported === false || status === 'processing'}
                   className="w-full text-center"
                 >
                   <Scan className="h-5 w-5 mr-2" />
@@ -515,13 +622,13 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                   onChange={handleCardIdChange}
                   placeholder="Entrez le numéro de la carte"
                   className="pl-10"
-                  disabled={isLoading}
+                  disabled={status === 'processing'}
                   maxLength={8}
                 />
               </div>
               <div className="flex justify-between items-center mt-1">
                 <div>
-                  {isCheckingCard ? (
+                  {status === 'checking' ? (
                     <div className="text-sm text-gray-500 flex items-center">
                       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                       Vérification...
@@ -561,7 +668,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                 value={amount}
                 onChange={handleAmountChange}
                 placeholder="Montant à recharger"
-                disabled={isLoading || !cardId}
+                disabled={status === 'processing' || !cardInfo}
               />
             </div>
             
@@ -572,6 +679,7 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
                   checked={paidByCard}
                   onCheckedChange={(checked) => setPaidByCard(checked === true)}
                   className="h-6 w-6 border-2 border-blue-500"
+                  disabled={status === 'processing'}
                 />
                 <Label 
                   htmlFor="paid-by-card" 
@@ -585,9 +693,9 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isLoading || !cardInfo || !amount || parseFloat(amount) <= 0}
+              disabled={status === 'processing' || !cardInfo || !amount || parseFloat(amount) <= 0}
             >
-              {isLoading ? (
+              {status === 'processing' ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Traitement...
@@ -600,7 +708,15 @@ const CardTopup: React.FC<CardTopupProps> = ({ onSuccess }) => {
               )}
             </Button>
           </form>
-        )}
+        );
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <h2 className="text-xl font-semibold mb-4">Recharger une carte</h2>
+        {renderContent()}
       </CardContent>
     </Card>
   );

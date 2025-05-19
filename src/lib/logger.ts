@@ -45,7 +45,12 @@ export type RechargeEventType =
   | 'recharge_error'
   | 'recharge_pending'
   | 'recharge_cancelled'
-  | 'recharge_topup_attempt';
+  | 'recharge_topup_attempt'
+  | 'recharge_retry'
+  | 'recharge_rate_limited'
+  | 'recharge_payment_log_error'
+  | 'recharge_update_failed'
+  | 'recharge_max_retries_exceeded';
 
 // Create a centralized logger with the ability to log to both console and Sentry
 export const logger = {
@@ -197,14 +202,23 @@ export const logger = {
     // Capture important recharge events in Sentry
     const importantEvents: RechargeEventType[] = [
       'recharge_success',
-      'recharge_error'
+      'recharge_error',
+      'recharge_rate_limited',
+      'recharge_max_retries_exceeded'
     ];
     
     if (importantEvents.includes(event)) {
       Sentry.captureMessage(`Recharge Event: ${event}`, {
-        level: 'info',
+        level: event.includes('error') ? 'error' : 'info',
         extra: { rechargeData: data }
       });
+    }
+    
+    // Add unique transaction ID if missing
+    const dataWithId = { ...data };
+    if (!dataWithId.transactionId) {
+      // Generate simple ID if none was provided
+      dataWithId.transactionId = `auto-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     }
     
     // Persist recharge logs to localStorage with enhanced timestamp
@@ -215,7 +229,7 @@ export const logger = {
         timestamp: timestamp.toISOString(),
         formattedTime: timestamp.toLocaleTimeString(),
         event,
-        data,
+        data: dataWithId,
       });
       
       // Keep only the last 50 recharge logs
@@ -226,10 +240,11 @@ export const logger = {
       localStorage.setItem('recharge_logs', JSON.stringify(rechargeLogs));
     } catch (error) {
       // Ignore localStorage errors
+      console.error('Failed to save recharge log to localStorage', error);
     }
     
     // Return the event data for chaining if needed
-    return { event, data, timestamp: new Date().toISOString() };
+    return { event, data: dataWithId, timestamp: new Date().toISOString() };
   },
   
   // Helper function to get all locally stored logs for troubleshooting
