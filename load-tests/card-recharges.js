@@ -165,7 +165,7 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
   }
   
   const startTime = new Date();
-  
+
   while (retries < maxRetries) {
     if (retries > 0) {
       // Exponential backoff with jitter: Base * (2^retry) * (0.5-1.5 random factor)
@@ -178,7 +178,7 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
     }
     
     let requestStartTime = new Date();
-    
+
     if (method.toLowerCase() === 'get') {
       result = http.get(url, fullParams);
     } else if (method.toLowerCase() === 'post') {
@@ -190,7 +190,7 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
     }
     
     endpointResponseTime.add(new Date() - requestStartTime);
-    
+
     // Check if we hit a rate limit
     if (result.status === 429) {
       console.log(`[${endpoint}] Rate limited, attempt ${retries + 1}/${maxRetries}`);
@@ -199,7 +199,7 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
       retries++;
       continue;
     }
-    
+
     // No rate limiting, return the result
     maxRetryCount.add(retries);
     if (totalBackoffTime > 0) {
@@ -207,7 +207,7 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
     }
     return result;
   }
-  
+
   // Return the last response if we exhausted our retries
   console.log(`[${endpoint}] Failed after ${maxRetries} retries`);
   maxRetryCount.add(maxRetries);
@@ -261,21 +261,21 @@ function processRecharge(authToken, cardId, rechargeAmount, isPaidByCard) {
       
       console.log(`Creating new card with ID: ${cardId} and description: ${cardDescription}`);
       
-      const createCardRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/table_cards`, 
+    const createCardRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/table_cards`, 
         {
-          id: cardId,
-          amount: '0',
+        id: cardId,
+        amount: '0',
           description: cardDescription
         },
-        {
+      {
           headers: {
             ...authHeaders,
             'Prefer': 'return=representation'
           },
           name: 'create_card'
-        }
-      );
-      
+      }
+    );
+    
       if (createCardRes.status === 201) {
         rechargeResponse.cardExists = true;
         rechargeResponse.previousBalance = 0;
@@ -309,7 +309,7 @@ function processRecharge(authToken, cardId, rechargeAmount, isPaidByCard) {
       {
         headers: {
           ...authHeaders,
-          'Prefer': 'return=representation',
+        'Prefer': 'return=representation',
         },
         name: 'create_payment'
       }
@@ -326,8 +326,8 @@ function processRecharge(authToken, cardId, rechargeAmount, isPaidByCard) {
       });
       console.error(`Failed to create payment record: ${transactionRes.status} ${transactionRes.body}`);
     }
-  });
-  
+    });
+    
   // Step 3: Update card balance
   group('Balance update', function() {
     // Calculate new balance
@@ -362,7 +362,7 @@ function processRecharge(authToken, cardId, rechargeAmount, isPaidByCard) {
         message: updateCardRes.body
       });
       console.error(`Failed to update card balance: ${updateCardRes.status} ${updateCardRes.body}`);
-    }
+  }
   });
   
   // Determine overall success
@@ -383,7 +383,7 @@ export default function() {
       
       // Add random delay at start to spread out requests
       sleep(Math.random() * 1.5);
-      
+  
       // Step 1: Login as recharge admin
       group('Login', function() {
         // Select a random recharge user from our pool
@@ -448,8 +448,8 @@ export default function() {
             console.log(`✗ Recharge failed for card ${cardId}. Errors: ${JSON.stringify(rechargeResult.errors)}`);
           }
         });
-      });
-      
+  });
+  
       // Longer sleep between operations with randomization to create more realistic patterns
       sleep(randomIntBetween(3, 5));
       

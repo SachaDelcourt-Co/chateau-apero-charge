@@ -132,6 +132,12 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
         }));
 
         // Call the Edge Function
+        console.log("About to call Edge Function with:", {
+          card_id: cardId.trim(),
+          total_amount: finalTotal,
+          items: formattedItems
+        });
+        
         const orderResult = await processBarOrder({
           card_id: cardId.trim(),
           total_amount: finalTotal,

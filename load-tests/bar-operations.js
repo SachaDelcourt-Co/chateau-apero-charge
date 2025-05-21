@@ -483,98 +483,98 @@ export default function() {
       // Log current stage for better reporting
       console.log(`Running bar operation - VU: ${__VU}, iteration: ${__ITER}`);
 
-      // Randomly select a bar user
-      const barCredential = barCredentials[Math.floor(Math.random() * barCredentials.length)];
-      
+  // Randomly select a bar user
+  const barCredential = barCredentials[Math.floor(Math.random() * barCredentials.length)];
+  
       group('Login', function() {
-        console.log(`Logging in as ${barCredential.email}`);
-        const loginResponse = rateLimitedRequest('POST', `${BASE_URL}/auth/v1/token?grant_type=password`, {
-          email: barCredential.email,
-          password: barCredential.password
-        }, {
+  console.log(`Logging in as ${barCredential.email}`);
+  const loginResponse = rateLimitedRequest('POST', `${BASE_URL}/auth/v1/token?grant_type=password`, {
+    email: barCredential.email,
+    password: barCredential.password
+  }, {
           name: 'login',
           addInitialJitter: true // Add jitter to avoid all VUs hitting login at the same time
-        });
-        
-        // Check if login was successful
-        if (!check(loginResponse, { 'login successful': (r) => r.status === 200 && r.json('access_token') !== undefined })) {
+  });
+  
+  // Check if login was successful
+  if (!check(loginResponse, { 'login successful': (r) => r.status === 200 && r.json('access_token') !== undefined })) {
           console.error(`Login failed: ${loginResponse.status} ${loginResponse.body}`);
           sleep(randomIntBetween(2, 4));
-          return;
-        }
-        
-        // Get access token
-        const accessToken = loginResponse.json('access_token');
-        // Include the API key in the auth header
-        const authHeader = { 
-          'Authorization': `Bearer ${accessToken}`,
-          'apikey': API_KEY
-        };
-        
-        // Sleep a random amount to spread out requests
-        sleep(Math.random() * 2);
-        
+    return;
+  }
+  
+  // Get access token
+  const accessToken = loginResponse.json('access_token');
+  // Include the API key in the auth header
+  const authHeader = { 
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': API_KEY
+  };
+  
+  // Sleep a random amount to spread out requests
+  sleep(Math.random() * 2);
+  
         group('Get products', function() {
-          // Get bar products - Use the correct table name 'bar_products' instead of 'products'
-          const productsUrl = `${BASE_URL}/rest/v1/bar_products?select=*`;
-          const productsResponse = rateLimitedRequest('GET', productsUrl, null, {
-            headers: authHeader,
-            name: 'get_products'
-          });
-          
-          if (!check(productsResponse, { 'products retrieved': (r) => r.status === 200 && r.json().length > 0 })) {
+  // Get bar products - Use the correct table name 'bar_products' instead of 'products'
+  const productsUrl = `${BASE_URL}/rest/v1/bar_products?select=*`;
+  const productsResponse = rateLimitedRequest('GET', productsUrl, null, {
+    headers: authHeader,
+    name: 'get_products'
+  });
+  
+  if (!check(productsResponse, { 'products retrieved': (r) => r.status === 200 && r.json().length > 0 })) {
             console.error(`No products found: ${productsResponse.status} ${productsResponse.body}`);
             sleep(randomIntBetween(2, 4));
-            return;
-          }
-          
-          // Get available products
-          const products = productsResponse.json();
-          if (products.length === 0) {
-            console.error('No products available');
+    return;
+  }
+  
+  // Get available products
+  const products = productsResponse.json();
+  if (products.length === 0) {
+    console.error('No products available');
             sleep(randomIntBetween(2, 4));
-            return;
-          }
-          
+    return;
+  }
+  
           group('Card operations', function() {
-            // Randomly select card
-            const cardId = simulatedCardIds[Math.floor(Math.random() * simulatedCardIds.length)];
-            
-            // Check if card exists, create if not (this helps with test stability)
-            const cardCheckUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=id,amount`;
-            const cardCheckResponse = rateLimitedRequest('GET', cardCheckUrl, null, {
-              headers: authHeader,
-              name: 'check_card'
-            });
-            
-            if (cardCheckResponse.json().length === 0) {
-              console.log(`Creating test card: ${cardId}`);
+  // Randomly select card
+  const cardId = simulatedCardIds[Math.floor(Math.random() * simulatedCardIds.length)];
+  
+  // Check if card exists, create if not (this helps with test stability)
+  const cardCheckUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=id,amount`;
+  const cardCheckResponse = rateLimitedRequest('GET', cardCheckUrl, null, {
+    headers: authHeader,
+    name: 'check_card'
+  });
+  
+  if (cardCheckResponse.json().length === 0) {
+    console.log(`Creating test card: ${cardId}`);
               
               // Randomize initial card balance (50-200)
               const initialBalance = (50 + Math.random() * 150).toFixed(2);
               
-              const createCardResponse = rateLimitedRequest('POST', `${BASE_URL}/rest/v1/table_cards`, {
-                id: cardId,
+    const createCardResponse = rateLimitedRequest('POST', `${BASE_URL}/rest/v1/table_cards`, {
+      id: cardId,
                 amount: initialBalance,
-                description: 'Test load card'
-              }, {
-                headers: authHeader,
-                name: 'create_card'
-              });
-              
-              if (!check(createCardResponse, { 'card created': (r) => r.status === 201 })) {
+      description: 'Test load card'
+    }, {
+      headers: authHeader,
+      name: 'create_card'
+    });
+    
+    if (!check(createCardResponse, { 'card created': (r) => r.status === 201 })) {
                 console.error(`Failed to create card: ${createCardResponse.status} ${createCardResponse.body}`);
                 sleep(randomIntBetween(2, 4));
-                return;
-              }
-              
-              // Sleep to make sure the card is created before we try to use it
+      return;
+    }
+    
+    // Sleep to make sure the card is created before we try to use it
               sleep(randomIntBetween(0.8, 1.5));
-            }
-            
-            // Random delay
-            sleep(Math.random() * 1);
-            
+  }
+  
+  // Random delay
+  sleep(Math.random() * 1);
+  
             group('Process order', function() {
               // Use enhanced createOrder function
               const orderResult = createOrder(authHeader, cardId, products);
@@ -597,9 +597,9 @@ export default function() {
             });
           });
         });
-      });
-      
-      // Sleep to allow some time between complete operations
+  });
+  
+  // Sleep to allow some time between complete operations
       sleep(randomIntBetween(3, 6));
       
     } catch (error) {

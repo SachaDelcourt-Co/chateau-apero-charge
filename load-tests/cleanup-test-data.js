@@ -172,24 +172,24 @@ export default function() {
       // Add a delay to avoid rate limiting on these requests
       sleep(1);  // Increased from 0.5 to 1
       
-      // Check table_cards
-      const tableCardsUrl = `${BASE_URL}/rest/v1/table_cards?id=like.${pattern}&select=id`;
-      const tableCardsResponse = rateLimitedRequest('GET', tableCardsUrl, null, {
-        headers: authHeader,
-        name: 'get_table_cards'
+    // Check table_cards
+    const tableCardsUrl = `${BASE_URL}/rest/v1/table_cards?id=like.${pattern}&select=id`;
+    const tableCardsResponse = rateLimitedRequest('GET', tableCardsUrl, null, {
+      headers: authHeader,
+      name: 'get_table_cards'
+    });
+    
+    if (tableCardsResponse.status === 200) {
+      const tableCards = tableCardsResponse.json();
+      console.log(`Found ${tableCards.length} test cards in table_cards matching ${pattern}`);
+      tableCards.forEach(card => {
+        // Check if this card ID is already in our list
+        if (!allCardIds.some(c => c.id === card.id)) {
+          allCardIds.push({ id: card.id, table: 'table_cards' });
+          console.log(`-> Added test card: ${card.id}`);
+        }
       });
-      
-      if (tableCardsResponse.status === 200) {
-        const tableCards = tableCardsResponse.json();
-        console.log(`Found ${tableCards.length} test cards in table_cards matching ${pattern}`);
-        tableCards.forEach(card => {
-          // Check if this card ID is already in our list
-          if (!allCardIds.some(c => c.id === card.id)) {
-            allCardIds.push({ id: card.id, table: 'table_cards' });
-            console.log(`-> Added test card: ${card.id}`);
-          }
-        });
-      }
+    }
     });
     
     // Longer sleep between pattern batches
@@ -242,16 +242,16 @@ export default function() {
   // 3. Delete all related data for each card - reduced batch size
   processBatch(allCardIds, (cardInfo) => {
     try {
-      console.log(`Cleaning up data for card: ${cardInfo.id}`);
+    console.log(`Cleaning up data for card: ${cardInfo.id}`);
       let success = true;
-      
+    
       // 3.1 Delete payment records first
-      const paymentsUrl = `${BASE_URL}/rest/v1/paiements?id_card=eq.${cardInfo.id}`;
-      const deletePaymentsResponse = rateLimitedRequest('DELETE', paymentsUrl, null, {
-        headers: authHeader,
-        name: 'delete_payments'
-      });
-      
+    const paymentsUrl = `${BASE_URL}/rest/v1/paiements?id_card=eq.${cardInfo.id}`;
+    const deletePaymentsResponse = rateLimitedRequest('DELETE', paymentsUrl, null, {
+      headers: authHeader,
+      name: 'delete_payments'
+    });
+    
       if (deletePaymentsResponse.status === 200 || deletePaymentsResponse.status === 204) {
         console.log(`✓ Deleted payments for card ${cardInfo.id}`);
       } else {
@@ -260,7 +260,7 @@ export default function() {
       }
       
       sleep(1);  // Increased from 0.5 to 1
-      
+    
       // 3.2 Delete order items and orders
       // First get order IDs for this card
       const ordersUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardInfo.id}&select=id`;
@@ -272,8 +272,8 @@ export default function() {
       if (ordersResponse.status === 200) {
         const orders = ordersResponse.json();
         if (orders && orders.length > 0) {
-          console.log(`Found ${orders.length} orders for card ${cardInfo.id}`);
-          
+        console.log(`Found ${orders.length} orders for card ${cardInfo.id}`);
+        
           // Process orders in smaller batches to avoid rate limits
           const orderBatchSize = 2;  // Reduced from 3 to 2
           for (let i = 0; i < orders.length; i += orderBatchSize) {
@@ -281,12 +281,12 @@ export default function() {
             
             // Delete order items for each order in batch
             orderBatch.forEach(order => {
-              const orderItemsUrl = `${BASE_URL}/rest/v1/bar_order_items?order_id=eq.${order.id}`;
-              const deleteItemsResponse = rateLimitedRequest('DELETE', orderItemsUrl, null, {
-                headers: authHeader,
-                name: 'delete_order_items'
-              });
-              
+          const orderItemsUrl = `${BASE_URL}/rest/v1/bar_order_items?order_id=eq.${order.id}`;
+          const deleteItemsResponse = rateLimitedRequest('DELETE', orderItemsUrl, null, {
+            headers: authHeader,
+            name: 'delete_order_items'
+          });
+          
               if (deleteItemsResponse.status === 200 || deleteItemsResponse.status === 204) {
                 console.log(`✓ Deleted items for order ${order.id}`);
               } else {
@@ -295,14 +295,14 @@ export default function() {
               }
               
               sleep(0.5);  // Increased from 0.2 to 0.5
-              
+        
               // Now delete the order itself
               const deleteOrderUrl = `${BASE_URL}/rest/v1/bar_orders?id=eq.${order.id}`;
               const deleteOrderResponse = rateLimitedRequest('DELETE', deleteOrderUrl, null, {
-                headers: authHeader,
+          headers: authHeader,
                 name: 'delete_order'
-              });
-              
+        });
+        
               if (deleteOrderResponse.status === 200 || deleteOrderResponse.status === 204) {
                 console.log(`✓ Deleted order ${order.id}`);
               } else {
@@ -324,17 +324,17 @@ export default function() {
       } else {
         console.log(`Failed to get orders for card ${cardInfo.id}: ${ordersResponse.status}`);
         success = false;
-      }
-      
+    }
+    
       sleep(1.5);  // Increased from 0.5 to 1.5
-      
+    
       // 3.3 Finally, delete the card
       const cardUrl = `${BASE_URL}/rest/v1/table_cards?id=eq.${cardInfo.id}`;
-      const deleteCardResponse = rateLimitedRequest('DELETE', cardUrl, null, {
-        headers: authHeader,
-        name: 'delete_card'
-      });
-      
+    const deleteCardResponse = rateLimitedRequest('DELETE', cardUrl, null, {
+      headers: authHeader,
+      name: 'delete_card'
+    });
+    
       if (deleteCardResponse.status === 200 || deleteCardResponse.status === 204) {
         console.log(`✓ Deleted card ${cardInfo.id}`);
       } else {

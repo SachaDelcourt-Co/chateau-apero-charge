@@ -432,35 +432,35 @@ export default function() {
       
       // Step 1: Login as bar user
       group('Login', function() {
-        // Randomly select a bar user
-        const barCredential = barCredentials[Math.floor(Math.random() * barCredentials.length)];
-        
-        console.log(`Logging in as ${barCredential.email}`);
-        const loginResponse = rateLimitedRequest('POST', `${BASE_URL}/auth/v1/token?grant_type=password`, {
-          email: barCredential.email,
-          password: barCredential.password
-        }, {
+  // Randomly select a bar user
+  const barCredential = barCredentials[Math.floor(Math.random() * barCredentials.length)];
+  
+  console.log(`Logging in as ${barCredential.email}`);
+  const loginResponse = rateLimitedRequest('POST', `${BASE_URL}/auth/v1/token?grant_type=password`, {
+    email: barCredential.email,
+    password: barCredential.password
+  }, {
           name: 'login',
           addInitialJitter: true // Add jitter to avoid all VUs hitting login at the same time
-        });
-        
-        // Check if login was successful
+  });
+  
+  // Check if login was successful
         if (!check(loginResponse, { 
           'login successful': (r) => r.status === 200 && r.json('access_token') !== undefined 
         })) {
           console.error(`Login failed: ${loginResponse.status} ${loginResponse.body}`);
           sleep(randomIntBetween(2, 4));
-          return;
-        }
-        
-        // Get access token
-        const accessToken = loginResponse.json('access_token');
-        // Include the API key in the auth header
-        const authHeader = { 
-          'Authorization': `Bearer ${accessToken}`,
-          'apikey': API_KEY
-        };
-        
+    return;
+  }
+  
+  // Get access token
+  const accessToken = loginResponse.json('access_token');
+  // Include the API key in the auth header
+  const authHeader = { 
+    'Authorization': `Bearer ${accessToken}`,
+    'apikey': API_KEY
+  };
+  
         // Step 2: Random simulated NFC scanning
         group('NFC scanning', function() {
           // Randomly select card
@@ -473,8 +473,8 @@ export default function() {
           const minimumBalance = 3 + Math.random() * 9;
           
           console.log(`Simulating ${scanType.type} NFC scan for card ${cardInfo.id}`);
-          
-          // Simulate NFC card scan
+  
+  // Simulate NFC card scan
           const scanResult = simulateNfcScan(authHeader, cardInfo, scanType, minimumBalance);
           
           // Track scan results
@@ -485,7 +485,7 @@ export default function() {
             'NFC scan processed': (r) => r.scanned === true,
             'Card has sufficient balance': (r) => r.hasBalance === true
           });
-          
+  
           // Detailed logging for diagnostics
           if (scanResult.success) {
             if (scanResult.hasBalance) {

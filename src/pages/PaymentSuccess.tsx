@@ -25,10 +25,10 @@ const PaymentSuccess: React.FC = () => {
   useEffect(() => {
     // Create an async function inside the effect
     const processPayment = async () => {
-      // Get parameters from URL if present
-      const params = new URLSearchParams(location.search);
-      const amountParam = params.get('amount');
-      const cardIdParam = params.get('cardId');
+    // Get parameters from URL if present
+    const params = new URLSearchParams(location.search);
+    const amountParam = params.get('amount');
+    const cardIdParam = params.get('cardId');
       
       // Check multiple possible parameter names for the session ID
       // Stripe might use 'session_id', 'sessionId', or other variants
@@ -36,21 +36,21 @@ const PaymentSuccess: React.FC = () => {
       
       // Clean up old localStorage entries
       cleanupLocalStorage();
-      
-      if (amountParam) {
-        setAmount(amountParam);
-      }
-      
-      if (cardIdParam) {
-        setCardId(cardIdParam);
-      }
+    
+    if (amountParam) {
+      setAmount(amountParam);
+    }
+    
+    if (cardIdParam) {
+      setCardId(cardIdParam);
+    }
 
       // Log the found session ID and URL parameters for debugging
       console.log('URL parameters:', Object.fromEntries(params.entries()));
       console.log('Session ID found:', sessionIdParam);
 
-      if (sessionIdParam) {
-        setSessionId(sessionIdParam);
+    if (sessionIdParam) {
+      setSessionId(sessionIdParam);
         
         // Check if this session has already been processed
         const processedTransactions = JSON.parse(localStorage.getItem('processedTransactions') || '[]');
@@ -68,8 +68,8 @@ const PaymentSuccess: React.FC = () => {
             fetchCardData(cardIdParam);
           }
         } else {
-          // Si nous avons un ID de session, cela signifie que le paiement a été complété
-          if (cardIdParam && amountParam) {
+      // Si nous avons un ID de session, cela signifie que le paiement a été complété
+      if (cardIdParam && amountParam) {
             // Mark this session as processed before updating the balance
             localStorage.setItem(
               'processedTransactions', 

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { supabase as integrationSupabase } from "@/integrations/supabase/client";
+import { logger } from '@/lib/logger';
 
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
@@ -54,7 +55,9 @@ export async function getCardById(cardNumber: string): Promise<Card | null> {
 export async function updateCardAmount(cardNumber: string, amount: string): Promise<boolean> {
   const { error } = await supabase
     .from('table_cards')
-    .update({ amount })
+    .update({ 
+      amount: amount // Sending as string as expected by the schema
+    })
     .eq('id', cardNumber);
 
   if (error) {
@@ -102,7 +105,9 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
 export async function updateTableCardAmount(id: string, amount: string): Promise<boolean> {
   const { error } = await supabase
     .from('table_cards')
-    .update({ amount })
+    .update({ 
+      amount: amount // Sending as string as expected by the schema
+    })
     .eq('id', id);
 
   if (error) {
@@ -200,7 +205,8 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
       return { success: false };
     }
 
-    const currentAmount = parseFloat(cardData.amount || '0');
+    // Parse the string amount to a number for calculations
+    const currentAmount = parseFloat(cardData.amount?.toString() || '0');
     if (currentAmount < order.total_amount) {
       console.error('Insufficient funds:', currentAmount, 'required:', order.total_amount);
       return { success: false };
@@ -249,7 +255,9 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
     
     const { error: updateError } = await supabase
       .from('table_cards')
-      .update({ amount: newAmount })
+      .update({ 
+        amount: newAmount // Storing as string as expected by the schema
+      })
       .eq('id', order.card_id);
 
     if (updateError) {
@@ -289,28 +297,160 @@ export async function processBarOrder(orderData: {
     quantity: number;
     unit_price: number;
     name: string;
+    is_deposit?: boolean;
+    is_return?: boolean;
   }>;
   total_amount: number;
 }): Promise<BarOrderTransactionResult> {
   try {
-    const { data, error } = await supabase.functions.invoke('process-bar-order', {
-      body: orderData
+    // Log the original data
+    console.log('[process-bar-order] Called with:', JSON.stringify(orderData, null, 2));
+    
+    // Create a clean payload with proper boolean handling
+    const payload = {
+      card_id: orderData.card_id,
+      total_amount: orderData.total_amount,
+      items: orderData.items.map(item => ({
+        product_id: item.product_id || 0,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        name: item.name,
+        is_deposit: item.is_deposit === true,
+        is_return: item.is_return === true
+      }))
+    };
+    
+    // Log the payload for debugging
+    console.log('[process-bar-order] Sending payload:', JSON.stringify(payload, null, 2));
+    
+    // *** CORS FIX: Use relative URL to send the request to the current domain ***
+    // This will be handled by the Vite dev server or production host which will proxy to Supabase
+    // avoiding direct browser-to-Supabase requests that can cause CORS issues
+    
+    // New approach using relative URL that will be handled by proxy
+    const apiUrl = '/api/process-bar-order';
+    
+    // Fallback to direct URL only when needed
+    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-bar-order';
+    
+    // Choose the URL based on environment
+    // In development or when using tunnels like ngrok, use the proxy approach
+    const functionUrl = window.location.hostname.includes('localhost') || 
+                       window.location.hostname.includes('ngrok') || 
+                       window.location.hostname.includes('.app') ? 
+                       apiUrl : directUrl;
+    
+    console.log(`[process-bar-order] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
+    
+    // Test the JSON serialization separately to catch any issues
+    const jsonPayload = JSON.stringify(payload);
+    console.log('[process-bar-order] JSON payload length:', jsonPayload.length);
+    console.log('[process-bar-order] JSON payload first 100 chars:', jsonPayload.substring(0, 100));
+    
+    // Add detailed timing and request information
+    const startTime = Date.now();
+    console.log(`[process-bar-order] Starting fetch request at ${new Date().toISOString()}`);
+    
+    // Make a direct fetch request with explicit content type
+    // Use a timeout promise to handle hanging requests
+    const FETCH_TIMEOUT = 15000; // 15 seconds timeout
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
+    );
+    
+    const fetchPromise = fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: jsonPayload,
+      // Use credentials for cookies if needed by your auth setup
+      credentials: 'same-origin'
     });
     
-    if (error) {
-      console.error('Edge function error:', error);
+    // Race between the fetch and timeout
+    const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+    
+    const responseTime = Date.now() - startTime;
+    console.log(`[process-bar-order] Response received in ${responseTime}ms`);
+    
+    // Log response status for debugging
+    console.log(`[process-bar-order] Response status: ${response.status} ${response.statusText}`);
+    
+    // Check if the response is OK
+    if (!response.ok) {
+      console.error(`[process-bar-order] Error response:`, response.status, response.statusText);
+      
+      let errorDetail = 'Unknown error';
+      let errorDetails = null;
+      
+      // Try to get error details from response
+      try {
+        const errorText = await response.text();
+        console.error(`[process-bar-order] Error response body:`, errorText);
+        
+        try {
+          // Try to parse as JSON
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error || errorJson.details || response.statusText;
+          errorDetails = errorJson;
+        } catch (parseError) {
+          // If not JSON, use as text
+          errorDetail = errorText || response.statusText;
+        }
+      } catch (e) {
+        // If we can't get response text
+        errorDetail = response.statusText;
+      }
+      
       return { 
         success: false, 
-        error: 'Error calling order processing service' 
+        error: errorDetail,
+        details: errorDetails
       };
     }
     
+    // Parse the response as JSON
+    const responseText = await response.text();
+    console.log(`[process-bar-order] Raw response (${responseText.length} chars):`, 
+      responseText.length > 200 ? responseText.substring(0, 200) + '...' : responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (jsonError) {
+      console.error(`[process-bar-order] JSON parse error:`, jsonError);
+      console.error(`[process-bar-order] Non-parseable response:`, responseText);
+      return {
+        success: false,
+        error: 'Invalid JSON response from server',
+        details: {
+          parseError: jsonError.message,
+          responseText: responseText.substring(0, 500) // Log first 500 chars
+        }
+      };
+    }
+    
+    console.log('[process-bar-order] Parsed response:', data);
+    
     return data;
   } catch (e) {
-    console.error('Client error calling order function:', e);
+    // Get detailed error info
+    const errorInfo = {
+      name: e.name,
+      message: e.message,
+      stack: e.stack,
+      toString: e.toString(),
+      constructor: e.constructor ? e.constructor.name : 'unknown'
+    };
+    
+    console.error('[process-bar-order] Client error details:', errorInfo);
+    
     return { 
       success: false, 
-      error: 'Network or client error' 
+      error: 'Network or client error',
+      details: errorInfo
     };
   }
 }

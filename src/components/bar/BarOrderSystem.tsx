@@ -272,6 +272,12 @@ export const BarOrderSystem: React.FC = () => {
       });
 
       // Call the Edge Function
+      console.log("About to call Edge Function with:", {
+        card_id: id.trim(),
+        total_amount: total,
+        items: formattedItems
+      });
+      
       const orderResult = await processBarOrder({
         card_id: id.trim(),
         total_amount: total,
