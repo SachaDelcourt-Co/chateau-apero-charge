@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BarOrder, createBarOrder, getTableCardById } from '@/lib/supabase';
+import { BarOrder, getTableCardById, processBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -118,61 +118,65 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
       }
       
       try {
-        // Check if card exists and has sufficient balance
-        const card = await getTableCardById(cardId.trim());
-        
-        if (!card) {
-          setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
-          setIsProcessing(false);
-          return;
-        }
-
-        const cardAmountFloat = parseFloat(card.amount || '0');
-        
-        // Use the current total to compare with card balance
-        if (cardAmountFloat < currentTotal) {
-          setErrorMessage(`Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${currentTotal.toFixed(2)}€.`);
-          setIsProcessing(false);
-          return;
-        }
-
-        setCardBalance(card.amount);
-
         // Process the order with the current total amount - get it one more time for absolute certainty
         const finalTotal = getCurrentTotal();
-        const orderData: BarOrder = {
-          ...order,
+        
+        // Prepare formatted items for the Edge Function
+        const formattedItems = order.items.map(item => ({
+          product_id: 0, // Not used in the DB but required for the Edge Function format
+          quantity: item.quantity,
+          unit_price: item.price,
+          name: item.product_name,
+          is_deposit: item.is_deposit,
+          is_return: item.is_return
+        }));
+
+        // Call the Edge Function
+        const orderResult = await processBarOrder({
           card_id: cardId.trim(),
-          total_amount: finalTotal, // Use the final total amount
-          items: JSON.parse(JSON.stringify(order.items)) // Deep copy to avoid reference issues
-        };
-
-        console.log("Sending order with total:", orderData.total_amount);
-
-        const orderResult = await createBarOrder(orderData);
+          total_amount: finalTotal,
+          items: formattedItems
+        });
 
         if (orderResult.success) {
           setPaymentSuccess(true);
+          
           toast({
             title: "Paiement réussi",
-            description: `La commande a été traitée avec succès. Nouveau solde: ${(cardAmountFloat - currentTotal).toFixed(2)}€`
+            description: `La commande a été traitée avec succès. Nouveau solde: ${orderResult.new_balance?.toFixed(2)}€`
           });
+          
+          // Store the balance to display it on success screen
+          if (orderResult.previous_balance !== undefined) {
+            setCardBalance(orderResult.previous_balance.toString());
+          }
+          
           // Operation successful, no need to retry
           shouldRetry = false;
         } else {
-          // Check if we encountered a rate limit error from the response
-          const response = orderResult as any; // Use any to access potential error properties
-          if (response.statusCode === 429 || response.message?.includes('rate limit')) {
+          // Handle specific error cases
+          if (orderResult.error?.includes('Insufficient funds')) {
+            // Show toast for insufficient balance with data from transaction
+            if (orderResult.previous_balance !== undefined) {
+              setErrorMessage(`Solde insuffisant. La carte dispose de ${orderResult.previous_balance.toFixed(2)}€ mais le total est de ${finalTotal.toFixed(2)}€.`);
+            } else {
+              setErrorMessage("Solde insuffisant sur la carte.");
+            }
+            shouldRetry = false;
+          } else if (orderResult.error?.includes('Card not found')) {
+            setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+            shouldRetry = false;
+          } else if (orderResult.error?.includes('rate limit') || orderResult.error?.includes('too many requests')) {
             shouldRetry = true;
             retryCount++;
             console.log('Rate limit detected in order result, will retry');
           } else {
             // Some other error
-            setErrorMessage("Erreur lors du traitement de la commande. Veuillez réessayer.");
+            setErrorMessage(`Erreur lors du traitement de la commande: ${orderResult.error || 'Erreur inconnue'}`);
             shouldRetry = false;
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error processing payment:', error);
         
         // Check if error is a rate limit error

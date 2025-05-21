@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { supabase as integrationSupabase } from "@/integrations/supabase/client";
 
@@ -265,5 +264,53 @@ export async function createBarOrder(order: BarOrder): Promise<{ success: boolea
   } catch (error) {
     console.error('Exception lors de la création de la commande:', error);
     return { success: false };
+  }
+}
+
+// Add a return type for the transaction function
+interface BarOrderTransactionResult {
+  success: boolean;
+  order_id?: number;
+  previous_balance?: number;
+  new_balance?: number;
+  error?: string;
+  details?: any;
+}
+
+/**
+ * Process a bar order through the Edge Function for transaction safety
+ * @param orderData Order data including card_id, items, and total_amount
+ * @returns Result of the transaction including success status and balance information
+ */
+export async function processBarOrder(orderData: {
+  card_id: string;
+  items: Array<{
+    product_id: number;
+    quantity: number;
+    unit_price: number;
+    name: string;
+  }>;
+  total_amount: number;
+}): Promise<BarOrderTransactionResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke('process-bar-order', {
+      body: orderData
+    });
+    
+    if (error) {
+      console.error('Edge function error:', error);
+      return { 
+        success: false, 
+        error: 'Error calling order processing service' 
+      };
+    }
+    
+    return data;
+  } catch (e) {
+    console.error('Client error calling order function:', e);
+    return { 
+      success: false, 
+      error: 'Network or client error' 
+    };
   }
 }

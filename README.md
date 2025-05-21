@@ -291,3 +291,45 @@ Please read our contribution guidelines before submitting pull requests.
 - [Stripe Documentation](https://stripe.com/docs)
 - [React Documentation](https://reactjs.org/docs)
 - [K6 Documentation](https://k6.io/docs/)
+
+## Edge Function Architecture
+
+The application has been migrated to use Supabase Edge Functions for critical operations, enhancing security, observability, and transaction safety.
+
+### Key Components:
+
+1. **Edge Function: `process-bar-order`**
+   - Handles bar order processing in a centralized, server-side fashion
+   - Provides transaction safety through Postgres stored procedures
+   - Includes detailed logging for production troubleshooting
+   - Returns standardized response objects
+
+2. **Stored Procedure: `create_bar_order_transaction`**
+   - Ensures atomicity of order creation, item addition, and balance updates
+   - Performs all operations within a single database transaction
+   - Validates card existence and sufficient balance
+   - Returns comprehensive result data including previous/new balances
+
+3. **Client Helper: `processBarOrder`**
+   - Provides a convenient interface for frontend components
+   - Handles the Edge Function invocation and error standardization
+   - Used by BarPaymentForm and BarOrderSystem components
+
+### Deployment Instructions:
+
+```bash
+# Deploy the Edge Function
+supabase functions deploy process-bar-order --no-verify-jwt
+
+# Apply the database migration for the stored procedure
+supabase db push
+# Or run the migration SQL manually through the Supabase dashboard
+```
+
+### Benefits:
+
+- Improved observability through centralized logging
+- Better transaction safety with atomicity guarantees
+- Simplified client code with reduced direct DB access
+- Enhanced security through service role isolation
+- Consistent error handling and reporting

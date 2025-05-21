@@ -24,22 +24,34 @@ docker pull grafana/k6
    - Tests product listing, order creation, and card balance updates
    - Enhanced randomization for more realistic order patterns
 
-2. **Card Recharge Test** (`card-recharges.js`)
+2. **Bar Operations Functional Test** (`bar-operations-functional.js`) **[NEW]**
+   - End-to-end business logic validation of the complete bar order workflow
+   - Validates data integrity across all operations (card balances, orders, items)
+   - Tests specific edge cases like exact balance orders and complex orders
+   - Provides detailed metrics on balance accuracy and order integrity
+
+3. **Card Recharge Test** (`card-recharges.js`)
    - Simulates card recharging with progressive load testing
    - Includes weighted distribution of recharge amounts
    - Implements comprehensive error tracking and reporting
 
-3. **Mixed Operations Test** (`mixed-operations.js`)
+4. **Card Recharge Functional Test** (`card-recharges-functional.js`) **[NEW]**
+   - End-to-end business logic validation of the complete recharge workflow
+   - Verifies payment records are properly created and linked to cards
+   - Tests various recharge scenarios (small/large amounts, cash/card payments)
+   - Validates final card balances match expected values after recharge
+
+5. **Mixed Operations Test** (`mixed-operations.js`)
    - Simulates a realistic mix of bar operations, recharges, and admin activities
    - Implements token bucket rate limiting to avoid overwhelming the API
    - Enhanced reporting of operation success rates
 
-4. **NFC Operations Test** (`nfc-operations.js`)
+6. **NFC Operations Test** (`nfc-operations.js`)
    - Simulates various NFC scanning patterns (quick, normal, flaky)
    - Tests different card types (regular, low balance, empty)
    - Detailed metrics for scan success and reconnection attempts
 
-5. **Cleanup Utility** (`cleanup-test-data.js`)
+7. **Cleanup Utility** (`cleanup-test-data.js`)
    - Removes all test data created during load testing sessions
    - Uses rate limit-aware deletion to avoid API limits
 
@@ -87,6 +99,19 @@ The updated tests track numerous metrics to provide comprehensive insights:
 | `nfc_reconnect_attempts` | Count of NFC reconnection attempts |
 | `total_recharge_amount` | Total value of all card recharges |
 
+### Business Logic Validation Metrics (New)
+
+The functional tests also include business validation metrics:
+
+| Metric | Description |
+|--------|-------------|
+| `business_balance_accuracy` | Rate of successful card balance verifications |
+| `business_order_integrity` | Rate of correctly created orders |
+| `business_item_integrity` | Rate of correctly created order items |
+| `business_workflow_success` | Rate of end-to-end workflow success |
+| `business_recharge_success` | Rate of successful card recharges |
+| `business_payment_record` | Rate of correct payment record creation |
+
 ## Running the Tests
 
 To run any test with detailed metrics output:
@@ -95,8 +120,14 @@ To run any test with detailed metrics output:
 # Run bar operations test with output to JSON for analysis
 k6 run --out json=results/bar-results.json bar-operations.js
 
+# Run bar operations functional test
+k6 run --out json=results/bar-functional-results.json bar-operations-functional.js
+
 # Run card recharge test
 k6 run --out json=results/recharge-results.json card-recharges.js
+
+# Run card recharge functional test
+k6 run --out json=results/recharge-functional-results.json card-recharges-functional.js
 
 # Run mixed operations test
 k6 run --out json=results/mixed-results.json mixed-operations.js 
@@ -112,7 +143,7 @@ For the best visualization of results, you can use InfluxDB and Grafana:
 
 ```bash
 # Run with output to InfluxDB
-k6 run --out influxdb=http://localhost:8086/k6 bar-operations.js
+k6 run --out influxdb=http://localhost:8086/k6 bar-operations-functional.js
 ```
 
 ## Interpreting Test Results
@@ -138,6 +169,46 @@ After running the tests, pay special attention to:
 5. **Endpoint-Specific Issues**
    - Which specific API endpoints hit rate limits first?
    - Are there particular operations that struggle under load?
+
+6. **Business Logic Integrity** (New)
+   - Does the card balance remain accurate under load?
+   - Are all order items properly created and linked?
+   - At what point does data integrity start to degrade?
+
+## New Functional Testing Approach
+
+The new functional tests go beyond technical success to validate full business logic:
+
+### End-to-End Workflow Validation
+
+Each test run verifies the complete workflow:
+
+1. **Card Verification/Creation**
+   - Ensures test cards exist with the correct initial balance
+   - Verifies card data can be retrieved consistently
+
+2. **Transaction Processing**
+   - For Bar Operations: Creates orders and order items with proper relationships
+   - For Card Recharges: Creates payment records with unique transaction IDs
+
+3. **Balance Management**
+   - Updates card balances correctly based on operation type
+   - For Bar: Deducts the order total from card balance
+   - For Recharges: Adds the recharge amount to card balance
+
+4. **Data Integrity Checks**
+   - Validates all relationships between entities
+   - Confirms no data is lost during high concurrency operations
+   - Verifies final balances match expected values
+
+### Specific Edge Cases Tested
+
+The functional tests include specific scenarios to verify edge cases:
+
+- **Simple/Complex Orders**: Order variations with different product mixes
+- **Exact Balance Orders**: Orders that use nearly all of a card's available balance
+- **Recharge Scenarios**: Various recharge amounts (small, medium, large)
+- **Payment Methods**: Testing both card and cash payment processing
 
 ## Randomization and Realism
 
@@ -171,9 +242,34 @@ All tests include sophisticated rate limit handling:
 
 ## Understanding the Test Scenarios
 
+### Bar Operations Functional Test
+
+The bar operations functional test validates the entire business process:
+
+1. Login as bar staff
+2. Get available products
+3. Create test cards with known balances
+4. Process simulated orders with different complexity levels
+5. Verify all data is correctly saved and consistent across the database
+
+This test focuses on data integrity and correctness rather than just successful API calls.
+
+### Card Recharge Functional Test
+
+The card recharge functional test validates the entire recharge process:
+
+1. Login as recharge staff
+2. Create or verify test cards with specific starting balances
+3. Process various recharge scenarios (different amounts, payment methods)
+4. Create payment records with unique transaction IDs
+5. Update card balances and verify correctness
+6. Validate payment records match the expected values
+
+This test ensures that the entire recharge workflow maintains data integrity under load.
+
 ### Bar Operations Test
 
-The bar operations test simulates the complete flow of processing orders at the bar:
+The standard bar operations test simulates the technical flow of processing orders at the bar:
 
 1. Login as bar staff
 2. Get available products
@@ -217,11 +313,11 @@ This test focuses specifically on NFC card scanning:
 
 For the most comprehensive analysis:
 
-1. Run each test individually first to establish baselines
-2. Run the mixed operations test to simulate real event conditions
-3. Monitor success rates and response times throughout test stages
-4. Identify the specific load point where rate limits first appear
-5. Analyze which operations are most affected by rate limiting
+1. Start with the functional tests to verify business logic correctness
+2. Run the standard load tests to establish performance baselines
+3. Run the mixed operations test to simulate real event conditions
+4. Monitor both technical and business metrics throughout the tests
+5. Identify the specific load point where data integrity starts to degrade
 6. Always run the cleanup script after testing
 
 ## Analyzing the Results
@@ -233,6 +329,8 @@ After running the tests, you'll be able to answer these key questions:
 3. Which specific operations are most vulnerable to rate limiting?
 4. How well does the system handle flaky NFC connections?
 5. What is the maximum sustainable throughput (operations per second)?
+6. At what point does business logic validation start to fail?
+7. Which aspects of data integrity (balance, orders, items) are most vulnerable?
 
 This information will help you configure appropriate rate limits and optimize the system for your expected attendance of 3,000 people across 10 bars.
 
@@ -248,8 +346,8 @@ When running these tests:
 
 For thorough testing before your event, we recommend the following approach:
 
-1. **Initial Testing**: Run individual tests at low volume to verify functionality
-2. **Gradual Scale-Up**: If tests succeed, you can gradually increase load by modifying request rates
+1. **Initial Testing**: Run functional tests at low volume to verify business logic correctness
+2. **Gradual Scale-Up**: If tests succeed, gradually increase load by modifying request rates
 3. **Mixed Workload**: Test with the mixed-operations script to simulate real-world usage
 4. **Sustained Load**: Run extended tests (10+ minutes) to verify system stability
 5. **Cleanup**: Clean up test data after each testing session

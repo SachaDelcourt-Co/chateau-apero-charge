@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, createBarOrder } from '@/lib/supabase';
+import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, processBarOrder } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -254,61 +254,39 @@ export const BarOrderSystem: React.FC = () => {
     });
 
     try {
-      // Check if card exists and has sufficient balance
-      const card = await getTableCardById(id.trim());
+      // Format the items for the Edge Function
+      const formattedItems = orderItems.map(item => ({
+        product_id: 0, // Not used by the stored procedure but required for interface
+        quantity: item.quantity,
+        unit_price: item.price,
+        name: item.product_name,
+        is_deposit: item.is_deposit || false,
+        is_return: item.is_return || false
+      }));
       
-      if (!card) {
-        const errorMsg = "Carte non trouvée. Veuillez vérifier l'ID de la carte.";
-        logger.error('Card not found during payment', { cardId: id });
-        setErrorMessage(errorMsg);
-        resetScan("card not found error");
-        setIsProcessing(false);
-        return;
-      }
+      logger.payment('submitting_order', { 
+        cardId: id, 
+        total, 
+        itemCount: orderItems.length,
+        transactionSafe: true // Log that we're using the transaction-safe method
+      });
 
-      const cardAmountFloat = parseFloat(card.amount || '0');
-      logger.payment('card_validated', { cardId: id, balance: cardAmountFloat, total });
-      
-      if (cardAmountFloat < total) {
-        // Show toast for insufficient balance - one of the two cases we want to keep
-        const errorMsg = `Solde insuffisant. La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`;
-        logger.payment('insufficient_balance', { 
-          cardId: id, 
-          balance: cardAmountFloat, 
-          required: total,
-          difference: total - cardAmountFloat
-        });
-        
-        toast({
-          title: "Solde insuffisant",
-          description: `La carte dispose de ${cardAmountFloat.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
-          variant: "destructive"
-        });
-        setErrorMessage(errorMsg);
-        resetScan("insufficient balance error");
-        setIsProcessing(false);
-        return;
-      }
-
-      // Process the order with the exact total amount
-      const orderData: BarOrder = {
+      // Call the Edge Function
+      const orderResult = await processBarOrder({
         card_id: id.trim(),
         total_amount: total,
-        items: JSON.parse(JSON.stringify(orderItems))
-      };
-
-      logger.payment('submitting_order', { cardId: id, total, itemCount: orderItems.length });
-
-      const orderResult = await createBarOrder(orderData);
+        items: formattedItems
+      });
 
       if (orderResult.success) {
-        const newBalance = (cardAmountFloat - total).toFixed(2);
+        // Use the transaction result data directly
         logger.payment('payment_success', { 
           cardId: id, 
-          previousBalance: cardAmountFloat,
+          previousBalance: orderResult.previous_balance,
           amount: total,
-          newBalance: parseFloat(newBalance),
-          orderId: orderResult.orderId
+          newBalance: orderResult.new_balance,
+          orderId: orderResult.order_id,
+          transactionSafe: true
         });
         
         // Remember if we were scanning
@@ -320,10 +298,10 @@ export const BarOrderSystem: React.FC = () => {
           stopScan();
         }
         
-        // Show success message with remaining balance - one of the two cases we want to keep
+        // Show success message with the new balance from the transaction
         toast({
           title: "Paiement réussi",
-          description: `Solde restant: ${newBalance}€`
+          description: `Solde restant: ${orderResult.new_balance?.toFixed(2)}€`
         });
         
         // Completely reset all state
@@ -341,9 +319,40 @@ export const BarOrderSystem: React.FC = () => {
           }, 800); // Slightly longer delay for better cleanup
         }
       } else {
-        const errorMsg = "Erreur lors du traitement de la commande. Veuillez réessayer.";
-        logger.error('Order processing failed', { cardId: id, total, error: orderResult });
-        setErrorMessage(errorMsg);
+        // Handle specific error cases
+        if (orderResult.error?.includes('Insufficient funds')) {
+          // Show toast for insufficient balance
+          const errorMsg = `Solde insuffisant sur la carte.`;
+          
+          if (orderResult.previous_balance !== undefined) {
+            // We have balance information from the transaction
+            toast({
+              title: "Solde insuffisant",
+              description: `La carte dispose de ${orderResult.previous_balance.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
+              variant: "destructive"
+            });
+          } else {
+            toast({
+              title: "Solde insuffisant",
+              description: errorMsg,
+              variant: "destructive"
+            });
+          }
+          
+          setErrorMessage(errorMsg);
+        } else if (orderResult.error?.includes('Card not found')) {
+          setErrorMessage("Carte non trouvée. Veuillez vérifier l'ID de la carte.");
+        } else {
+          setErrorMessage(`Erreur lors du traitement de la commande: ${orderResult.error || 'Erreur inconnue'}`);
+        }
+        
+        logger.error('Order processing failed', { 
+          cardId: id, 
+          total, 
+          error: orderResult.error,
+          transactionSafe: true
+        });
+        
         resetScan("order processing error");
       }
     } catch (error) {

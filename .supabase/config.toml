@@ -1,0 +1,46 @@
+# A string used to distinguish different Supabase projects on the same host. Defaults to the working
+# directory name when running `supabase init`.
+project_id = "chateau-apero-charge"
+
+[api]
+# Port to use for the API URL.
+port = 54321
+# Schemes for the API URL.
+schemes = ["http", "https"]
+
+[db]
+# Port to use for the local database URL.
+port = 54322
+
+[studio]
+# Port to use for Supabase Studio.
+port = 54323
+
+# Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
+# are monitored, and you can view the emails that would have been sent from the web interface.
+[inbucket]
+# Port to use for the email testing server web interface.
+port = 54324
+# Port to use for the email testing server SMTP port.
+smtp_port = 54325
+# Port to use for the email testing server POP3 port.
+pop3_port = 54326
+
+[auth]
+# The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
+# in emails.
+site_url = "http://localhost:3000"
+# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
+additional_redirect_urls = ["https://localhost:3000"]
+# How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
+jwt_expiry = 3600
+# Allow/disallow new user signups to your project.
+enable_signup = true
+
+[functions]
+# Port to use for Functions server.
+port = 54328
+
+# [functions.function_name]
+# Set individual function environmental variables for a function.
+# env_XXXX = "value" 
