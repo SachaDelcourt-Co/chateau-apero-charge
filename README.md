@@ -77,19 +77,17 @@ npm run dev
 │   └── integrations/        # Third-party integrations
 ├── supabase/                # Supabase configuration and edge functions
 │   ├── functions/           # Serverless edge functions
-│   │   ├── create-checkout-session/  # Stripe checkout creation
-│   │   ├── stripe-webhook/           # Stripe webhook handler
-│   │   └── __tests__/               # Edge function tests
+│   │   ├── process-bar-order/    # Bar order processing
+│   │   ├── stripe-webhook/       # Stripe webhook handler
+│   │   └── __tests__/           # Edge function tests
 ├── load-tests/              # K6 load testing suite
 │   ├── bar-operations.js    # Bar payment flow tests
 │   ├── card-recharges.js    # Card recharge flow tests
 │   ├── nfc-operations.js    # NFC scanning performance tests
 │   ├── mixed-operations.js  # Mixed workload testing
-│   ├── cleanup-test-data.js # Test data cleanup utilities
 │   └── results/             # Test results output directory
 └── public/                  # Public assets
 ```
-
 
 ## 🔄 User Flows
 
@@ -105,6 +103,7 @@ npm run dev
 3. Select products for a customer's order
 4. Simply hold customer's NFC card near the phone to process payment
    (or manually enter the card ID)
+5. All order processing is handled securely by the Edge Function
 
 ### Recharge Staff Flow
 1. Log in with recharge role credentials
@@ -294,42 +293,52 @@ Please read our contribution guidelines before submitting pull requests.
 
 ## Edge Function Architecture
 
-The application has been migrated to use Supabase Edge Functions for critical operations, enhancing security, observability, and transaction safety.
+The application uses Supabase Edge Functions for critical operations, providing enhanced security, observability, and transaction safety.
 
 ### Key Components:
 
 1. **Edge Function: `process-bar-order`**
-   - Handles bar order processing in a centralized, server-side fashion
-   - Provides transaction safety through Postgres stored procedures
-   - Includes detailed logging for production troubleshooting
-   - Returns standardized response objects
+   - Centralized handler for all bar order processing
+   - Directly manages the entire transaction flow:
+     - Card balance verification
+     - Order creation
+     - Order item creation
+     - Balance updates
+   - Includes comprehensive error handling and logging
+   - Returns detailed response with balance information
 
-2. **Stored Procedure: `create_bar_order_transaction`**
-   - Ensures atomicity of order creation, item addition, and balance updates
-   - Performs all operations within a single database transaction
-   - Validates card existence and sufficient balance
-   - Returns comprehensive result data including previous/new balances
+2. **Backend-Only Logic**
+   - All business logic related to order processing is isolated in the Edge Function
+   - No direct database modifications are performed from the frontend
+   - Frontend components only collect data and call the Edge Function
+   - Responses include detailed information for UI updates
 
 3. **Client Helper: `processBarOrder`**
-   - Provides a convenient interface for frontend components
-   - Handles the Edge Function invocation and error standardization
-   - Used by BarPaymentForm and BarOrderSystem components
+   - Provides a clean interface for frontend components
+   - Handles Edge Function communication with proper error handling
+   - Implements timeout handling and detailed logging
+   - Used consistently across all bar components
 
-### Deployment Instructions:
+### Payment Processing
+
+1. **Direct Stripe Integration**
+   - Client-side Stripe integration using the Stripe.js library
+   - Bypasses server for initial checkout creation
+   - Handles proper success/cancel URLs and payment methods
+   - Maintains card ID references throughout the payment flow
+
+### Deployment Process:
 
 ```bash
 # Deploy the Edge Function
 supabase functions deploy process-bar-order --no-verify-jwt
-
-# Apply the database migration for the stored procedure
-supabase db push
-# Or run the migration SQL manually through the Supabase dashboard
 ```
 
 ### Benefits:
 
-- Improved observability through centralized logging
-- Better transaction safety with atomicity guarantees
-- Simplified client code with reduced direct DB access
-- Enhanced security through service role isolation
-- Consistent error handling and reporting
+- **Security**: All sensitive operations occur server-side
+- **Consistency**: Unified processing logic in one location
+- **Reliability**: Transaction safety with proper error handling
+- **Observability**: Comprehensive logging throughout the process
+- **Maintainability**: Clear separation of frontend and backend concerns
+- **Performance**: Optimized database operations

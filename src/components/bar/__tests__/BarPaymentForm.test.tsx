@@ -7,7 +7,7 @@ import { toast } from '@/hooks/use-toast';
 // Mock the supabase module
 vi.mock('@/lib/supabase', () => ({
   getTableCardById: vi.fn(),
-  createBarOrder: vi.fn(),
+  processBarOrder: vi.fn(),
 }));
 
 // Mock the toast function
@@ -74,15 +74,20 @@ describe('BarPaymentForm Rate Limit Handling', () => {
   });
 
   it('should handle rate limit errors with exponential backoff', async () => {
-    // Mock the createBarOrder function to simulate rate limit errors
+    // Mock the processBarOrder function to simulate rate limit errors
     let callCount = 0;
-    vi.mocked(supabaseModule.createBarOrder).mockImplementation(async () => {
+    vi.mocked(supabaseModule.processBarOrder).mockImplementation(async () => {
       callCount++;
       if (callCount <= 2) {
         console.error('Error processing payment:', { status: 429, message: 'Too many requests' });
         return Promise.reject({ status: 429, message: 'Too many requests' });
       } else {
-        return Promise.resolve({ success: true, orderId: 'order-123' });
+        return Promise.resolve({ 
+          success: true, 
+          order_id: 123, 
+          previous_balance: 50.00,
+          new_balance: 40.00
+        });
       }
     });
 
@@ -102,7 +107,7 @@ describe('BarPaymentForm Rate Limit Handling', () => {
     });
 
     // Verify first call happens
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(1);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(1);
 
     // Run the first retry
     await act(async () => {
@@ -110,7 +115,7 @@ describe('BarPaymentForm Rate Limit Handling', () => {
     });
 
     // Verify second call happens
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(2);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(2);
 
     // Run the second retry (which will succeed)
     await act(async () => {
@@ -118,18 +123,18 @@ describe('BarPaymentForm Rate Limit Handling', () => {
     });
 
     // Verify all three calls were made
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(3);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(3);
 
     // Success should show
     expect(toast).toHaveBeenCalledWith(expect.objectContaining({
       title: "Paiement réussi",
-      description: expect.stringContaining("Nouveau solde: 40.00€"),
+      description: expect.stringContaining("Nouveau solde: 40.00"),
     }));
   });
 
   it('should display an error after exceeding max retries', async () => {
-    // Mock createBarOrder to always fail with rate limit
-    vi.mocked(supabaseModule.createBarOrder).mockRejectedValue({ 
+    // Mock processBarOrder to always fail with rate limit
+    vi.mocked(supabaseModule.processBarOrder).mockRejectedValue({ 
       status: 429, 
       message: 'Too many requests' 
     });
@@ -153,32 +158,32 @@ describe('BarPaymentForm Rate Limit Handling', () => {
     await act(async () => {
       vi.advanceTimersByTime(1100); // First retry
     });
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(2);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       vi.advanceTimersByTime(2100); // Second retry
     });
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(3);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(3);
 
     await act(async () => {
       vi.advanceTimersByTime(4100); // Third retry
     });
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(4);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(4);
 
     await act(async () => {
       vi.advanceTimersByTime(8100); // Fourth retry
     });
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(5);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(5);
 
     await act(async () => {
       vi.advanceTimersByTime(10100); // Fifth retry
     });
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(6);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(6);
     
     // Verify the error message shows up
     expect(screen.getByText(/momentanément surchargé/i)).toBeTruthy();
     
     // Verify all retries were attempted (1 initial + 5 retries = 6 total)
-    expect(supabaseModule.createBarOrder).toHaveBeenCalledTimes(6);
+    expect(supabaseModule.processBarOrder).toHaveBeenCalledTimes(6);
   });
 }); 

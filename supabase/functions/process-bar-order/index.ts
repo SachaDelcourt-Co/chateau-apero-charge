@@ -61,9 +61,9 @@ serve(async (req) => {
       }
       
       // Check body length and content
-      console.log(`[${requestId}] Raw request body length: ${bodyText.length}`);
-      console.log(`[${requestId}] Raw request body starts with: ${bodyText.substring(0, 50)}...`);
-      console.log(`[${requestId}] Raw request body ends with: ...${bodyText.substring(bodyText.length - 50)}`);
+      // console.log(`[${requestId}] Raw request body length: ${bodyText.length}`);
+      // console.log(`[${requestId}] Raw request body starts with: ${bodyText.substring(0, 50)}...`);
+      // console.log(`[${requestId}] Raw request body ends with: ...${bodyText.substring(bodyText.length - 50)}`);
       
       // Log the raw body for debugging
       console.log(`[${requestId}] Raw request body (length ${bodyText.length}): ${bodyText.substring(0, 300)}${bodyText.length > 300 ? '...' : ''}`);
