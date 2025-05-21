@@ -28,10 +28,47 @@ serve(async (req) => {
   console.log(`[${requestId}] Bar order processing started`);
   
   try {
-    // Parse request body
-    const { card_id, items, total_amount, point_of_sale = 1 } = await req.json() as BarOrderRequest;
+    // Enhanced error handling for JSON parsing
+    let requestBody;
+    try {
+      // Log the request content type for debugging
+      console.log(`[${requestId}] Request content-type: ${req.headers.get('content-type')}`);
+      
+      // Read request body as text first for debugging
+      const bodyText = await req.text();
+      
+      // If body is empty, log it and throw an error
+      if (!bodyText || bodyText.trim() === '') {
+        console.error(`[${requestId}] Empty request body received`);
+        throw new Error('Empty request body');
+      }
+      
+      // Log the raw body for debugging
+      console.log(`[${requestId}] Raw request body: ${bodyText.substring(0, 200)}${bodyText.length > 200 ? '...' : ''}`);
+      
+      // Parse the body text as JSON
+      try {
+        requestBody = JSON.parse(bodyText);
+      } catch (jsonError) {
+        console.error(`[${requestId}] JSON parse error: ${jsonError.message}`);
+        throw new Error(`Invalid JSON: ${jsonError.message}`);
+      }
+    } catch (bodyError) {
+      console.error(`[${requestId}] Body processing error: ${bodyError.message}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Invalid request body format',
+          details: bodyError.message
+        }),
+        { headers: { 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
     
-    console.log(`[${requestId}] Processing order for card ${card_id} with ${items.length} items, total: ${total_amount}€`);
+    // Extract request data with validation
+    const { card_id, items, total_amount, point_of_sale = 1 } = requestBody as BarOrderRequest;
+    
+    console.log(`[${requestId}] Processing order for card ${card_id} with ${items?.length || 0} items, total: ${total_amount}€`);
     
     // Create Supabase client with service role for full access
     const supabaseAdmin = createClient(
