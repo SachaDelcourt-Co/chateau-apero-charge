@@ -9,8 +9,60 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      app_logs: {
+        Row: {
+          app_version: string | null
+          args: Json | null
+          batch_id: string | null
+          client_timestamp: string
+          created_at: string
+          environment: string | null
+          id: number
+          level: string
+          message: string
+          request_id: string | null
+          route: string | null
+          server_timestamp: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          app_version?: string | null
+          args?: Json | null
+          batch_id?: string | null
+          client_timestamp: string
+          created_at?: string
+          environment?: string | null
+          id?: number
+          level: string
+          message: string
+          request_id?: string | null
+          route?: string | null
+          server_timestamp: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          app_version?: string | null
+          args?: Json | null
+          batch_id?: string | null
+          client_timestamp?: string
+          created_at?: string
+          environment?: string | null
+          id?: number
+          level?: string
+          message?: string
+          request_id?: string | null
+          route?: string | null
+          server_timestamp?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       bar_order_items: {
         Row: {
+          created_at: string | null
           id: string
           is_deposit: boolean | null
           is_return: boolean | null
@@ -20,6 +72,7 @@ export type Database = {
           quantity: number
         }
         Insert: {
+          created_at?: string | null
           id?: string
           is_deposit?: boolean | null
           is_return?: boolean | null
@@ -29,6 +82,7 @@ export type Database = {
           quantity?: number
         }
         Update: {
+          created_at?: string | null
           id?: string
           is_deposit?: boolean | null
           is_return?: boolean | null
@@ -77,6 +131,13 @@ export type Database = {
             foreignKeyName: "bar_orders_card_id_fkey"
             columns: ["card_id"]
             isOneToOne: false
+            referencedRelation: "card_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bar_orders_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: false
             referencedRelation: "table_cards"
             referencedColumns: ["id"]
           },
@@ -109,67 +170,47 @@ export type Database = {
         }
         Relationships: []
       }
-      card_transactions: {
+      card_statistics: {
         Row: {
-          amount: number
           card_id: string
-          created_at: string | null
-          id: string
-          payment_method: string | null
-          point_of_sale: number | null
-          transaction_type: string
+          last_updated: string
+          total_amount_recharged: number
+          total_amount_spent: number
+          total_orders: number
+          total_recharges: number
         }
         Insert: {
-          amount: number
           card_id: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type: string
+          last_updated?: string
+          total_amount_recharged?: number
+          total_amount_spent?: number
+          total_orders?: number
+          total_recharges?: number
         }
         Update: {
-          amount?: number
           card_id?: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type?: string
+          last_updated?: string
+          total_amount_recharged?: number
+          total_amount_spent?: number
+          total_orders?: number
+          total_recharges?: number
         }
         Relationships: [
           {
-            foreignKeyName: "card_transactions_card_id_fkey"
+            foreignKeyName: "card_statistics_card_id_fkey"
             columns: ["card_id"]
-            isOneToOne: false
+            isOneToOne: true
+            referencedRelation: "card_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_statistics_card_id_fkey"
+            columns: ["card_id"]
+            isOneToOne: true
             referencedRelation: "table_cards"
             referencedColumns: ["id"]
           },
         ]
-      }
-      paiements: {
-        Row: {
-          amount: number | null
-          created_at: string
-          id: number
-          id_card: string | null
-          paid_by_card: boolean | null
-        }
-        Insert: {
-          amount?: number | null
-          created_at?: string
-          id?: number
-          id_card?: string | null
-          paid_by_card?: boolean | null
-        }
-        Update: {
-          amount?: number | null
-          created_at?: string
-          id?: number
-          id_card?: string | null
-          paid_by_card?: boolean | null
-        }
-        Relationships: []
       }
       profiles: {
         Row: {
@@ -192,35 +233,98 @@ export type Database = {
         }
         Relationships: []
       }
+      recharges: {
+        Row: {
+          amount: number | null
+          card_id: string | null
+          created_at: string
+          id: number
+          notes: string | null
+          paid_by_card: boolean | null
+          payment_method: string | null
+          processed_by_user_id: string | null
+          stripe_session_id: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          card_id?: string | null
+          created_at?: string
+          id?: number
+          notes?: string | null
+          paid_by_card?: boolean | null
+          payment_method?: string | null
+          processed_by_user_id?: string | null
+          stripe_session_id?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          card_id?: string | null
+          created_at?: string
+          id?: number
+          notes?: string | null
+          paid_by_card?: boolean | null
+          payment_method?: string | null
+          processed_by_user_id?: string | null
+          stripe_session_id?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: []
+      }
       refunds: {
         Row: {
           account: string | null
+          amount_recharged: number | null
+          card_balance: number | null
           created_at: string
           email: string | null
           "first name": string | null
           id: number
           id_card: string | null
           "last name": string | null
+          matched_card: string | null
         }
         Insert: {
           account?: string | null
+          amount_recharged?: number | null
+          card_balance?: number | null
           created_at?: string
           email?: string | null
           "first name"?: string | null
           id?: number
           id_card?: string | null
           "last name"?: string | null
+          matched_card?: string | null
         }
         Update: {
           account?: string | null
+          amount_recharged?: number | null
+          card_balance?: number | null
           created_at?: string
           email?: string | null
           "first name"?: string | null
           id?: number
           id_card?: string | null
           "last name"?: string | null
+          matched_card?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "refunds_matched_card_fkey"
+            columns: ["matched_card"]
+            isOneToOne: false
+            referencedRelation: "card_balances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refunds_matched_card_fkey"
+            columns: ["matched_card"]
+            isOneToOne: false
+            referencedRelation: "table_cards"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       table_cards: {
         Row: {
@@ -251,9 +355,37 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      card_balances: {
+        Row: {
+          current_balance: number | null
+          id: string | null
+          last_updated: string | null
+          order_count: number | null
+          recharge_count: number | null
+          total_recharged: number | null
+          total_spent: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      create_bar_order_transaction: {
+        Args: {
+          p_card_id: string
+          p_total_amount: number
+          p_status?: string
+          p_point_of_sale?: number
+          p_items?: Json
+        }
+        Returns: Json
+      }
+      get_tables: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          table_schema: string
+          table_name: string
+        }[]
+      }
       get_user_role: {
         Args: { user_id: string }
         Returns: Database["public"]["Enums"]["user_role"]
