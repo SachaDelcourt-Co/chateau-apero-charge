@@ -42,119 +42,72 @@ serve(async (req) => {
       
       // Extract metadata
       const cardId = session.metadata?.cardId;
-      const amount = session.metadata?.amount;
+      const amountString = session.metadata?.amount;
       const sessionId = session.id;
-      
-      if (!cardId || !amount) {
+
+      if (!cardId || !amountString) {
         console.error('Missing metadata in Stripe session:', session.metadata);
-        return new Response('Missing cardId or amount in metadata', { status: 400 });
+        return new Response(JSON.stringify({ error: 'Missing cardId or amount in metadata' }), { status: 400 });
       }
 
-      console.log(`Processing payment for card ${cardId} with amount ${amount}`);
+      const amountNumber = parseFloat(amountString);
 
-      // Rate limit handling variables
-      const maxRetries = 5;
-      let retryCount = 0;
+      if (isNaN(amountNumber) || amountNumber <= 0) {
+        console.error('Invalid or non-positive amount in metadata. cardId:', cardId, 'amountString:', amountString);
+        return new Response(JSON.stringify({ error: 'Invalid or non-positive amount in metadata' }), { status: 400 });
+      }
 
-      // Function to perform database operations with retry
-      const performDatabaseOperationWithRetry = async (operation: () => Promise<any>) => {
-        while (retryCount <= maxRetries) {
-          try {
-            return await operation();
-          } catch (error) {
-            // Check if it's a rate limit error
-            if (error.code === '429' || error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
-              retryCount++;
-              
-              // If we've exhausted our retries, throw the error
-              if (retryCount > maxRetries) {
-                console.error(`Rate limit hit, max retries (${maxRetries}) exceeded.`);
-                throw error;
-              }
-              
-              // Calculate backoff time (exponential with jitter)
-              const sleepTime = Math.min(Math.pow(2, retryCount) * 500 + Math.random() * 500, 10000);
-              console.log(`Rate limit hit, retrying in ${sleepTime}ms (attempt ${retryCount}/${maxRetries})...`);
-              
-              // Sleep for the backoff time
-              await new Promise(resolve => setTimeout(resolve, sleepTime));
-            } else {
-              // For non-rate-limit errors, throw immediately
-              throw error;
-            }
+      console.log(`Calling sp_process_stripe_recharge for card ${cardId}, amount ${amountNumber}, session ${sessionId}`);
+
+      try {
+        const { data: spResult, error: spError } = await supabaseClient.rpc(
+          'sp_process_stripe_recharge',
+          {
+            card_id_in: cardId,
+            amount_in: amountNumber,
+            stripe_session_id_in: sessionId,
+            stripe_metadata_in: session, // Pass the whole session object as metadata
           }
+        );
+
+        if (spError) {
+          console.error('Error calling stored procedure sp_process_stripe_recharge:', JSON.stringify(spError, null, 2));
+          // Check for specific PostgreSQL error codes or custom codes raised by the SP
+          if (spError.code === 'P0001') { // Assuming P0001 is custom 'Card Not Found'
+            return new Response(JSON.stringify({ error: 'Card not found', cardId }), { status: 404 });
+          } else if (spError.code === '23505' || spError.code === 'P0002') { // 23505 for unique_violation (idempotency), P0002 custom for idempotency
+            return new Response(JSON.stringify({ message: 'Transaction already processed or idempotency conflict', cardId }), { status: 200 });
+          }
+          // Generic database error
+          return new Response(JSON.stringify({ error: 'Database error processing recharge', details: spError.message, code: spError.code }), { status: 500 });
         }
-      };
 
-      // Check if this transaction has already been processed with retry
-      const existingPayment = await performDatabaseOperationWithRetry(async () => {
-        const { data, error } = await supabaseClient
-          .from('paiements')
-          .select('id')
-          .eq('stripe_session_id', sessionId)
-          .maybeSingle();
-          
-        if (error) throw error;
-        return data;
-      });
+        let newBalance;
+        if (spResult && typeof spResult === 'object' && spResult.hasOwnProperty('new_balance')) {
+            newBalance = spResult.new_balance;
+        } else if (spResult && typeof spResult === 'number') { // If SP directly returns the new balance
+            newBalance = spResult;
+        } else {
+            console.warn('Stored procedure sp_process_stripe_recharge did not return new_balance in the expected format. Response will not include it.');
+        }
 
-      // Get the current card details with retry
-      const cardData = await performDatabaseOperationWithRetry(async () => {
-        const { data, error } = await supabaseClient
-          .from('table_cards')
-          .select('amount')
-          .eq('id', cardId)
-          .single();
-          
-        if (error) throw error;
-        return data;
-      });
+        console.log(`Successfully processed recharge for card ${cardId} via stored procedure. New balance from SP: ${newBalance ?? 'N/A'}`);
+        return new Response(JSON.stringify({
+          received: true,
+          status: 'success',
+          message: 'Recharge processed successfully via stored procedure.',
+          cardId: cardId,
+          rechargeAmount: amountNumber,
+          ...(newBalance !== undefined && { newBalance: newBalance }),
+        }), { status: 200 });
 
-      if (!cardData) {
-        console.error('Error fetching card data: Card not found');
-        return new Response('Error fetching card data: Card not found', { status: 400 });
+      } catch (rpcCallError) {
+        // Catch any unexpected errors during the RPC call itself (e.g. network issues)
+        console.error('Unexpected error calling RPC sp_process_stripe_recharge:', JSON.stringify(rpcCallError, null, 2));
+        // It's important to check if rpcCallError has a message property
+        const errorMessage = rpcCallError instanceof Error ? rpcCallError.message : String(rpcCallError);
+        return new Response(JSON.stringify({ error: 'Failed to communicate with database service', details: errorMessage }), { status: 503 });
       }
-
-      // Calculate new amount - ensure proper addition with toFixed(2)
-      const currentAmount = parseFloat(cardData.amount || '0');
-      const rechargeAmount = parseFloat(amount);
-      // Addition and then format to 2 decimal places
-      const newAmount = (currentAmount + rechargeAmount).toFixed(2);
-
-      console.log(`Card ${cardId} current balance: ${currentAmount}, recharge: ${rechargeAmount}, new balance: ${newAmount}`);
-
-      // Update the card amount with retry
-      await performDatabaseOperationWithRetry(async () => {
-        const { error } = await supabaseClient
-          .from('table_cards')
-          .update({ amount: newAmount })
-          .eq('id', cardId);
-          
-        if (error) throw error;
-      });
-
-      console.log(`Successfully updated card ${cardId} balance to ${newAmount}`);
-
-      // Log the payment in the paiements table with retry
-      await performDatabaseOperationWithRetry(async () => {
-        const { error } = await supabaseClient
-          .from('paiements')
-          .insert({
-            id_card: cardId,
-            amount: rechargeAmount,
-            paid_by_card: true,
-            stripe_session_id: session.id
-          });
-          
-        if (error) throw error;
-      });
-
-      return new Response(JSON.stringify({ 
-        received: true,
-        cardId: cardId,
-        rechargeAmount: rechargeAmount,
-        newBalance: newAmount 
-      }), { status: 200 });
     }
 
     // Return a response for other events

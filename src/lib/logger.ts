@@ -1,6 +1,18 @@
 import * as Sentry from '@sentry/browser';
 import log from 'loglevel';
 
+// Define LogEntry interface
+interface LogEntry {
+  level: string;
+  message: string; // This is contextualMessage (e.g., [file-func] originalMessage)
+  originalMessage: string; // The message as passed to logger method
+  args: any[];
+  timestamp: string;
+  fileFunction: string;
+  log_type?: string;
+  payload?: any;
+}
+
 // Initialize Sentry with a DSN from your Sentry.io account
 // For now using a test DSN - replace with your actual DSN
 Sentry.init({
@@ -50,7 +62,11 @@ export type RechargeEventType =
   | 'recharge_rate_limited'
   | 'recharge_payment_log_error'
   | 'recharge_update_failed'
-  | 'recharge_max_retries_exceeded';
+  | 'recharge_max_retries_exceeded'
+  | 'recharge_checkpoint_attempt' // Added
+  | 'recharge_checkpoint_success' // Added
+  | 'recharge_checkpoint_error_invoke' // Added
+  | 'recharge_checkpoint_error_catch'; // Added
 
 // Remote logging configuration
 const REMOTE_LOGGING_ENABLED = true; // Can be toggled in production
@@ -122,7 +138,7 @@ const shouldIncludeLog = (level: string, message: string, args: any[]): boolean 
 }
 
 // Queue to store logs for batching
-let logQueue: any[] = [];
+let logQueue: LogEntry[] = [];
 let batchTimeout: number | null = null;
 
 // Get current route from window.location
@@ -144,14 +160,14 @@ const getLogMetadata = () => {
 };
 
 // Function to send logs to Supabase Edge Function
-const sendLogsToEdgeFunction = async (logs: any[]) => {
+const sendLogsToEdgeFunction = async (logs: LogEntry[]) => {
   if (!REMOTE_LOGGING_ENABLED || logs.length === 0) return;
   
   try {
     // Quick sanity check to avoid sending sensitive data like auth tokens
     // This is a simple check and should be enhanced based on your needs
-    const sanitizedLogs = logs.map(log => {
-      const { args, ...rest } = log;
+    const sanitizedLogs = logs.map(logEntry => {
+      const { args, log_type, payload, ...rest } = logEntry;
       // Basic sanitization of potential sensitive data in args
       // Creates a deep copy to avoid modifying the original
       let sanitizedArgs = JSON.parse(JSON.stringify(args || {}));
@@ -175,7 +191,11 @@ const sendLogsToEdgeFunction = async (logs: any[]) => {
         return obj;
       };
       
-      return { ...rest, args: sanitizeObject(sanitizedArgs) };
+      // The payload for NFC scans is assumed to be structured eventData and less likely to contain
+      // arbitrary sensitive info that isn't already an arg. If payload could be sensitive,
+      // it might need its own sanitization step or be included in sanitizeObject if args structure is similar.
+      // For now, passing payload through as is, relying on args sanitization for general cases.
+      return { ...rest, args: sanitizeObject(sanitizedArgs), log_type, payload };
     });
 
     await fetch(SUPABASE_LOG_ENDPOINT, {
@@ -230,7 +250,7 @@ const scheduleBatchSend = () => {
 };
 
 // Add a log to the queue
-const queueLog = (level: string, message: string, args: any[] = []) => {
+const queueLog = (level: string, message: string, args: any[] = [], logDetails?: { log_type?: string; payload?: any }) => {
   // Skip filtered log patterns to reduce noise
   if (LOG_FILTER_PATTERNS.some(pattern => 
       (typeof message === 'string' && message.includes(pattern)) || 
@@ -314,14 +334,24 @@ const queueLog = (level: string, message: string, args: any[] = []) => {
     // Add file-function context to the message
     const contextualMessage = `${fileFunction} ${message}`;
     
-    logQueue.push({
+    const logEntry: LogEntry = {
       level,
       message: contextualMessage,
       originalMessage: message,
       args,
       timestamp: new Date().toISOString(),
       fileFunction
-    });
+    };
+
+    if (logDetails?.log_type) {
+      logEntry.log_type = logDetails.log_type;
+    }
+    // Check for undefined to allow null as a valid payload
+    if (logDetails?.payload !== undefined) {
+      logEntry.payload = logDetails.payload;
+    }
+    
+    logQueue.push(logEntry);
     
     // If we've reached batch size, process immediately
     if (logQueue.length >= LOG_BATCH_SIZE) {
@@ -390,37 +420,92 @@ export const logger = {
     }
   },
   
-  // Special NFC logging for the bar components
-  nfc: (message: string, ...args: any[]) => {
-    log.info(`[NFC] ${message}`, ...args);
-    queueLog('info', `[NFC] ${message}`, args);
-    
-    // In production, log NFC operations to Sentry breadcrumbs
-    if (import.meta.env.PROD) {
-      Sentry.addBreadcrumb({
-        category: 'nfc',
-        message: args.length ? `${message} ${JSON.stringify(args)}` : message,
-        level: 'info',
+  // Special NFC logging. Handles two cases:
+  // 1. Structured NFC Scan Event: logger.nfc(eventName: string, eventData: Record<string, any>)
+  // 2. General NFC Debug Log: logger.nfc(message: string, ...args: any[])
+  nfc: (messageOrEventName: string, dataOrFirstArg?: Record<string, any> | any, ...remainingArgs: any[]) => {
+    // Case 1: Structured NFC Scan Log (e.g., logger.nfc('NFC Event', eventData))
+    // Check if dataOrFirstArg is a plain object and no further args are passed.
+    if (dataOrFirstArg && typeof dataOrFirstArg === 'object' && !Array.isArray(dataOrFirstArg) && remainingArgs.length === 0) {
+      const eventName = messageOrEventName;
+      const eventData = dataOrFirstArg as Record<string, any>;
+
+      const consoleMessage = `[NFC_SCAN] ${eventName}`;
+      log.info(consoleMessage, eventData); // Log to console with full data
+
+      // Prepare the specific structured log for the server.
+      const messageForServer = eventData.scan_status
+        ? `NFC Scan: ${eventData.scan_status}`
+        : `NFC Scan: ${eventName}`;
+
+      // Queue the specific log with log_type and payload.
+      // Pass empty array for 'args' as eventData is in 'payload'.
+      queueLog('info', messageForServer, [], {
+        log_type: 'nfc_scan',
+        payload: eventData
       });
-    }
-    
-    // Persist NFC logs to localStorage for debugging in production
-    try {
-      const nfcLogs = JSON.parse(localStorage.getItem('nfc_logs') || '[]');
-      nfcLogs.push({
-        timestamp: new Date().toISOString(),
-        message: message,
-        args: args.length > 0 ? args : undefined,
-      });
-      
-      // Keep only the last 100 logs to avoid storage issues
-      if (nfcLogs.length > 100) {
-        nfcLogs.shift(); // Remove oldest log
+
+      // Sentry breadcrumb for NFC Scan event
+      if (import.meta.env.PROD) {
+        Sentry.addBreadcrumb({
+          category: 'nfc_scan', // More specific category for Sentry
+          message: messageForServer,
+          level: 'info',
+          data: eventData // Attach full event data to Sentry breadcrumb
+        });
       }
-      
-      localStorage.setItem('nfc_logs', JSON.stringify(nfcLogs));
-    } catch (error) {
-      // Ignore localStorage errors
+
+      // Persist structured NFC scan logs to localStorage
+      try {
+        const nfcLogs = JSON.parse(localStorage.getItem('nfc_logs') || '[]');
+        nfcLogs.push({
+          timestamp: new Date().toISOString(),
+          message: messageForServer, // Use the server-bound message
+          payload: eventData,        // Store the structured payload
+          log_type: 'nfc_scan'     // Add log_type for clarity
+        });
+        if (nfcLogs.length > 100) nfcLogs.shift();
+        localStorage.setItem('nfc_logs', JSON.stringify(nfcLogs));
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          const directConsoleWarn = (typeof window !== 'undefined' && window.console && window.console.warn) ? window.console.warn : log.warn;
+          directConsoleWarn('Failed to save structured NFC log to localStorage:', error);
+        }
+      }
+    } else {
+      // Case 2: General NFC Debug Log (e.g., logger.nfc('Some message', arg1, arg2) or logger.nfc('Simple message'))
+      const message = messageOrEventName;
+      const args = dataOrFirstArg !== undefined ? [dataOrFirstArg, ...remainingArgs] : remainingArgs;
+
+      log.info(`[NFC] ${message}`, ...args); // Standard console log
+      queueLog('info', `[NFC] ${message}`, args); // Queue for server, no special log_type/payload
+
+      // Sentry breadcrumb for general NFC operations
+      if (import.meta.env.PROD) {
+        Sentry.addBreadcrumb({
+          category: 'nfc', // General NFC category
+          message: args.length ? `${message} ${JSON.stringify(args)}` : message,
+          level: 'info',
+        });
+      }
+
+      // Persist general NFC logs to localStorage (original behavior)
+      try {
+        const nfcLogs = JSON.parse(localStorage.getItem('nfc_logs') || '[]');
+        nfcLogs.push({
+          timestamp: new Date().toISOString(),
+          message: message,
+          args: args.length > 0 ? args : undefined,
+          // No log_type: 'nfc_scan' here, it's a general NFC log
+        });
+        if (nfcLogs.length > 100) nfcLogs.shift();
+        localStorage.setItem('nfc_logs', JSON.stringify(nfcLogs));
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          const directConsoleWarn = (typeof window !== 'undefined' && window.console && window.console.warn) ? window.console.warn : log.warn;
+          directConsoleWarn('Failed to save general NFC log to localStorage:', error);
+        }
+      }
     }
   },
   

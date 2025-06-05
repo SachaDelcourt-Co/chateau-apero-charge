@@ -12,17 +12,21 @@ interface BarOrderRequest {
     is_return?: boolean;
   }>;
   total_amount: number;
-  point_of_sale?: number;
+  client_request_id: string; // Added for idempotency
+  point_of_sale?: string; // Changed to string, e.g., "BAR_KIOSK_1"
 }
 
-interface BarOrderResponse {
-  success: boolean;
-  order_id?: number;
-  previous_balance?: number;
+// The response will now be more directly derived from the stored procedure's output.
+// This interface might be simplified or removed depending on SP's direct passthrough.
+interface SpResponse {
+  status: 'SUCCESS' | 'ERROR' | 'IDEMPOTENCY_SUCCESS' | 'IDEMPOTENCY_CONFLICT';
+  message: string;
+  order_id?: string | number; // SP might return string or number
   new_balance?: number;
-  error?: string;
+  error_code?: string; // e.g., 'CARD_NOT_FOUND', 'INSUFFICIENT_FUNDS'
   details?: any;
 }
+
 
 serve(async (req) => {
   // Initialize logging with request ID for traceability
@@ -101,9 +105,9 @@ serve(async (req) => {
     }
     
     // Extract request data with validation
-    const { card_id, items, total_amount, point_of_sale = 1 } = requestBody as BarOrderRequest;
+    const { card_id, items, total_amount, client_request_id, point_of_sale = "BAR_DEFAULT_POS" } = requestBody as BarOrderRequest;
     
-    console.log(`[${requestId}] Processing order for card ${card_id} with ${items?.length || 0} items, total: ${total_amount}€`);
+    console.log(`[${requestId}] Processing order for card ${card_id}, client_request_id: ${client_request_id}, total: ${total_amount}€, POS: ${point_of_sale}`);
     console.log(`[${requestId}] Items: ${JSON.stringify(items)}`);
     
     // Create Supabase client with service role for full access
@@ -114,164 +118,114 @@ serve(async (req) => {
     );
     
     // Validate inputs
-    if (!card_id || !items || items.length === 0 || total_amount <= 0) {
-      console.error(`[${requestId}] Input validation failed:`, { card_id, itemCount: items?.length, total_amount });
+    if (!card_id || !items || items.length === 0 || total_amount <= 0 || !client_request_id) {
+      console.error(`[${requestId}] Input validation failed:`, { card_id, itemCount: items?.length, total_amount, client_request_id });
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Invalid input parameters' 
+        JSON.stringify({
+          status: 'ERROR',
+          error_code: 'INVALID_INPUT',
+          message: 'Invalid input parameters. card_id, items, total_amount, and client_request_id are required.'
         }),
         { headers: { 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-    
-    // First, query the current card balance to verify it exists and has enough funds
-    console.log(`[${requestId}] Fetching card balance for card ID: ${card_id}`);
-    const { data: cardData, error: cardError } = await supabaseAdmin
-      .from('table_cards')
-      .select('id, amount')
-      .eq('id', card_id)
-      .maybeSingle();
-
-    if (cardError) {
-      console.error(`[${requestId}] Error fetching card data:`, cardError);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Error fetching card data',
-          details: cardError.message
-        }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    if (!cardData) {
-      console.error(`[${requestId}] Card not found: ${card_id}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Card not found'
-        }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    console.log(`[${requestId}] Card found: ${cardData.id}, current balance: ${cardData.amount}`);
-    
-    // Parse balance as number for comparison
-    const currentBalance = parseFloat(cardData.amount);
-    if (isNaN(currentBalance)) {
-      console.error(`[${requestId}] Invalid card balance: ${cardData.amount}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Invalid card balance format'
-        }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    // Check if the card has enough funds
-    if (currentBalance < total_amount) {
-      console.error(`[${requestId}] Insufficient funds: ${currentBalance} < ${total_amount}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Insufficient funds on card',
-          previous_balance: currentBalance,
-          details: `Card has ${currentBalance}€ but order costs ${total_amount}€`
-        }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    // Begin database transaction manually instead of using stored procedure
-    console.log(`[${requestId}] Starting transaction`);
 
     try {
-      // 1. Create the order record
-      console.log(`[${requestId}] Creating order record`);
-      const { data: orderData, error: orderError } = await supabaseAdmin
-        .from('bar_orders')
-        .insert({
-          card_id: card_id,
-          total_amount: total_amount,
-          status: 'completed',
-          point_of_sale: point_of_sale
-        })
-        .select()
-        .single();
-
-      if (orderError) {
-        throw new Error(`Error creating order: ${orderError.message}`);
-      }
-
-      console.log(`[${requestId}] Order created with ID: ${orderData.id}`);
-
-      // 2. Create order items
-      const orderItems = [];
-      for (const item of items) {
-        orderItems.push({
-          order_id: orderData.id,
-          product_name: item.name,
-          price: item.unit_price,
-          quantity: item.quantity,
-          is_deposit: item.is_deposit || false,
-          is_return: item.is_return || false
-        });
-      }
-
-      console.log(`[${requestId}] Creating ${orderItems.length} order items`);
-      const { error: itemsError } = await supabaseAdmin
-        .from('bar_order_items')
-        .insert(orderItems);
-
-      if (itemsError) {
-        throw new Error(`Error creating order items: ${itemsError.message}`);
-      }
-
-      // 3. Update card balance
-      const newBalance = (currentBalance - total_amount).toFixed(2);
-      console.log(`[${requestId}] Updating card balance from ${currentBalance} to ${newBalance}`);
-      
-      const { error: updateError } = await supabaseAdmin
-        .from('table_cards')
-        .update({ 
-          amount: newBalance 
-        })
-        .eq('id', card_id);
-
-      if (updateError) {
-        throw new Error(`Error updating card balance: ${updateError.message}`);
-      }
-
-      // 4. Return success result
-      console.log(`[${requestId}] Transaction successful, returning response`);
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          order_id: orderData.id,
-          previous_balance: currentBalance,
-          new_balance: parseFloat(newBalance)
-        }),
-        { headers: { 'Content-Type': 'application/json' } }
+      console.log(`[${requestId}] Calling sp_process_bar_order with card_id: ${card_id}, client_request_id: ${client_request_id}, total_amount: ${total_amount}, point_of_sale: ${point_of_sale}`);
+      const { data: spResult, error: spError } = await supabaseAdmin.rpc(
+        'sp_process_bar_order',
+        {
+          card_id_in: card_id,
+          items_in: items, // Supabase client handles JSONB conversion
+          total_amount_in: total_amount,
+          client_request_id_in: client_request_id,
+          point_of_sale_in: point_of_sale,
+        }
       );
 
-    } catch (txError) {
-      // If any part of the transaction fails, log and return the error
-      console.error(`[${requestId}] Transaction error:`, txError);
-      
+      if (spError) {
+        console.error(`[${requestId}] Error calling stored procedure sp_process_bar_order:`, spError);
+        // This could be a database connection error, or SP does not exist, etc.
+        return new Response(
+          JSON.stringify({
+            status: 'ERROR',
+            error_code: 'DB_PROCEDURE_ERROR',
+            message: 'Failed to execute payment processing.',
+            details: spError.message,
+          }),
+          { headers: { 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+
+      console.log(`[${requestId}] Stored procedure sp_process_bar_order returned:`, spResult);
+      const result = spResult as SpResponse; // Cast to our expected SP response structure
+
+      // Handle response based on SP output
+      switch (result.status) {
+        case 'SUCCESS':
+          return new Response(JSON.stringify(result), {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        case 'IDEMPOTENCY_SUCCESS': // Already processed, return original success
+           console.log(`[${requestId}] Idempotency key ${client_request_id} indicated prior success.`);
+           return new Response(JSON.stringify(result), {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200, // Or 201 if that's how original success was reported
+          });
+        case 'ERROR':
+          switch (result.error_code) {
+            case 'CARD_NOT_FOUND':
+            case 'CARD_INACTIVE':
+              return new Response(JSON.stringify(result), {
+                headers: { 'Content-Type': 'application/json' },
+                status: 404, // Not Found
+              });
+            case 'INSUFFICIENT_FUNDS':
+              return new Response(JSON.stringify(result), {
+                headers: { 'Content-Type': 'application/json' },
+                status: 402, // Payment Required (or 400 Bad Request as per original)
+              });
+            case 'IDEMPOTENCY_CONFLICT_PROCESSING': // Order is currently being processed by another request
+              return new Response(JSON.stringify(result), {
+                headers: { 'Content-Type': 'application/json' },
+                status: 409, // Conflict
+              });
+            default: // Other business logic errors from SP
+              return new Response(JSON.stringify(result), {
+                headers: { 'Content-Type': 'application/json' },
+                status: 400, // Bad Request for general SP-side validation errors
+              });
+          }
+        default:
+          // Should not happen if SP is well-behaved
+          console.error(`[${requestId}] Unexpected status from SP: ${result.status}`);
+          return new Response(
+            JSON.stringify({
+              status: 'ERROR',
+              error_code: 'UNEXPECTED_SP_RESPONSE',
+              message: 'Received an unexpected response from the payment processor.',
+              details: result,
+            }),
+            { headers: { 'Content-Type': 'application/json' }, status: 500 }
+          );
+      }
+    } catch (e) {
+      // This catch block is for unexpected errors in the Edge Function itself,
+      // not for errors returned by the SP (which are handled above).
+      console.error(`[${requestId}] Unexpected error in Edge Function:`, e);
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: txError.message || 'Transaction failed',
-          details: txError
+        JSON.stringify({
+          status: 'ERROR',
+          error_code: 'EDGE_FUNCTION_ERROR',
+          message: 'An unexpected server error occurred.',
+          details: e.message,
         }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { 'Content-Type': 'application/json' }, status: 500 }
       );
     }
-    
   } catch (e) {
+    // This outer catch is for errors like JSON parsing before SP call attempt
     console.error(`[${requestId}] Unexpected error:`, e);
     
     return new Response(

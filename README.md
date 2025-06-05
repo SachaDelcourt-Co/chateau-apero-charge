@@ -69,7 +69,7 @@ npm run dev
 │   │   │   └── __tests__/   # Tests for admin components
 │   │   ├── bar/             # Bar interface components
 │   │   │   └── __tests__/   # Tests for bar components
-│   ├── hooks/               # Custom React hooks
+│   │   ├── hooks/           # Custom React hooks
 │   │   └── use-nfc.tsx      # NFC card scanning hook
 │   ├── __mocks__/           # Mock files for testing
 │   ├── lib/                 # Utility functions and helpers
@@ -134,9 +134,15 @@ The application uses Supabase with the following main tables:
 - **bar_products**: Products available for purchase
 - **bar_orders**: Completed orders with total amount
 - **bar_order_items**: Individual items in each order
-- **paiements**: Transaction history for card recharges
+- **recharges**: Transaction history for card recharges (formerly paiements)
 - **refunds**: Refund requests with user details
 - **profiles**: User profiles with role information
+
+The database also includes optimized views for analytics:
+
+- **card_statistics**: Consolidated view of card metrics (total spent, recharged, etc.)
+
+All tables have proper indexing and row-level security policies applied to ensure performance and data protection.
 
 ## 🔒 Authentication & Authorization
 

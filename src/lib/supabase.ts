@@ -8,7 +8,7 @@ export const supabase = integrationSupabase;
 // Export interfaces and types
 export interface TableCard {
   id: string;
-  amount: string; // Keep as string to match the DB schema
+  amount: string; // We still maintain string in the interface for backward compatibility
   description?: string | null;
 }
 
@@ -53,10 +53,13 @@ export async function getCardById(cardNumber: string): Promise<Card | null> {
 }
 
 export async function updateCardAmount(cardNumber: string, amount: string): Promise<boolean> {
+  // Convert to number for database
+  const numericAmount = parseFloat(amount);
+  
   const { error } = await supabase
     .from('table_cards')
     .update({ 
-      amount: amount // Sending as string as expected by the schema
+      amount: numericAmount // Send as number to match the database schema
     })
     .eq('id', cardNumber);
 
@@ -87,7 +90,7 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
 
     console.log('Réponse de Supabase (table_cards):', data);
     
-    // Ensure the amount is a string
+    // Ensure the amount is a string (for backward compatibility)
     if (data) {
       return {
         ...data,
@@ -103,10 +106,13 @@ export async function getTableCardById(id: string): Promise<TableCard | null> {
 }
 
 export async function updateTableCardAmount(id: string, amount: string): Promise<boolean> {
+  // Convert to a decimal/number when sending to the database
+  const numericAmount = parseFloat(amount);
+  
   const { error } = await supabase
     .from('table_cards')
     .update({ 
-      amount: amount // Sending as string as expected by the schema
+      amount: numericAmount // Send as number to match new schema
     })
     .eq('id', id);
 
@@ -129,6 +135,7 @@ export interface BarProduct {
 }
 
 export interface OrderItem {
+  product_id: number; 
   product_name: string;
   price: number;
   quantity: number;
@@ -153,32 +160,28 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes en millisecondes
 export async function getBarProducts(forceRefresh: boolean = false): Promise<BarProduct[]> {
   const now = Date.now();
   
-  // Si on force le rafraîchissement ou si le cache est expiré, on récupère les données
   if (forceRefresh || barProductsCache.length === 0 || (now - lastFetchTime) > CACHE_TTL) {
     try {
       console.log(`Récupération des produits depuis Supabase (${forceRefresh ? 'forcé' : 'cache expiré'})`);
       
-      const { data, error } = await supabase
-        .from('bar_products')
-        .select('*')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
+    const { data, error } = await supabase
+      .from('bar_products')
+      .select('*')
+      .order('category', { ascending: true })
+      .order('name', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching bar products:', error);
-        // En cas d'erreur, retourner le cache actuel s'il existe
+    if (error) {
+      console.error('Error fetching bar products:', error);
         return barProductsCache.length > 0 ? barProductsCache : [];
       }
 
-      // Mettre à jour le cache et l'horodatage
       barProductsCache = data || [];
       lastFetchTime = now;
       
       console.log(`${barProductsCache.length} produits récupérés et mis en cache`);
       return barProductsCache;
-    } catch (error) {
-      console.error('Exception lors de la récupération des produits:', error);
-      // En cas d'erreur, retourner le cache actuel s'il existe
+  } catch (error) {
+    console.error('Exception lors de la récupération des produits:', error);
       return barProductsCache.length > 0 ? barProductsCache : [];
     }
   } else {
@@ -187,22 +190,17 @@ export async function getBarProducts(forceRefresh: boolean = false): Promise<Bar
   }
 }
 
-// Add a return type for the transaction function
 interface BarOrderTransactionResult {
-  success: boolean;
-  order_id?: number;
-  previous_balance?: number;
+  status: 'success' | 'error' | 'card_not_found' | 'insufficient_funds' | 'idempotency_conflict' | 'invalid_input';
+  message: string;
+  order_id?: string; 
   new_balance?: number;
-  error?: string;
-  details?: any;
+  previous_balance?: number;
+  client_request_id?: string; 
 }
 
-/**
- * Process a bar order through the Edge Function for transaction safety
- * @param orderData Order data including card_id, items, and total_amount
- * @returns Result of the transaction including success status and balance information
- */
-export async function processBarOrder(orderData: {
+// Define a type for the payload of processBarOrder
+export interface ProcessBarOrderPayload {
   card_id: string;
   items: Array<{
     product_id: number;
@@ -213,12 +211,19 @@ export async function processBarOrder(orderData: {
     is_return?: boolean;
   }>;
   total_amount: number;
-}): Promise<BarOrderTransactionResult> {
+  client_request_id: string;
+  point_of_sale?: string;
+}
+
+/**
+ * Process a bar order through the Edge Function for transaction safety
+ * @param orderData Order data including card_id, items, and total_amount
+ * @returns Result of the transaction including success status and balance information
+ */
+export async function processBarOrder(orderData: ProcessBarOrderPayload): Promise<BarOrderTransactionResult> {
   try {
-    // Log the original data
     console.log('[process-bar-order] Called with:', JSON.stringify(orderData, null, 2));
     
-    // Create a clean payload with proper boolean handling
     const payload = {
       card_id: orderData.card_id,
       total_amount: orderData.total_amount,
@@ -229,24 +234,16 @@ export async function processBarOrder(orderData: {
         name: item.name,
         is_deposit: item.is_deposit === true,
         is_return: item.is_return === true
-      }))
+      })),
+      client_request_id: orderData.client_request_id,
+      point_of_sale: orderData.point_of_sale
     };
     
-    // Log the payload for debugging
     console.log('[process-bar-order] Sending payload:', JSON.stringify(payload, null, 2));
     
-    // *** CORS FIX: Use relative URL to send the request to the current domain ***
-    // This will be handled by the Vite dev server or production host which will proxy to Supabase
-    // avoiding direct browser-to-Supabase requests that can cause CORS issues
-    
-    // New approach using relative URL that will be handled by proxy
     const apiUrl = '/api/process-bar-order';
-    
-    // Fallback to direct URL only when needed
     const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-bar-order';
     
-    // Choose the URL based on environment
-    // In development or when using tunnels like ngrok, use the proxy approach
     const functionUrl = window.location.hostname.includes('localhost') || 
                        window.location.hostname.includes('ngrok') || 
                        window.location.hostname.includes('.app') ? 
@@ -254,18 +251,14 @@ export async function processBarOrder(orderData: {
     
     console.log(`[process-bar-order] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
     
-    // Test the JSON serialization separately to catch any issues
     const jsonPayload = JSON.stringify(payload);
     console.log('[process-bar-order] JSON payload length:', jsonPayload.length);
     console.log('[process-bar-order] JSON payload first 100 chars:', jsonPayload.substring(0, 100));
     
-    // Add detailed timing and request information
     const startTime = Date.now();
     console.log(`[process-bar-order] Starting fetch request at ${new Date().toISOString()}`);
     
-    // Make a direct fetch request with explicit content type
-    // Use a timeout promise to handle hanging requests
-    const FETCH_TIMEOUT = 15000; // 15 seconds timeout
+    const FETCH_TIMEOUT = 15000; 
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
     );
@@ -277,53 +270,44 @@ export async function processBarOrder(orderData: {
         'Accept': 'application/json'
       },
       body: jsonPayload,
-      // Use credentials for cookies if needed by your auth setup
       credentials: 'same-origin'
     });
     
-    // Race between the fetch and timeout
     const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
     
     const responseTime = Date.now() - startTime;
     console.log(`[process-bar-order] Response received in ${responseTime}ms`);
     
-    // Log response status for debugging
     console.log(`[process-bar-order] Response status: ${response.status} ${response.statusText}`);
     
-    // Check if the response is OK
     if (!response.ok) {
       console.error(`[process-bar-order] Error response:`, response.status, response.statusText);
       
       let errorDetail = 'Unknown error';
-      let errorDetails = null;
+      let errorDetailsObject = null; // Renamed to avoid conflict with BarOrderTransactionResult.details
       
-      // Try to get error details from response
       try {
         const errorText = await response.text();
         console.error(`[process-bar-order] Error response body:`, errorText);
         
         try {
-          // Try to parse as JSON
           const errorJson = JSON.parse(errorText);
-          errorDetail = errorJson.error || errorJson.details || response.statusText;
-          errorDetails = errorJson;
+          errorDetail = errorJson.error || errorJson.message || response.statusText; // Prefer message if error is not present
+          errorDetailsObject = errorJson;
         } catch (parseError) {
-          // If not JSON, use as text
           errorDetail = errorText || response.statusText;
         }
       } catch (e) {
-        // If we can't get response text
         errorDetail = response.statusText;
       }
       
-      return { 
-        success: false, 
-        error: errorDetail,
-        details: errorDetails
-      };
+      return {
+        status: 'error',
+        message: `Server error: ${errorDetail}`,
+        // details: errorDetailsObject // 'details' is not part of BarOrderTransactionResult, log separately if needed
+      } as BarOrderTransactionResult; 
     }
     
-    // Parse the response as JSON
     const responseText = await response.text();
     console.log(`[process-bar-order] Raw response (${responseText.length} chars):`, 
       responseText.length > 200 ? responseText.substring(0, 200) + '...' : responseText);
@@ -335,20 +319,20 @@ export async function processBarOrder(orderData: {
       console.error(`[process-bar-order] JSON parse error:`, jsonError);
       console.error(`[process-bar-order] Non-parseable response:`, responseText);
       return {
-        success: false,
-        error: 'Invalid JSON response from server',
-        details: {
-          parseError: jsonError.message,
-          responseText: responseText.substring(0, 500) // Log first 500 chars
-        }
-      };
+        status: 'error',
+        message: 'Invalid JSON response from server',
+        // details: { 
+        //   parseError: jsonError.message,
+        //   responseText: responseText.substring(0, 500)
+        // }
+      } as BarOrderTransactionResult; 
     }
     
     console.log('[process-bar-order] Parsed response:', data);
     
-    return data;
-  } catch (e) {
-    // Get detailed error info
+    return data as BarOrderTransactionResult;
+
+  } catch (e: any) { // Added type any for e
     const errorInfo = {
       name: e.name,
       message: e.message,
@@ -359,10 +343,10 @@ export async function processBarOrder(orderData: {
     
     console.error('[process-bar-order] Client error details:', errorInfo);
     
-    return { 
-      success: false, 
-      error: 'Network or client error',
-      details: errorInfo
-    };
+    return {
+      status: 'error',
+      message: 'Network or client error: ' + e.message,
+      // details: errorInfo
+    } as BarOrderTransactionResult; 
   }
 }

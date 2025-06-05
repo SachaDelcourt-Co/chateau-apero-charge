@@ -3,6 +3,15 @@ import { check, sleep, group } from 'k6';
 import { SharedArray } from 'k6/data';
 import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 import { Rate, Trend, Counter } from 'k6/metrics';
+// import { uuidv4 } from 'k6/crypto'; // Removing dependency
+
+// Custom UUIDv4 Generator
+function generateUuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 // Enhanced metrics for better reporting
 const rateLimitErrors = new Rate('rate_limit_errors');
@@ -16,8 +25,7 @@ const unknownEndpointTime = new Trend('response_time_unknown');
 
 // Pre-declare all endpoint-specific metrics in the init context
 const ENDPOINTS = [
-  'login', 'check_card', 'create_card', 'create_payment', 'update_balance',
-  'verify_card'
+  'login', 'process_checkpoint_recharge', 'check_card_optional' // check_card might be used pre-recharge if desired, but not core to EF
 ];
 
 // Initialize all endpoint metrics in init context
@@ -35,12 +43,15 @@ const rechargeCredentials = new SharedArray('recharge credentials', function() {
   ];
 });
 
-// Generate a unique ID for this test run to avoid collisions
-const testRunId = new Date().getTime();
-
-// Simulated card IDs (representing NFC cards)
+// Use existing test cards instead of generating random ones
 const simulatedCardIds = new SharedArray('card IDs', function() {
-  return Array.from({ length: 200 }, (_, i) => `simulated-card-${testRunId}-${i+1}`);
+  return [
+    'k6-test-card-001',  // Created test card with €50 balance
+    'K7McPLKa',          // Existing card (may need balance)
+    'dQdtfYgZ',          // Existing card (may need balance)
+    'tRS2RVg1',          // Existing card (may need balance)
+    'brJm7KCu',          // Existing card (may need balance)
+  ];
 });
 
 // Recharge amounts with weighted distribution
@@ -215,161 +226,63 @@ function rateLimitedRequest(method, url, body = null, params = {}) {
   return result;
 }
 
-// Enhanced function to process a card recharge with better error tracking
-function processRecharge(authToken, cardId, rechargeAmount, isPaidByCard) {
-  const authHeaders = {
-    'Authorization': `Bearer ${authToken}`,
-    'apikey': API_KEY
-  };
-  
-  let success = false;
-  let rechargeResponse = {
-    cardExists: false,
-    paymentCreated: false,
-    balanceUpdated: false,
-    previousBalance: 0,
-    newBalance: 0,
-    errors: []
-  };
-  
-  // Step 1: Check if card exists or create it
-  group('Card verification', function() {
-    const cardRes = rateLimitedRequest('get', `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}&select=*`, null, {
-      headers: authHeaders,
-      name: 'check_card'
-    });
-    
-    if (cardRes.status === 200) {
-      const cardData = JSON.parse(cardRes.body);
-      if (cardData.length > 0) {
-        rechargeResponse.cardExists = true;
-        rechargeResponse.previousBalance = parseFloat(cardData[0].amount || '0');
-        console.log(`Found existing card ${cardId} with balance: ${rechargeResponse.previousBalance}`);
-      }
-    } else {
-      rechargeResponse.errors.push({
-        stage: 'card_verification',
-        status: cardRes.status,
-        message: cardRes.body
-      });
-    }
-    
-    // If card doesn't exist, create it
-    if (!rechargeResponse.cardExists) {
-      // Generate a descriptive name for the test card
-      const cardDescription = `Test recharge card (${new Date().toISOString()})`;
-      
-      console.log(`Creating new card with ID: ${cardId} and description: ${cardDescription}`);
-      
-    const createCardRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/table_cards`, 
-        {
-        id: cardId,
-        amount: '0',
-          description: cardDescription
-        },
-      {
-          headers: {
-            ...authHeaders,
-            'Prefer': 'return=representation'
-          },
-          name: 'create_card'
-      }
-    );
-    
-      if (createCardRes.status === 201) {
-        rechargeResponse.cardExists = true;
-        rechargeResponse.previousBalance = 0;
-        console.log(`Successfully created new card ${cardId}`);
-      } else {
-        rechargeResponse.errors.push({
-          stage: 'card_creation',
-          status: createCardRes.status,
-          message: createCardRes.body
-        });
-        console.error(`Failed to create card: ${createCardRes.status} ${createCardRes.body}`);
-      }
-    }
-  });
-  
-  // Only proceed if card exists
-  if (!rechargeResponse.cardExists) {
-    return rechargeResponse;
-  }
-  
-  // Step 2: Create payment record
-  group('Payment record creation', function() {
-    // Create payment record (removed description field as it doesn't exist)
-    const transactionRes = rateLimitedRequest('post', `${BASE_URL}/rest/v1/paiements`, 
-      {
-        amount: rechargeAmount,
-        id_card: cardId,
-        paid_by_card: isPaidByCard,
-        created_at: new Date().toISOString()
+// Enhanced function to process a card recharge via Edge Function
+function processRecharge(baseApiUrl, apiKey, cardId, rechargeAmount, isPaidByCard, rechargePointId = 'load-test-recharge-station-1') {
+  const clientRequestId = generateUuidv4(); // Use custom UUID generator
+  const paymentMethod = isPaidByCard ? 'card_terminal' : 'cash'; // Example payment methods
+
+  try {
+    console.log(`Attempting recharge for card ${cardId}, amount ${rechargeAmount}, method ${paymentMethod}, client_request_id: ${clientRequestId}, point: ${rechargePointId}`);
+
+    const payload = {
+      client_request_id: clientRequestId,
+      card_id: cardId,
+      recharge_amount: rechargeAmount,
+      payment_method_at_checkpoint: paymentMethod,
+      staff_id: 'k6-test-staff',
+      checkpoint_id: rechargePointId
+    };
+
+    const processRechargeUrl = `${baseApiUrl}/functions/v1/process-checkpoint-recharge`;
+    const rechargeEdgeResponse = rateLimitedRequest('POST', processRechargeUrl, payload, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`, // Use API_KEY (anon/service) as Bearer token
+        'Content-Type': 'application/json'
       },
-      {
-        headers: {
-          ...authHeaders,
-        'Prefer': 'return=representation',
-        },
-        name: 'create_payment'
-      }
-    );
-    
-    if (transactionRes.status === 201) {
-      rechargeResponse.paymentCreated = true;
-      console.log(`Payment record created for card ${cardId} with amount ${rechargeAmount}€`);
-    } else {
-      rechargeResponse.errors.push({
-        stage: 'payment_creation',
-        status: transactionRes.status,
-        message: transactionRes.body
-      });
-      console.error(`Failed to create payment record: ${transactionRes.status} ${transactionRes.body}`);
-    }
+      name: 'process_checkpoint_recharge' // Metric name for this Edge Function call
     });
-    
-  // Step 3: Update card balance
-  group('Balance update', function() {
-    // Calculate new balance
-    rechargeResponse.newBalance = rechargeResponse.previousBalance + rechargeAmount;
-    
-    console.log(`Updating card ${cardId} balance from ${rechargeResponse.previousBalance} to ${rechargeResponse.newBalance}`);
-    
-    const updateCardRes = rateLimitedRequest('patch', `${BASE_URL}/rest/v1/table_cards?id=eq.${cardId}`, 
-      {
-        amount: rechargeResponse.newBalance.toString()
-      },
-      {
-        headers: {
-          ...authHeaders,
-          'Prefer': 'return=minimal'
-        },
-        name: 'update_balance'
-      }
-    );
-    
-    if (updateCardRes.status === 204 || updateCardRes.status === 200) {
-      rechargeResponse.balanceUpdated = true;
-      
-      // Track the total amount recharged
-      totalRechargeAmount.add(rechargeAmount);
-      
-      console.log(`Successfully updated card ${cardId} balance to ${rechargeResponse.newBalance}€`);
+
+    if (rechargeEdgeResponse.status === 200) {
+      const responseBody = rechargeEdgeResponse.json(); // Safely parse JSON
+      console.log(`Recharge processed successfully for client_request_id: ${clientRequestId}. Response: ${JSON.stringify(responseBody)}`);
+      totalRechargeAmount.add(rechargeAmount); // Track successful recharge amount
+      return {
+        success: true,
+        client_request_id: clientRequestId,
+        response: responseBody,
+        recharge_id: responseBody ? responseBody.recharge_id : null,
+        new_balance: responseBody ? responseBody.new_balance : null
+      };
     } else {
-      rechargeResponse.errors.push({
-        stage: 'balance_update',
-        status: updateCardRes.status,
-        message: updateCardRes.body
-      });
-      console.error(`Failed to update card balance: ${updateCardRes.status} ${updateCardRes.body}`);
+      console.error(`Failed to process recharge (client_request_id: ${clientRequestId}): ${rechargeEdgeResponse.status} ${rechargeEdgeResponse.body}`);
+      return {
+        success: false,
+        client_request_id: clientRequestId,
+        stage: 'process_checkpoint_recharge_edge_function',
+        status: rechargeEdgeResponse.status,
+        error: rechargeEdgeResponse.body
+      };
+    }
+
+  } catch (error) {
+    console.error(`Error in processRecharge function (client_request_id: ${clientRequestId}):`, error);
+    return {
+        success: false,
+        client_request_id: clientRequestId,
+        error: error.message,
+        stage: 'processRecharge_internal_error'
+    };
   }
-  });
-  
-  // Determine overall success
-  success = rechargeResponse.cardExists && rechargeResponse.paymentCreated && rechargeResponse.balanceUpdated;
-  rechargeResponse.success = success;
-  
-  return rechargeResponse;
 }
 
 // Main test function
@@ -411,10 +324,10 @@ export default function() {
           return;
         }
         
-        const authToken = JSON.parse(loginRes.body).access_token;
+        // const authToken = JSON.parse(loginRes.body).access_token; // authToken not directly used for Edge Function call with API_KEY
         
         // Step 2: Simulate card scan for recharge
-        group('Process recharge', function() {
+        group('Process recharge via Edge Function', function() {
           // Select a random card ID
           const cardId = simulatedCardIds[randomIntBetween(0, simulatedCardIds.length - 1)];
           
@@ -424,17 +337,13 @@ export default function() {
           // Randomly determine payment method (card or cash)
           const isPaidByCard = Math.random() < 0.7; // 70% card payments, 30% cash
           
-          console.log(`Processing ${rechargeAmount}€ recharge for card ${cardId} paid by ${isPaidByCard ? 'card' : 'cash'}`);
-          
-          // Process the recharge
-          const rechargeResult = processRecharge(authToken, cardId, rechargeAmount, isPaidByCard);
+          // Process the recharge using the new function targeting the Edge Function
+          // Pass BASE_URL and API_KEY. authToken from login is not used here.
+          const rechargeResult = processRecharge(BASE_URL, API_KEY, cardId, rechargeAmount, isPaidByCard);
           
           // Check results
           check(rechargeResult, {
-            'Card exists or was created': (r) => r.cardExists,
-            'Payment record created': (r) => r.paymentCreated,
-            'Card balance updated': (r) => r.balanceUpdated,
-            'Recharge completed successfully': (r) => r.success
+            'Recharge processed successfully by Edge Function': (r) => r.success === true,
           });
           
           // Track success rate
@@ -442,10 +351,10 @@ export default function() {
           
           // Log detailed results for diagnostics
           if (rechargeResult.success) {
-            console.log(`✓ Recharge successful: Card ${cardId} balance updated from ${rechargeResult.previousBalance}€ to ${rechargeResult.newBalance}€`);
+            console.log(`✓ Recharge successful via Edge Function: client_request_id: ${rechargeResult.client_request_id}, Card ${cardId}, New Balance: ${rechargeResult.new_balance}€, Recharge ID: ${rechargeResult.recharge_id}`);
             stageSuccess = true;
           } else {
-            console.log(`✗ Recharge failed for card ${cardId}. Errors: ${JSON.stringify(rechargeResult.errors)}`);
+            console.log(`✗ Recharge failed via Edge Function: client_request_id: ${rechargeResult.client_request_id}, Card ${cardId}. Stage: ${rechargeResult.stage}, Status: ${rechargeResult.status}, Error: ${rechargeResult.error}`);
           }
         });
   });
@@ -455,9 +364,10 @@ export default function() {
       
     } catch (error) {
       console.error(`Unhandled error in card recharge: ${error.message}`);
+      rechargeSuccessRate.add(0); // Ensure failure is tracked if an unhandled error occurs
     }
   });
   
-  // Track overall success of the execution
-  rechargeSuccessRate.add(stageSuccess ? 1 : 0);
-} 
+  // This might be redundant if stageSuccess correctly captures the outcome of the core operation.
+  // rechargeSuccessRate.add(stageSuccess ? 1 : 0);
+}

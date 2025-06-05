@@ -17,21 +17,26 @@ const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 // Define patterns for identifying test data
 const TEST_CARD_PATTERNS = [
   'simulated-card-%',       // Original load tests
+  'simulated-card-_',       // Original load tests alternative pattern
   'nfc-card-%',             // NFC tests
   'nfc-test-%',             // NFC tests
-  'simulated-card-_',       // Original load tests alternative pattern
-  'nfc-test-_',             // NFC tests alternative pattern 
-  'test-card-%',            // New functional bar tests
-  'test-recharge-%',        // New functional recharge tests
+  'nfc-test-_',             // NFC tests alternative pattern
   'nfc-low-%',              // NFC low balance tests
   'nfc-empty-%',            // NFC empty tests
+  'test-card-%',            // General functional bar tests
   'test-card-normal-%',     // Specific functional test patterns
   'test-card-low-%',        // Specific functional test patterns
   'test-card-exact-%',      // Specific functional test patterns
   'test-card-empty-%',      // Specific functional test patterns
+  'test-recharge-%',        // General functional recharge tests
   'test-recharge-new-%',    // Specific recharge test patterns
   'test-recharge-existing-%', // Specific recharge test patterns
-  'test-recharge-high-%'    // Specific recharge test patterns
+  'test-recharge-high-%',   // Specific recharge test patterns
+  'stripe-sim-card-%',      // Stripe webhook simulation cards
+  'log-sim-card-%',         // Log simulation cards
+  'event-recharge-%',       // Shared cards from functional recharge tests
+  'load-test-pos-%',        // If POS IDs are created as cards or similar identifiable entities
+  'load-test-recharge-station-%' // If recharge station IDs are created
 ];
 
 // k6 options - one user, one iteration
@@ -244,24 +249,52 @@ export default function() {
     try {
     console.log(`Cleaning up data for card: ${cardInfo.id}`);
       let success = true;
-    
-      // 3.1 Delete payment records first
-    const paymentsUrl = `${BASE_URL}/rest/v1/paiements?id_card=eq.${cardInfo.id}`;
-    const deletePaymentsResponse = rateLimitedRequest('DELETE', paymentsUrl, null, {
-      headers: authHeader,
-      name: 'delete_payments'
-    });
-    
-      if (deletePaymentsResponse.status === 200 || deletePaymentsResponse.status === 204) {
-        console.log(`✓ Deleted payments for card ${cardInfo.id}`);
-      } else {
-        console.log(`✗ Failed to delete payments for card ${cardInfo.id}: ${deletePaymentsResponse.status}`);
+
+      // Order of deletion: logs, then dependent records, then main records.
+      // 1. Delete from app_transaction_log
+      const appLogUrl = `${BASE_URL}/rest/v1/app_transaction_log?card_id=eq.${cardInfo.id}`;
+      const deleteAppLogResponse = rateLimitedRequest('DELETE', appLogUrl, null, {
+        headers: authHeader,
+        name: 'delete_app_transaction_log'
+      });
+      if (deleteAppLogResponse.status === 200 || deleteAppLogResponse.status === 204) {
+        console.log(`✓ Deleted app_transaction_log entries for card ${cardInfo.id}`);
+      } else if (deleteAppLogResponse.status !== 404) { // 404 is ok if no logs existed
+        console.log(`✗ Failed to delete app_transaction_log for card ${cardInfo.id}: ${deleteAppLogResponse.status}`);
         success = false;
       }
-      
-      sleep(1);  // Increased from 0.5 to 1
+      sleep(0.5);
+
+      // 2. Delete from nfc_scan_log
+      const nfcLogUrl = `${BASE_URL}/rest/v1/nfc_scan_log?card_id=eq.${cardInfo.id}`;
+      const deleteNfcLogResponse = rateLimitedRequest('DELETE', nfcLogUrl, null, {
+        headers: authHeader,
+        name: 'delete_nfc_scan_log'
+      });
+      if (deleteNfcLogResponse.status === 200 || deleteNfcLogResponse.status === 204) {
+        console.log(`✓ Deleted nfc_scan_log entries for card ${cardInfo.id}`);
+      } else if (deleteNfcLogResponse.status !== 404) {
+        console.log(`✗ Failed to delete nfc_scan_log for card ${cardInfo.id}: ${deleteNfcLogResponse.status}`);
+        success = false;
+      }
+      sleep(0.5);
     
-      // 3.2 Delete order items and orders
+      // 3. Delete recharge records (formerly payments)
+    const rechargesUrl = `${BASE_URL}/rest/v1/recharges?card_id=eq.${cardInfo.id}`; // Assuming table is 'recharges' and FK is 'card_id'
+    const deleteRechargesResponse = rateLimitedRequest('DELETE', rechargesUrl, null, {
+      headers: authHeader,
+      name: 'delete_recharges'
+    });
+    
+      if (deleteRechargesResponse.status === 200 || deleteRechargesResponse.status === 204) {
+        console.log(`✓ Deleted recharges for card ${cardInfo.id}`);
+      } else if (deleteRechargesResponse.status !== 404) {
+        console.log(`✗ Failed to delete recharges for card ${cardInfo.id}: ${deleteRechargesResponse.status}`);
+        success = false;
+      }
+      sleep(1);
+    
+      // 4. Delete order items and orders
       // First get order IDs for this card
       const ordersUrl = `${BASE_URL}/rest/v1/bar_orders?card_id=eq.${cardInfo.id}&select=id`;
       const ordersResponse = rateLimitedRequest('GET', ordersUrl, null, {
@@ -348,6 +381,23 @@ export default function() {
       return false;
     }
   }, 2); // Process 2 cards at a time instead of 3
+
+  // 4. Clean up idempotency_keys for Stripe simulations
+  console.log('Cleaning up Stripe simulation idempotency keys...');
+  const stripeIdempotencyKeyPattern = 'cs_test_%'; // Pattern for Stripe checkout session IDs
+  const idempotencyKeysStripeUrl = `${BASE_URL}/rest/v1/idempotency_keys?idempotency_key=like.${stripeIdempotencyKeyPattern}`;
+  const deleteStripeIdempotencyKeys = rateLimitedRequest('DELETE', idempotencyKeysStripeUrl, null, {
+      headers: authHeader,
+      name: 'delete_stripe_idempotency_keys'
+  });
+  if (deleteStripeIdempotencyKeys.status === 200 || deleteStripeIdempotencyKeys.status === 204) {
+      console.log(`✓ Deleted Stripe simulation idempotency keys matching ${stripeIdempotencyKeyPattern}`);
+      cleanupSuccess.add(1);
+  } else if (deleteStripeIdempotencyKeys.status !== 404) { // 404 means none found, which is fine
+      console.log(`✗ Failed to delete Stripe simulation idempotency keys: ${deleteStripeIdempotencyKeys.status}`);
+      cleanupSuccess.add(0);
+  }
+  // Note: Cleaning general client_request_id based idempotency keys is harder without specific patterns or linking tables.
   
   console.log('Cleanup completed! Check above for any failures.');
-} 
+}

@@ -134,7 +134,7 @@ export function LogViewer({ open, onOpenChange }: { open: boolean; onOpenChange:
           <div className="flex justify-between items-center mb-2">
             <TabsList>
               <TabsTrigger value="nfc">NFC ({logs.nfc?.length || 0})</TabsTrigger>
-              <TabsTrigger value="payment">Paiements ({logs.payment?.length || 0})</TabsTrigger>
+              <TabsTrigger value="payment">Recharges ({logs.payment?.length || 0})</TabsTrigger>
               <TabsTrigger value="recharge">Recharges ({logs.recharge?.length || 0})</TabsTrigger>
             </TabsList>
             

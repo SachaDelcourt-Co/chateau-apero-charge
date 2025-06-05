@@ -109,65 +109,39 @@ export type Database = {
         }
         Relationships: []
       }
-      card_transactions: {
-        Row: {
-          amount: number
-          card_id: string
-          created_at: string | null
-          id: string
-          payment_method: string | null
-          point_of_sale: number | null
-          transaction_type: string
-        }
-        Insert: {
-          amount: number
-          card_id: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type: string
-        }
-        Update: {
-          amount?: number
-          card_id?: string
-          created_at?: string | null
-          id?: string
-          payment_method?: string | null
-          point_of_sale?: number | null
-          transaction_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "card_transactions_card_id_fkey"
-            columns: ["card_id"]
-            isOneToOne: false
-            referencedRelation: "table_cards"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      paiements: {
+      recharges: {
         Row: {
           amount: number | null
           created_at: string
           id: number
-          id_card: string | null
+          card_id: string | null
           paid_by_card: boolean | null
+          payment_method: string | null
+          transaction_id: string | null
+          stripe_session_id: string | null
+          notes: string | null
         }
         Insert: {
           amount?: number | null
           created_at?: string
           id?: number
-          id_card?: string | null
+          card_id?: string | null
           paid_by_card?: boolean | null
+          payment_method?: string | null
+          transaction_id?: string | null
+          stripe_session_id?: string | null
+          notes?: string | null
         }
         Update: {
           amount?: number | null
           created_at?: string
           id?: number
-          id_card?: string | null
+          card_id?: string | null
           paid_by_card?: boolean | null
+          payment_method?: string | null
+          transaction_id?: string | null
+          stripe_session_id?: string | null
+          notes?: string | null
         }
         Relationships: []
       }
@@ -251,7 +225,20 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      card_statistics: {
+        Row: {
+          card_id: string | null
+          current_balance: number | null
+          description: string | null
+          total_recharged: number | null
+          recharge_count: number | null
+          last_recharge_date: string | null
+          total_spent: number | null
+          order_count: number | null
+          last_order_date: string | null
+        },
+        Relationships: []
+      }
     }
     Functions: {
       get_user_role: {
