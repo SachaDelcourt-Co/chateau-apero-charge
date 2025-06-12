@@ -5,6 +5,17 @@ import { logger } from '@/lib/logger';
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
 
+// Client Request ID generation utility for idempotency protection
+export function generateClientRequestId(): string {
+  const timestamp = Date.now();
+  const randomString = Math.random().toString(36).substring(2, 15);
+  const userAgent = typeof navigator !== 'undefined'
+    ? navigator.userAgent.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '')
+    : 'server';
+  
+  return `${timestamp}-${randomString}-${userAgent}`;
+}
+
 // Export interfaces and types
 export interface TableCard {
   id: string;
@@ -145,6 +156,40 @@ export interface BarOrder {
   items: OrderItem[];
 }
 
+// Enhanced interfaces for Phase 2 with client_request_id support
+export interface BarOrderRequest {
+  card_id: string;
+  items: Array<{
+    product_id: number;
+    quantity: number;
+    unit_price: number;
+    name: string;
+    is_deposit?: boolean;
+    is_return?: boolean;
+  }>;
+  total_amount: number;
+  client_request_id: string;
+  point_of_sale?: number;
+}
+
+export interface CheckpointRechargeRequest {
+  card_id: string;
+  amount: number;
+  payment_method: 'cash' | 'card';
+  staff_id: string;
+  client_request_id: string;
+  checkpoint_id?: string;
+}
+
+export interface CheckpointRechargeResult {
+  success: boolean;
+  transaction_id?: string;
+  previous_balance?: number;
+  new_balance?: number;
+  error?: string;
+  details?: any;
+}
+
 // Cache des produits pour optimiser les performances
 let barProductsCache: BarProduct[] = [];
 let lastFetchTime: number = 0;
@@ -199,7 +244,7 @@ interface BarOrderTransactionResult {
 
 /**
  * Process a bar order through the Edge Function for transaction safety
- * @param orderData Order data including card_id, items, and total_amount
+ * @param orderData Order data including card_id, items, total_amount, and client_request_id
  * @returns Result of the transaction including success status and balance information
  */
 export async function processBarOrder(orderData: {
@@ -213,15 +258,20 @@ export async function processBarOrder(orderData: {
     is_return?: boolean;
   }>;
   total_amount: number;
+  client_request_id?: string; // Optional for backward compatibility
 }): Promise<BarOrderTransactionResult> {
   try {
     // Log the original data
     console.log('[process-bar-order] Called with:', JSON.stringify(orderData, null, 2));
     
-    // Create a clean payload with proper boolean handling
+    // Generate client_request_id if not provided for backward compatibility
+    const clientRequestId = orderData.client_request_id || generateClientRequestId();
+    
+    // Create a clean payload with proper boolean handling and client_request_id
     const payload = {
       card_id: orderData.card_id,
       total_amount: orderData.total_amount,
+      client_request_id: clientRequestId,
       items: orderData.items.map(item => ({
         product_id: item.product_id || 0,
         quantity: item.quantity,
@@ -359,8 +409,140 @@ export async function processBarOrder(orderData: {
     
     console.error('[process-bar-order] Client error details:', errorInfo);
     
-    return { 
-      success: false, 
+    return {
+      success: false,
+      error: 'Network or client error',
+      details: errorInfo
+    };
+  }
+}
+
+/**
+ * Process a checkpoint recharge through the Edge Function for staff operations
+ * @param rechargeData Recharge data including card_id, amount, payment_method, staff_id, and client_request_id
+ * @returns Result of the recharge including success status and balance information
+ */
+export async function processCheckpointRecharge(rechargeData: CheckpointRechargeRequest): Promise<CheckpointRechargeResult> {
+  try {
+    // Log the original data
+    console.log('[process-checkpoint-recharge] Called with:', JSON.stringify(rechargeData, null, 2));
+    
+    // Create the payload for the Edge Function
+    const payload = {
+      card_id: rechargeData.card_id,
+      amount: rechargeData.amount,
+      payment_method: rechargeData.payment_method,
+      staff_id: rechargeData.staff_id,
+      client_request_id: rechargeData.client_request_id,
+      checkpoint_id: rechargeData.checkpoint_id
+    };
+    
+    // Log the payload for debugging
+    console.log('[process-checkpoint-recharge] Sending payload:', JSON.stringify(payload, null, 2));
+    
+    // Choose the URL based on environment
+    const apiUrl = '/api/process-checkpoint-recharge';
+    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-checkpoint-recharge';
+    
+    const functionUrl = window.location.hostname.includes('localhost') ||
+                       window.location.hostname.includes('ngrok') ||
+                       window.location.hostname.includes('.app') ?
+                       apiUrl : directUrl;
+    
+    console.log(`[process-checkpoint-recharge] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
+    
+    // Make the request with timeout
+    const FETCH_TIMEOUT = 15000; // 15 seconds timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
+    );
+    
+    const fetchPromise = fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin'
+    });
+    
+    // Race between the fetch and timeout
+    const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+    
+    console.log(`[process-checkpoint-recharge] Response status: ${response.status} ${response.statusText}`);
+    
+    // Check if the response is OK
+    if (!response.ok) {
+      console.error(`[process-checkpoint-recharge] Error response:`, response.status, response.statusText);
+      
+      let errorDetail = 'Unknown error';
+      let errorDetails = null;
+      
+      // Try to get error details from response
+      try {
+        const errorText = await response.text();
+        console.error(`[process-checkpoint-recharge] Error response body:`, errorText);
+        
+        try {
+          // Try to parse as JSON
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error || errorJson.details || response.statusText;
+          errorDetails = errorJson;
+        } catch (parseError) {
+          // If not JSON, use as text
+          errorDetail = errorText || response.statusText;
+        }
+      } catch (e) {
+        // If we can't get response text
+        errorDetail = response.statusText;
+      }
+      
+      return {
+        success: false,
+        error: errorDetail,
+        details: errorDetails
+      };
+    }
+    
+    // Parse the response as JSON
+    const responseText = await response.text();
+    console.log(`[process-checkpoint-recharge] Raw response (${responseText.length} chars):`,
+      responseText.length > 200 ? responseText.substring(0, 200) + '...' : responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (jsonError) {
+      console.error(`[process-checkpoint-recharge] JSON parse error:`, jsonError);
+      console.error(`[process-checkpoint-recharge] Non-parseable response:`, responseText);
+      return {
+        success: false,
+        error: 'Invalid JSON response from server',
+        details: {
+          parseError: jsonError.message,
+          responseText: responseText.substring(0, 500) // Log first 500 chars
+        }
+      };
+    }
+    
+    console.log('[process-checkpoint-recharge] Parsed response:', data);
+    
+    return data;
+  } catch (e) {
+    // Get detailed error info
+    const errorInfo = {
+      name: e.name,
+      message: e.message,
+      stack: e.stack,
+      toString: e.toString(),
+      constructor: e.constructor ? e.constructor.name : 'unknown'
+    };
+    
+    console.error('[process-checkpoint-recharge] Client error details:', errorInfo);
+    
+    return {
+      success: false,
       error: 'Network or client error',
       details: errorInfo
     };

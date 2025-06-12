@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BarOrder, getTableCardById, processBarOrder } from '@/lib/supabase';
+import { BarOrder, getTableCardById, processBarOrder, generateClientRequestId } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, Euro, Scan } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -131,17 +131,22 @@ export const BarPaymentForm: React.FC<BarPaymentFormProps> = ({
           is_return: item.is_return
         }));
 
+        // Generate client request ID for idempotency protection
+        const clientRequestId = generateClientRequestId();
+        
         // Call the Edge Function
         console.log("About to call Edge Function with:", {
           card_id: cardId.trim(),
           total_amount: finalTotal,
-          items: formattedItems
+          items: formattedItems,
+          client_request_id: clientRequestId
         });
         
         const orderResult = await processBarOrder({
           card_id: cardId.trim(),
           total_amount: finalTotal,
-          items: formattedItems
+          items: formattedItems,
+          client_request_id: clientRequestId
         });
 
         if (orderResult.success) {
