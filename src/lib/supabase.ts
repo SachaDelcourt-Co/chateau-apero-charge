@@ -5,6 +5,9 @@ import { logger } from '@/lib/logger';
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
 
+// Anon key for authorization headers
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
+
 // Client Request ID generation utility for idempotency protection
 export function generateClientRequestId(): string {
   const timestamp = Date.now();
@@ -67,7 +70,7 @@ export async function updateCardAmount(cardNumber: string, amount: string): Prom
   const { error } = await supabase
     .from('table_cards')
     .update({ 
-      amount: amount // Sending as string as expected by the schema
+      amount: parseFloat(amount) // Parse as number for decimal field
     })
     .eq('id', cardNumber);
 
@@ -117,7 +120,7 @@ export async function updateTableCardAmount(id: string, amount: string): Promise
   const { error } = await supabase
     .from('table_cards')
     .update({ 
-      amount: amount // Sending as string as expected by the schema
+      amount: parseFloat(amount) // Parse as number for decimal field
     })
     .eq('id', id);
 
@@ -172,16 +175,16 @@ export interface BarOrderRequest {
   point_of_sale?: number;
 }
 
-export interface CheckpointRechargeRequest {
+
+
+export interface StandardRechargeRequest {
   card_id: string;
   amount: number;
   payment_method: 'cash' | 'card';
-  staff_id: string;
   client_request_id: string;
-  checkpoint_id?: string;
 }
 
-export interface CheckpointRechargeResult {
+export interface StandardRechargeResult {
   success: boolean;
   transaction_id?: string;
   previous_balance?: number;
@@ -320,11 +323,18 @@ export async function processBarOrder(orderData: {
       setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
     );
     
+    // Get the current session for authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    const authHeaders = session?.access_token 
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+    
     const fetchPromise = fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        ...authHeaders
       },
       body: jsonPayload,
       // Use credentials for cookies if needed by your auth setup
@@ -418,38 +428,60 @@ export async function processBarOrder(orderData: {
 }
 
 /**
- * Process a checkpoint recharge through the Edge Function for staff operations
- * @param rechargeData Recharge data including card_id, amount, payment_method, staff_id, and client_request_id
+ * Process a standard recharge through the Edge Function to avoid race conditions
+ * @param rechargeData Recharge data including card_id, amount, payment_method, and client_request_id
  * @returns Result of the recharge including success status and balance information
  */
-export async function processCheckpointRecharge(rechargeData: CheckpointRechargeRequest): Promise<CheckpointRechargeResult> {
+
+
+/**
+ * Process a standard recharge through the Edge Function to avoid race conditions
+ * @param rechargeData Recharge data including card_id, amount, payment_method, and client_request_id
+ * @returns Result of the recharge including success status and balance information
+ */
+export async function processStandardRecharge(rechargeData: StandardRechargeRequest): Promise<StandardRechargeResult> {
   try {
     // Log the original data
-    console.log('[process-checkpoint-recharge] Called with:', JSON.stringify(rechargeData, null, 2));
+    console.log('[process-standard-recharge] Called with:', JSON.stringify(rechargeData, null, 2));
     
     // Create the payload for the Edge Function
     const payload = {
       card_id: rechargeData.card_id,
       amount: rechargeData.amount,
       payment_method: rechargeData.payment_method,
-      staff_id: rechargeData.staff_id,
-      client_request_id: rechargeData.client_request_id,
-      checkpoint_id: rechargeData.checkpoint_id
+      client_request_id: rechargeData.client_request_id
     };
     
     // Log the payload for debugging
-    console.log('[process-checkpoint-recharge] Sending payload:', JSON.stringify(payload, null, 2));
+    console.log('[process-standard-recharge] Sending payload:', JSON.stringify(payload, null, 2));
+    
+    // *** CORS FIX: Use relative URL to send the request to the current domain ***
+    // This will be handled by the Vite dev server or production host which will proxy to Supabase
+    // avoiding direct browser-to-Supabase requests that can cause CORS issues
+    
+    // New approach using relative URL that will be handled by proxy
+    const apiUrl = '/api/process-standard-recharge';
+    
+    // Fallback to direct URL only when needed
+    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-standard-recharge';
     
     // Choose the URL based on environment
-    const apiUrl = '/api/process-checkpoint-recharge';
-    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-checkpoint-recharge';
-    
-    const functionUrl = window.location.hostname.includes('localhost') ||
-                       window.location.hostname.includes('ngrok') ||
-                       window.location.hostname.includes('.app') ?
+    // In development or when using tunnels like ngrok, use the proxy approach
+    const functionUrl = window.location.hostname.includes('localhost') || 
+                       window.location.hostname.includes('ngrok') || 
+                       window.location.hostname.includes('.app') ? 
                        apiUrl : directUrl;
     
-    console.log(`[process-checkpoint-recharge] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
+    console.log(`[process-standard-recharge] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
+    
+    // Test the JSON serialization separately to catch any issues
+    const jsonPayload = JSON.stringify(payload);
+    console.log('[process-standard-recharge] JSON payload length:', jsonPayload.length);
+    console.log('[process-standard-recharge] JSON payload first 100 chars:', jsonPayload.substring(0, 100));
+    
+    // Add detailed timing and request information
+    const startTime = Date.now();
+    console.log(`[process-standard-recharge] Starting fetch request at ${new Date().toISOString()}`);
     
     // Make the request with timeout
     const FETCH_TIMEOUT = 15000; // 15 seconds timeout
@@ -457,24 +489,32 @@ export async function processCheckpointRecharge(rechargeData: CheckpointRecharge
       setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
     );
     
+    // Get the current session for authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    const authHeaders = session?.access_token 
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+    
     const fetchPromise = fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        ...authHeaders
       },
-      body: JSON.stringify(payload),
+      body: jsonPayload,
+      // Use credentials for cookies if needed by your auth setup
       credentials: 'same-origin'
     });
     
     // Race between the fetch and timeout
     const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
     
-    console.log(`[process-checkpoint-recharge] Response status: ${response.status} ${response.statusText}`);
+    console.log(`[process-standard-recharge] Response status: ${response.status} ${response.statusText}`);
     
     // Check if the response is OK
     if (!response.ok) {
-      console.error(`[process-checkpoint-recharge] Error response:`, response.status, response.statusText);
+      console.error(`[process-standard-recharge] Error response:`, response.status, response.statusText);
       
       let errorDetail = 'Unknown error';
       let errorDetails = null;
@@ -482,7 +522,7 @@ export async function processCheckpointRecharge(rechargeData: CheckpointRecharge
       // Try to get error details from response
       try {
         const errorText = await response.text();
-        console.error(`[process-checkpoint-recharge] Error response body:`, errorText);
+        console.error(`[process-standard-recharge] Error response body:`, errorText);
         
         try {
           // Try to parse as JSON
@@ -507,15 +547,15 @@ export async function processCheckpointRecharge(rechargeData: CheckpointRecharge
     
     // Parse the response as JSON
     const responseText = await response.text();
-    console.log(`[process-checkpoint-recharge] Raw response (${responseText.length} chars):`,
+    console.log(`[process-standard-recharge] Raw response (${responseText.length} chars):`,
       responseText.length > 200 ? responseText.substring(0, 200) + '...' : responseText);
     
     let data;
     try {
       data = JSON.parse(responseText);
     } catch (jsonError) {
-      console.error(`[process-checkpoint-recharge] JSON parse error:`, jsonError);
-      console.error(`[process-checkpoint-recharge] Non-parseable response:`, responseText);
+      console.error(`[process-standard-recharge] JSON parse error:`, jsonError);
+      console.error(`[process-standard-recharge] Non-parseable response:`, responseText);
       return {
         success: false,
         error: 'Invalid JSON response from server',
@@ -526,7 +566,7 @@ export async function processCheckpointRecharge(rechargeData: CheckpointRecharge
       };
     }
     
-    console.log('[process-checkpoint-recharge] Parsed response:', data);
+    console.log('[process-standard-recharge] Parsed response:', data);
     
     return data;
   } catch (e) {
@@ -539,7 +579,7 @@ export async function processCheckpointRecharge(rechargeData: CheckpointRecharge
       constructor: e.constructor ? e.constructor.name : 'unknown'
     };
     
-    console.error('[process-checkpoint-recharge] Client error details:', errorInfo);
+    console.error('[process-standard-recharge] Client error details:', errorInfo);
     
     return {
       success: false,

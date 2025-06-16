@@ -2,12 +2,11 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 /**
- * Phase 2 Checkpoint Recharge Processing Edge Function
+ * Standard Recharge Processing Edge Function
  *
  * Key Features:
- * - Atomic operations via stored procedure sp_process_checkpoint_recharge
+ * - Atomic operations via stored procedure sp_process_standard_recharge
  * - Mandatory client_request_id for idempotency protection
- * - Staff authentication and operation logging
  * - Support for both cash and card payment methods
  * - Comprehensive input validation and error handling
  * - Race condition prevention through database-level locking
@@ -15,24 +14,20 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
  */
 
 // Enhanced interfaces with mandatory client_request_id for idempotency
-interface CheckpointRechargeRequest {
+interface StandardRechargeRequest {
   card_id: string;
   amount: number;
   payment_method: 'cash' | 'card';
-  staff_id: string;
   client_request_id: string; // MANDATORY for idempotency protection
-  checkpoint_id?: string;
 }
 
-interface CheckpointRechargeResponse {
+interface StandardRechargeResponse {
   success: boolean;
   transaction_id?: string;
   previous_balance?: number;
   new_balance?: number;
   recharge_amount?: number;
   payment_method?: string;
-  staff_id?: string;
-  checkpoint_id?: string;
   error?: string;
   error_code?: string;
   details?: any;
@@ -42,7 +37,6 @@ interface CheckpointRechargeResponse {
 enum ErrorCode {
   INVALID_REQUEST = 'INVALID_REQUEST',
   CARD_NOT_FOUND = 'CARD_NOT_FOUND',
-  STAFF_NOT_FOUND = 'STAFF_NOT_FOUND',
   INVALID_PAYMENT_METHOD = 'INVALID_PAYMENT_METHOD',
   DUPLICATE_REQUEST = 'DUPLICATE_REQUEST',
   DATABASE_ERROR = 'DATABASE_ERROR',
@@ -54,7 +48,7 @@ serve(async (req) => {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
   
-  console.log(`[${requestId}] ===== CHECKPOINT RECHARGE PROCESSING STARTED =====`);
+  console.log(`[${requestId}] ===== STANDARD RECHARGE PROCESSING STARTED =====`);
   console.log(`[${requestId}] Timestamp: ${new Date().toISOString()}`);
   console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
   console.log(`[${requestId}] User-Agent: ${req.headers.get('user-agent') || 'unknown'}`);
@@ -77,7 +71,7 @@ serve(async (req) => {
     }
 
     // Parse and validate request body
-    let requestBody: CheckpointRechargeRequest;
+    let requestBody: StandardRechargeRequest;
     try {
       const bodyText = await req.text();
       
@@ -114,9 +108,7 @@ serve(async (req) => {
       card_id, 
       amount, 
       payment_method, 
-      staff_id, 
-      client_request_id, 
-      checkpoint_id = null 
+      client_request_id
     } = requestBody;
     
     console.log(`[${requestId}] ===== REQUEST DETAILS =====`);
@@ -124,8 +116,6 @@ serve(async (req) => {
     console.log(`[${requestId}] Client Request ID: ${client_request_id}`);
     console.log(`[${requestId}] Amount: €${amount}`);
     console.log(`[${requestId}] Payment Method: ${payment_method}`);
-    console.log(`[${requestId}] Staff ID: ${staff_id}`);
-    console.log(`[${requestId}] Checkpoint ID: ${checkpoint_id || 'not specified'}`);
 
     // Validate mandatory fields
     const validationErrors: string[] = [];
@@ -138,10 +128,6 @@ serve(async (req) => {
       validationErrors.push('client_request_id is required and must be a non-empty string');
     }
     
-    if (!staff_id || typeof staff_id !== 'string' || staff_id.trim() === '') {
-      validationErrors.push('staff_id is required and must be a non-empty string');
-    }
-    
     if (typeof amount !== 'number' || amount <= 0) {
       validationErrors.push('amount is required and must be a positive number');
     }
@@ -149,16 +135,10 @@ serve(async (req) => {
     if (!payment_method || !['cash', 'card'].includes(payment_method)) {
       validationErrors.push('payment_method is required and must be either "cash" or "card"');
     }
-    
-    // Validate checkpoint_id if provided
-    if (checkpoint_id !== null && checkpoint_id !== undefined && 
-        (typeof checkpoint_id !== 'string' || checkpoint_id.trim() === '')) {
-      validationErrors.push('checkpoint_id must be a non-empty string if provided');
-    }
 
     // Additional business validation
     if (amount && (amount > 1000)) {
-      validationErrors.push('amount cannot exceed €1000 for checkpoint recharges');
+      validationErrors.push('amount cannot exceed €1000 for standard recharges');
     }
 
     if (validationErrors.length > 0) {
@@ -182,25 +162,22 @@ serve(async (req) => {
     );
 
     console.log(`[${requestId}] ===== CALLING ATOMIC STORED PROCEDURE =====`);
-    console.log(`[${requestId}] Procedure: sp_process_checkpoint_recharge`);
-    console.log(`[${requestId}] Parameters: card_id=${card_id}, staff_id=${staff_id}, amount=${amount}, payment_method=${payment_method}, client_request_id=${client_request_id}`);
+    console.log(`[${requestId}] Procedure: sp_process_standard_recharge`);
+    console.log(`[${requestId}] Parameters: card_id=${card_id}, amount=${amount}, payment_method=${payment_method}, client_request_id=${client_request_id}`);
     
     // Call the atomic stored procedure - this eliminates ALL race conditions
     // The stored procedure handles:
     // - Idempotency checking via client_request_id
     // - Card balance locking (FOR UPDATE)
-    // - Staff validation
     // - Atomic balance updates
-    // - Transaction logging with staff and checkpoint information
+    // - Transaction logging
     // - Error handling and rollback
     const { data: procedureResult, error: procedureError } = await supabaseAdmin
-      .rpc('sp_process_checkpoint_recharge', {
+      .rpc('sp_process_standard_recharge', {
         card_id_in: card_id.trim(),
         amount_in: amount,
         payment_method_in: payment_method,
-        staff_id_in: staff_id.trim(),
-        client_request_id_in: client_request_id.trim(),
-        checkpoint_id_in: checkpoint_id?.trim() || null
+        client_request_id_in: client_request_id.trim()
       });
 
     const processingTime = Date.now() - startTime;
@@ -223,10 +200,6 @@ serve(async (req) => {
       if (errorMessage.includes('card not found')) {
         errorCode = ErrorCode.CARD_NOT_FOUND;
         userFriendlyMessage = 'Card not found. Please verify the card ID.';
-        httpStatus = 404;
-      } else if (errorMessage.includes('staff not found') || errorMessage.includes('invalid staff')) {
-        errorCode = ErrorCode.STAFF_NOT_FOUND;
-        userFriendlyMessage = 'Staff member not found. Please verify the staff ID.';
         httpStatus = 404;
       } else if (errorMessage.includes('invalid payment method')) {
         errorCode = ErrorCode.INVALID_PAYMENT_METHOD;
@@ -269,16 +242,14 @@ serve(async (req) => {
     console.log(`[${requestId}] Stored procedure result:`, procedureResult);
 
     // The stored procedure returns a JSONB object with the result
-    const result = procedureResult as CheckpointRechargeResponse;
+    const result = procedureResult as StandardRechargeResponse;
     
     if (result.success) {
-      console.log(`[${requestId}] ===== CHECKPOINT RECHARGE PROCESSED SUCCESSFULLY =====`);
+      console.log(`[${requestId}] ===== STANDARD RECHARGE PROCESSED SUCCESSFULLY =====`);
       console.log(`[${requestId}] Transaction ID: ${result.transaction_id}`);
       console.log(`[${requestId}] Balance Change: €${result.previous_balance} → €${result.new_balance}`);
       console.log(`[${requestId}] Recharge Amount: €${amount}`);
       console.log(`[${requestId}] Payment Method: ${payment_method}`);
-      console.log(`[${requestId}] Staff ID: ${staff_id}`);
-      console.log(`[${requestId}] Checkpoint ID: ${checkpoint_id || 'not specified'}`);
       console.log(`[${requestId}] Total Processing Time: ${processingTime}ms`);
       console.log(`[${requestId}] ===== PROCESSING COMPLETED =====`);
       
@@ -303,9 +274,6 @@ serve(async (req) => {
       
       if (result.error?.includes('Card not found')) {
         errorCode = ErrorCode.CARD_NOT_FOUND;
-        httpStatus = 404; // Not Found
-      } else if (result.error?.includes('Staff not found') || result.error?.includes('Invalid staff')) {
-        errorCode = ErrorCode.STAFF_NOT_FOUND;
         httpStatus = 404; // Not Found
       } else if (result.error?.includes('Invalid payment method')) {
         errorCode = ErrorCode.INVALID_PAYMENT_METHOD;
@@ -344,4 +312,4 @@ serve(async (req) => {
       { headers: { 'Content-Type': 'application/json' }, status: 500 }
     );
   }
-})
+}) 
