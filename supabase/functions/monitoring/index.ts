@@ -84,24 +84,24 @@ class CircuitBreaker {
     last_failure_time: 0,
     half_open_calls: 0,
   };
+  private readonly stateLock = new Map<string, Promise<any>>();
 
   constructor(private config: MonitoringConfig['circuit_breaker']) {}
 
   async execute<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.state.state === 'OPEN') {
-      if (Date.now() - this.state.last_failure_time > this.config.recovery_timeout_ms) {
-        this.state.state = 'HALF_OPEN';
-        this.state.half_open_calls = 0;
-      } else {
-        throw new Error('Circuit breaker is OPEN - operation blocked');
-      }
+    // Atomic state check and transition
+    const currentState = await this.getStateAtomically();
+    
+    if (currentState === 'OPEN') {
+      throw new Error('Circuit breaker is OPEN - operation blocked');
     }
 
-    if (this.state.state === 'HALF_OPEN') {
-      if (this.state.half_open_calls >= this.config.half_open_max_calls) {
+    if (currentState === 'HALF_OPEN') {
+      // Use atomic increment for half-open calls
+      const currentCalls = this.incrementHalfOpenCalls();
+      if (currentCalls > this.config.half_open_max_calls) {
         throw new Error('Circuit breaker HALF_OPEN - max calls exceeded');
       }
-      this.state.half_open_calls++;
     }
 
     try {
@@ -112,21 +112,79 @@ class CircuitBreaker {
         ),
       ]);
 
-      this.onSuccess();
+      await this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure();
+      await this.onFailure();
       throw error;
     }
   }
 
-  private onSuccess(): void {
+  private async getStateAtomically(): Promise<'CLOSED' | 'OPEN' | 'HALF_OPEN'> {
+    const lockKey = 'state_check';
+    
+    // If there's already a state transition in progress, wait for it
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+    }
+
+    // Check if we need to transition from OPEN to HALF_OPEN
+    if (this.state.state === 'OPEN') {
+      if (Date.now() - this.state.last_failure_time > this.config.recovery_timeout_ms) {
+        const transitionPromise = this.transitionToHalfOpen();
+        this.stateLock.set(lockKey, transitionPromise);
+        await transitionPromise;
+        this.stateLock.delete(lockKey);
+      }
+    }
+
+    return this.state.state;
+  }
+
+  private async transitionToHalfOpen(): Promise<void> {
+    this.state.state = 'HALF_OPEN';
+    this.state.half_open_calls = 0;
+  }
+
+  private incrementHalfOpenCalls(): number {
+    return ++this.state.half_open_calls;
+  }
+
+  private async onSuccess(): Promise<void> {
+    const lockKey = 'success_transition';
+    
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+      return;
+    }
+
+    const transitionPromise = this.performSuccessTransition();
+    this.stateLock.set(lockKey, transitionPromise);
+    await transitionPromise;
+    this.stateLock.delete(lockKey);
+  }
+
+  private async performSuccessTransition(): Promise<void> {
     this.state.failure_count = 0;
     this.state.state = 'CLOSED';
     this.state.half_open_calls = 0;
   }
 
-  private onFailure(): void {
+  private async onFailure(): Promise<void> {
+    const lockKey = 'failure_transition';
+    
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+      return;
+    }
+
+    const transitionPromise = this.performFailureTransition();
+    this.stateLock.set(lockKey, transitionPromise);
+    await transitionPromise;
+    this.stateLock.delete(lockKey);
+  }
+
+  private async performFailureTransition(): Promise<void> {
     this.state.failure_count++;
     this.state.last_failure_time = Date.now();
 
@@ -619,5 +677,53 @@ serve(async (req) => {
     });
   }
 });
+
+// =====================================================
+// BACKGROUND SCHEDULING INTEGRATION
+// =====================================================
+
+/**
+ * Initialize background scheduling if running in production
+ */
+async function initializeBackgroundScheduling() {
+  const environment = Deno.env.get('ENVIRONMENT') || 'development';
+  
+  if (environment === 'production') {
+    console.log('Initializing background monitoring scheduling...');
+    
+    // Schedule critical detection cycles every 30 seconds
+    setInterval(async () => {
+      try {
+        console.log('Running scheduled critical detection cycle...');
+        const result = await monitoringService.runDetectionCycle();
+        
+        if (!result.success) {
+          console.error('Scheduled detection cycle failed:', result.errors);
+        } else {
+          console.log(`Scheduled cycle completed: ${result.total_events_created} events created`);
+        }
+      } catch (error) {
+        console.error('Error in scheduled detection cycle:', error);
+      }
+    }, MONITORING_CONFIG.intervals.critical_checks);
+    
+    // Schedule health snapshots every 5 minutes
+    setInterval(async () => {
+      try {
+        console.log('Running scheduled health snapshot...');
+        await monitoringService.getSystemHealth();
+      } catch (error) {
+        console.error('Error in scheduled health snapshot:', error);
+      }
+    }, MONITORING_CONFIG.intervals.health_checks);
+    
+    console.log('Background monitoring scheduling initialized successfully');
+  } else {
+    console.log('Background scheduling disabled in development mode');
+  }
+}
+
+// Initialize background scheduling
+initializeBackgroundScheduling();
 
 console.log('Phase 4 Monitoring Edge Function started successfully');

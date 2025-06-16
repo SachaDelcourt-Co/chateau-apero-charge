@@ -16,6 +16,9 @@ import {
   MonitoringSeverity,
   MonitoringEventStatus,
   SystemHealthStatus,
+  AlertLevel,
+  ComponentStatus,
+  CircuitBreakerState,
   DEFAULT_MONITORING_CONFIG
 } from '@/types/monitoring';
 import type {
@@ -32,7 +35,8 @@ import type {
   ComponentHealth,
   AlertSummary,
   TimeSeriesDataPoint,
-  ChartData
+  ChartData,
+  ProcessStatus
 } from '@/types/monitoring';
 
 /**
@@ -51,7 +55,9 @@ export class MonitoringClient {
   private readonly config = DEFAULT_MONITORING_CONFIG;
   private readonly cache = new Map<string, CacheEntry<any>>();
   private readonly defaultTTL = 5 * 60 * 1000; // 5 minutes
+  private readonly maxCacheSize = 100; // Maximum cache entries
   private subscriptions = new Map<string, any>();
+  private cacheAccessOrder = new Map<string, number>(); // LRU tracking
 
   /**
    * Get monitoring events with filtering and pagination
@@ -138,12 +144,12 @@ export class MonitoringClient {
 
       // Mock component health (would be real checks in production)
       const components = {
-        transaction_detector: this.createComponentHealth('UP'),
-        balance_detector: this.createComponentHealth('UP'),
-        nfc_detector: this.createComponentHealth('UP'),
-        race_detector: this.createComponentHealth('UP'),
-        database: this.createComponentHealth('UP'),
-        circuit_breaker: this.createComponentHealth('UP')
+        transaction_detector: this.createComponentHealth(ComponentStatus.UP),
+        balance_detector: this.createComponentHealth(ComponentStatus.UP),
+        nfc_detector: this.createComponentHealth(ComponentStatus.UP),
+        race_detector: this.createComponentHealth(ComponentStatus.UP),
+        database: this.createComponentHealth(ComponentStatus.UP),
+        circuit_breaker: this.createComponentHealth(ComponentStatus.UP)
       };
 
       // Create recent alerts summary
@@ -152,7 +158,7 @@ export class MonitoringClient {
         .slice(0, 5)
         .map(event => ({
           alert_id: event.event_id,
-          alert_level: 'CRITICAL' as const,
+          alert_level: AlertLevel.CRITICAL,
           alert_message: `${event.event_type} detected for card ${event.card_id || 'SYSTEM'}`,
           alert_timestamp: event.detection_timestamp,
           event_type: event.event_type as MonitoringEventType,
@@ -290,7 +296,7 @@ export class MonitoringClient {
         monitoring_processes: [
           {
             name: 'detection_service',
-            status: 'UP' as const,
+            status: ComponentStatus.UP,
             uptime_seconds: healthCheck.uptime_seconds,
             memory_usage_mb: 50,
             cpu_usage_percent: 15,
@@ -299,7 +305,7 @@ export class MonitoringClient {
         ],
         last_successful_check: new Date().toISOString(),
         circuit_breakers: {
-          'monitoring-detection': 'CLOSED' as const
+          'monitoring-detection': CircuitBreakerState.CLOSED
         }
       };
 
@@ -321,7 +327,7 @@ export class MonitoringClient {
   }
 
   /**
-   * Subscribe to real-time monitoring events
+   * Subscribe to real-time monitoring events using Supabase real-time
    */
   subscribeToEvents(
     callback: (event: MonitoringEvent) => void,
@@ -329,29 +335,92 @@ export class MonitoringClient {
   ): () => void {
     const subscriptionId = `events_${Date.now()}_${Math.random()}`;
     
-    // In a real implementation, this would use Supabase real-time subscriptions
-    // For now, we'll simulate with polling
+    try {
+      // Create Supabase real-time subscription
+      const subscription = supabase
+        .channel(`monitoring_events_${subscriptionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'monitoring_events',
+            filter: this.buildRealtimeFilter(filters)
+          },
+          (payload) => {
+            try {
+              const newEvent = payload.new as MonitoringEvent;
+              
+              // Apply client-side filtering if needed
+              if (this.matchesFilters(newEvent, filters)) {
+                callback(newEvent);
+              }
+            } catch (error) {
+              console.error('Error processing real-time event:', error);
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log(`Real-time subscription ${subscriptionId} established`);
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error(`Real-time subscription ${subscriptionId} error`);
+          } else if (status === 'TIMED_OUT') {
+            console.warn(`Real-time subscription ${subscriptionId} timed out`);
+          }
+        });
+
+      this.subscriptions.set(subscriptionId, subscription);
+
+      // Return unsubscribe function
+      return () => {
+        const sub = this.subscriptions.get(subscriptionId);
+        if (sub) {
+          supabase.removeChannel(sub);
+          this.subscriptions.delete(subscriptionId);
+          console.log(`Real-time subscription ${subscriptionId} unsubscribed`);
+        }
+      };
+    } catch (error) {
+      console.error('Failed to create real-time subscription:', error);
+      
+      // Fallback to polling if real-time fails
+      return this.subscribeToEventsPolling(callback, filters);
+    }
+  }
+
+  /**
+   * Fallback polling subscription method
+   */
+  private subscribeToEventsPolling(
+    callback: (event: MonitoringEvent) => void,
+    filters: MonitoringEventsFilters = {}
+  ): () => void {
+    const subscriptionId = `polling_${Date.now()}_${Math.random()}`;
+    console.warn('Using polling fallback for event subscription');
+    
     const interval = setInterval(async () => {
       try {
         const events = await detectionService.getMonitoringEvents({
           limit: 10,
-          ...filters
+          event_type: Array.isArray(filters.event_type) ? filters.event_type[0] : filters.event_type,
+          severity: Array.isArray(filters.severity) ? filters.severity[0] : filters.severity,
+          status: Array.isArray(filters.status) ? filters.status[0] : filters.status
         });
         
-        // Simulate new events by checking timestamps
-        const recentEvents = events.filter(event => 
+        // Only notify about very recent events (last 30 seconds)
+        const recentEvents = events.filter(event =>
           Date.parse(event.detection_timestamp) > Date.now() - 30000
         );
         
         recentEvents.forEach(event => callback(event as MonitoringEvent));
       } catch (error) {
-        console.error('Error in event subscription:', error);
+        console.error('Error in polling subscription:', error);
       }
     }, 10000); // Poll every 10 seconds
 
     this.subscriptions.set(subscriptionId, interval);
 
-    // Return unsubscribe function
     return () => {
       const interval = this.subscriptions.get(subscriptionId);
       if (interval) {
@@ -362,10 +431,81 @@ export class MonitoringClient {
   }
 
   /**
+   * Build real-time filter string for Supabase
+   */
+  private buildRealtimeFilter(filters: MonitoringEventsFilters): string | undefined {
+    const conditions: string[] = [];
+    
+    if (filters.event_type) {
+      const eventType = Array.isArray(filters.event_type) ? filters.event_type[0] : filters.event_type;
+      conditions.push(`event_type=eq.${eventType}`);
+    }
+    
+    if (filters.severity) {
+      const severity = Array.isArray(filters.severity) ? filters.severity[0] : filters.severity;
+      conditions.push(`severity=eq.${severity}`);
+    }
+    
+    if (filters.status) {
+      const status = Array.isArray(filters.status) ? filters.status[0] : filters.status;
+      conditions.push(`status=eq.${status}`);
+    }
+    
+    if (filters.card_id) {
+      conditions.push(`card_id=eq.${filters.card_id}`);
+    }
+    
+    return conditions.length > 0 ? conditions.join(',') : undefined;
+  }
+
+  /**
+   * Check if event matches client-side filters
+   */
+  private matchesFilters(event: MonitoringEvent, filters: MonitoringEventsFilters): boolean {
+    if (filters.event_type) {
+      const eventTypes = Array.isArray(filters.event_type) ? filters.event_type : [filters.event_type];
+      if (!eventTypes.includes(event.event_type)) return false;
+    }
+    
+    if (filters.severity) {
+      const severities = Array.isArray(filters.severity) ? filters.severity : [filters.severity];
+      if (!severities.includes(event.severity)) return false;
+    }
+    
+    if (filters.status) {
+      const statuses = Array.isArray(filters.status) ? filters.status : [filters.status];
+      if (!statuses.includes(event.status)) return false;
+    }
+    
+    if (filters.card_id && event.card_id !== filters.card_id) {
+      return false;
+    }
+    
+    if (filters.transaction_id && event.transaction_id !== filters.transaction_id) {
+      return false;
+    }
+    
+    if (filters.min_confidence_score && event.confidence_score < filters.min_confidence_score) {
+      return false;
+    }
+    
+    if (filters.start_date && event.detection_timestamp < filters.start_date) {
+      return false;
+    }
+    
+    if (filters.end_date && event.detection_timestamp > filters.end_date) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  /**
    * Clear all caches
    */
   clearCache(): void {
     this.cache.clear();
+    this.cacheAccessOrder.clear();
   }
 
   /**
@@ -395,32 +535,80 @@ export class MonitoringClient {
 
     if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
+      this.cacheAccessOrder.delete(key);
       return null;
     }
 
+    // Update access time for LRU
+    this.cacheAccessOrder.set(key, Date.now());
     return entry.data;
   }
 
   /**
-   * Set data in cache
+   * Set data in cache with LRU eviction
    */
   private setCache<T>(key: string, data: T, ttl: number): void {
+    // Clean expired entries first
+    this.cleanExpiredCache();
+    
+    // If cache is at max size, remove least recently used item
+    if (this.cache.size >= this.maxCacheSize) {
+      this.evictLRU();
+    }
+    
+    // Set new cache entry
     this.cache.set(key, {
       data,
       timestamp: Date.now(),
       ttl
     });
+    
+    // Update access order
+    this.cacheAccessOrder.set(key, Date.now());
+  }
+
+  /**
+   * Clean expired cache entries
+   */
+  private cleanExpiredCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key);
+        this.cacheAccessOrder.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Evict least recently used cache entry
+   */
+  private evictLRU(): void {
+    let oldestKey: string | null = null;
+    let oldestTime = Date.now();
+    
+    for (const [key, accessTime] of this.cacheAccessOrder.entries()) {
+      if (accessTime < oldestTime) {
+        oldestTime = accessTime;
+        oldestKey = key;
+      }
+    }
+    
+    if (oldestKey) {
+      this.cache.delete(oldestKey);
+      this.cacheAccessOrder.delete(oldestKey);
+    }
   }
 
   /**
    * Create component health status
    */
-  private createComponentHealth(status: 'UP' | 'DOWN' | 'DEGRADED'): ComponentHealth {
+  private createComponentHealth(status: ComponentStatus): ComponentHealth {
     return {
       status,
       last_check: new Date().toISOString(),
       response_time_ms: Math.floor(Math.random() * 100) + 10,
-      circuit_breaker_state: 'CLOSED'
+      circuit_breaker_state: CircuitBreakerState.CLOSED
     };
   }
 

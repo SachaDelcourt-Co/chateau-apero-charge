@@ -31,24 +31,24 @@ class CircuitBreaker {
   private failureCount = 0;
   private lastFailureTime = 0;
   private halfOpenCalls = 0;
+  private readonly stateLock = new Map<string, Promise<any>>();
 
   constructor(private config: CircuitBreakerConfig) {}
 
   async execute<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.state === CircuitBreakerState.OPEN) {
-      if (Date.now() - this.lastFailureTime > this.config.recovery_timeout_ms) {
-        this.state = CircuitBreakerState.HALF_OPEN;
-        this.halfOpenCalls = 0;
-      } else {
-        throw new Error('Circuit breaker is OPEN - operation blocked');
-      }
+    // Atomic state check and transition
+    const currentState = await this.getStateAtomically();
+    
+    if (currentState === CircuitBreakerState.OPEN) {
+      throw new Error('Circuit breaker is OPEN - operation blocked');
     }
 
-    if (this.state === CircuitBreakerState.HALF_OPEN) {
-      if (this.halfOpenCalls >= this.config.half_open_max_calls) {
+    if (currentState === CircuitBreakerState.HALF_OPEN) {
+      // Use atomic increment for half-open calls
+      const currentCalls = this.incrementHalfOpenCalls();
+      if (currentCalls > this.config.half_open_max_calls) {
         throw new Error('Circuit breaker HALF_OPEN - max calls exceeded');
       }
-      this.halfOpenCalls++;
     }
 
     try {
@@ -59,21 +59,79 @@ class CircuitBreaker {
         )
       ]);
 
-      this.onSuccess();
+      await this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure();
+      await this.onFailure();
       throw error;
     }
   }
 
-  private onSuccess(): void {
+  private async getStateAtomically(): Promise<CircuitBreakerState> {
+    const lockKey = 'state_check';
+    
+    // If there's already a state transition in progress, wait for it
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+    }
+
+    // Check if we need to transition from OPEN to HALF_OPEN
+    if (this.state === CircuitBreakerState.OPEN) {
+      if (Date.now() - this.lastFailureTime > this.config.recovery_timeout_ms) {
+        const transitionPromise = this.transitionToHalfOpen();
+        this.stateLock.set(lockKey, transitionPromise);
+        await transitionPromise;
+        this.stateLock.delete(lockKey);
+      }
+    }
+
+    return this.state;
+  }
+
+  private async transitionToHalfOpen(): Promise<void> {
+    this.state = CircuitBreakerState.HALF_OPEN;
+    this.halfOpenCalls = 0;
+  }
+
+  private incrementHalfOpenCalls(): number {
+    return ++this.halfOpenCalls;
+  }
+
+  private async onSuccess(): Promise<void> {
+    const lockKey = 'success_transition';
+    
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+      return;
+    }
+
+    const transitionPromise = this.performSuccessTransition();
+    this.stateLock.set(lockKey, transitionPromise);
+    await transitionPromise;
+    this.stateLock.delete(lockKey);
+  }
+
+  private async performSuccessTransition(): Promise<void> {
     this.failureCount = 0;
     this.state = CircuitBreakerState.CLOSED;
     this.halfOpenCalls = 0;
   }
 
-  private onFailure(): void {
+  private async onFailure(): Promise<void> {
+    const lockKey = 'failure_transition';
+    
+    if (this.stateLock.has(lockKey)) {
+      await this.stateLock.get(lockKey);
+      return;
+    }
+
+    const transitionPromise = this.performFailureTransition();
+    this.stateLock.set(lockKey, transitionPromise);
+    await transitionPromise;
+    this.stateLock.delete(lockKey);
+  }
+
+  private async performFailureTransition(): Promise<void> {
     this.failureCount++;
     this.lastFailureTime = Date.now();
 

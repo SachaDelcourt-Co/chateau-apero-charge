@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, CreditCard, TrendingUp, Search, RefreshCw, Euro, Receipt } from "lucide-react";
+import { Wallet, CreditCard, TrendingUp, Search, RefreshCw, Euro, Receipt, Shield, Activity } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { toast } from "@/hooks/use-toast";
+import { MonitoringDashboard } from './MonitoringDashboard';
 
 interface CardData {
   id: string;
@@ -254,9 +256,9 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold">Tableau de bord</h2>
-        <Button 
-          onClick={handleRefresh} 
-          variant="outline" 
+        <Button
+          onClick={handleRefresh}
+          variant="outline"
           size="sm"
           disabled={refreshing || loading}
           className="flex items-center gap-2"
@@ -265,6 +267,20 @@ const Dashboard: React.FC = () => {
           {refreshing ? 'Actualisation...' : 'Actualiser les données'}
         </Button>
       </div>
+
+      <Tabs defaultValue="business" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="business" className="flex items-center gap-2">
+            <Euro className="h-4 w-4" />
+            Business Dashboard
+          </TabsTrigger>
+          <TabsTrigger value="monitoring" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            System Monitoring
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="business" className="space-y-6">
       
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -528,6 +544,12 @@ const Dashboard: React.FC = () => {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="monitoring">
+          <MonitoringDashboard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
