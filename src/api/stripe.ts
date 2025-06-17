@@ -2,14 +2,11 @@
  * API functions for Stripe integration
  */
 
-import { loadStripe } from '@stripe/stripe-js';
-
-// Initialize Stripe with the public key
-const stripePromise = loadStripe('pk_live_51RBXwRAWk9DBMhnhHYkcORHp7CoL5HqSHRSlR1hJX9BFNOof4UFjK44DGaksREIm90E6e9QYWmqsnPflzWAS7HW300YwBI1ubB');
+import { createStripeCheckout, generateClientRequestId } from '@/lib/supabase';
 
 /**
- * Method to directly redirect to Stripe payment page
- * This replaces the previous Edge Function approach
+ * Method to create a Stripe checkout session through the backend edge function
+ * This centralizes the process to avoid race conditions and frontend complexity
  * 
  * @param amount The amount to charge in euros
  * @param cardId The ID of the card to recharge
@@ -18,42 +15,53 @@ export const redirectToCheckout = async (amount: number, cardId: string) => {
   try {
     console.log(`Creating checkout session for card ${cardId} with amount ${amount}`);
     
-    // Get the Stripe instance
-    const stripe = await stripePromise;
-    if (!stripe) throw new Error("Couldn't load Stripe");
+    // Validate amount (must be positive and reasonable)
+    if (typeof amount !== 'number' || amount <= 0 || amount > 1000) {
+      throw new Error('Amount must be a positive number between 0.01 and 1000 euros');
+    }
+
+    // Validate card ID
+    if (!cardId || typeof cardId !== 'string') {
+      throw new Error('Card ID is required and must be a string');
+    }
+
+    // Generate client request ID for idempotency
+    const clientRequestId = generateClientRequestId();
     
-    // Format price and success/cancel URLs
-    const priceInCents = Math.round(amount * 100);
-    const successUrl = `${window.location.origin}/payment/success?card_id=${cardId}&amount=${amount}`;
+    // Format success/cancel URLs (Stripe will automatically append session_id parameter)
+    const successUrl = `${window.location.origin}/payment-success?card_id=${cardId}&amount=${amount}&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${window.location.origin}/payment?canceled=true`;
     
-    // Redirect to Stripe Checkout
-    const { error } = await stripe.redirectToCheckout({
-      lineItems: [
-        {
-          price_data: {
-            currency: 'eur',
-            product_data: {
-              name: 'Recharge de carte',
-              description: `Recharge carte ID: ${cardId}`,
-            },
-            unit_amount: priceInCents,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      successUrl,
-      cancelUrl,
-      payment_method_types: ['card', 'bancontact'], // Specify payment methods
-      client_reference_id: cardId,
+    console.log(`[stripe-api] Constructed success URL: ${successUrl}`);
+    console.log(`[stripe-api] Card ID being used: ${cardId}`);
+    
+    console.log(`[stripe-api] Calling createStripeCheckout with clientRequestId: ${clientRequestId}`);
+    
+    // Create checkout session through edge function
+    const result = await createStripeCheckout({
+      card_id: cardId,
+      amount: amount,
+      client_request_id: clientRequestId,
+      success_url: successUrl,
+      cancel_url: cancelUrl
     });
     
-    if (error) {
-      throw new Error(error.message);
+    console.log('[stripe-api] createStripeCheckout result:', result);
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to create checkout session');
     }
+    
+    if (!result.checkout_url) {
+      throw new Error('No checkout URL returned from server');
+    }
+    
+    // Redirect to the Stripe checkout URL
+    console.log(`[stripe-api] Redirecting to checkout URL: ${result.checkout_url}`);
+    window.location.href = result.checkout_url;
+    
   } catch (error) {
-    console.error('Error redirecting to checkout:', error);
+    console.error('Error creating checkout session:', error);
     throw error;
   }
 };

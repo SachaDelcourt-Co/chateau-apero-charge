@@ -193,6 +193,22 @@ export interface StandardRechargeResult {
   details?: any;
 }
 
+export interface CreateStripeCheckoutRequest {
+  card_id: string;
+  amount: number;
+  client_request_id: string;
+  success_url?: string;
+  cancel_url?: string;
+}
+
+export interface CreateStripeCheckoutResult {
+  success: boolean;
+  checkout_url?: string;
+  session_id?: string;
+  error?: string;
+  details?: any;
+}
+
 // Cache des produits pour optimiser les performances
 let barProductsCache: BarProduct[] = [];
 let lastFetchTime: number = 0;
@@ -418,6 +434,162 @@ export async function processBarOrder(orderData: {
     };
     
     console.error('[process-bar-order] Client error details:', errorInfo);
+    
+    return {
+      success: false,
+      error: 'Network or client error',
+      details: errorInfo
+    };
+  }
+}
+
+/**
+ * Create a Stripe checkout session through the Edge Function to centralize payment processing
+ * @param checkoutData Checkout data including card_id, amount, and client_request_id
+ * @returns Result of the checkout session creation including success status and checkout URL
+ */
+export async function createStripeCheckout(checkoutData: CreateStripeCheckoutRequest): Promise<CreateStripeCheckoutResult> {
+  try {
+    // Log the original data
+    console.log('[create-stripe-checkout] Called with:', JSON.stringify(checkoutData, null, 2));
+    
+    // Create the payload for the Edge Function
+    const payload = {
+      card_id: checkoutData.card_id,
+      amount: checkoutData.amount,
+      client_request_id: checkoutData.client_request_id,
+      success_url: checkoutData.success_url,
+      cancel_url: checkoutData.cancel_url
+    };
+    
+    // Log the payload for debugging
+    console.log('[create-stripe-checkout] Sending payload:', JSON.stringify(payload, null, 2));
+    
+    // *** CORS FIX: Use relative URL to send the request to the current domain ***
+    // This will be handled by the Vite dev server or production host which will proxy to Supabase
+    // avoiding direct browser-to-Supabase requests that can cause CORS issues
+    
+    // New approach using relative URL that will be handled by proxy
+    const apiUrl = '/api/create-stripe-checkout';
+    
+    // Fallback to direct URL only when needed
+    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/create-stripe-checkout';
+    
+    // Choose the URL based on environment
+    // In development or when using tunnels like ngrok, use the proxy approach
+    const functionUrl = window.location.hostname.includes('localhost') || 
+                       window.location.hostname.includes('ngrok') || 
+                       window.location.hostname.includes('.app') ? 
+                       apiUrl : directUrl;
+    
+    console.log(`[create-stripe-checkout] Using endpoint: ${functionUrl} (${functionUrl === apiUrl ? 'proxy' : 'direct'})`);
+    
+    // Test the JSON serialization separately to catch any issues
+    const jsonPayload = JSON.stringify(payload);
+    console.log('[create-stripe-checkout] JSON payload length:', jsonPayload.length);
+    console.log('[create-stripe-checkout] JSON payload first 100 chars:', jsonPayload.substring(0, 100));
+    
+    // Add detailed timing and request information
+    const startTime = Date.now();
+    console.log(`[create-stripe-checkout] Starting fetch request at ${new Date().toISOString()}`);
+    
+    // Make the request with timeout
+    const FETCH_TIMEOUT = 15000; // 15 seconds timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
+    );
+    
+    // Get the current session for authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    const authHeaders = session?.access_token 
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
+    
+    const fetchPromise = fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...authHeaders
+      },
+      body: jsonPayload,
+      // Use credentials for cookies if needed by your auth setup
+      credentials: 'same-origin'
+    });
+    
+    // Race between the fetch and timeout
+    const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+    
+    console.log(`[create-stripe-checkout] Response status: ${response.status} ${response.statusText}`);
+    
+    // Check if the response is OK
+    if (!response.ok) {
+      console.error(`[create-stripe-checkout] Error response:`, response.status, response.statusText);
+      
+      let errorDetail = 'Unknown error';
+      let errorDetails = null;
+      
+      // Try to get error details from response
+      try {
+        const errorText = await response.text();
+        console.error(`[create-stripe-checkout] Error response body:`, errorText);
+        
+        try {
+          // Try to parse as JSON
+          const errorJson = JSON.parse(errorText);
+          errorDetail = errorJson.error || errorJson.details || response.statusText;
+          errorDetails = errorJson;
+        } catch (parseError) {
+          // If not JSON, use as text
+          errorDetail = errorText || response.statusText;
+        }
+      } catch (e) {
+        // If we can't get response text
+        errorDetail = response.statusText;
+      }
+      
+      return {
+        success: false,
+        error: errorDetail,
+        details: errorDetails
+      };
+    }
+    
+    // Parse the response as JSON
+    const responseText = await response.text();
+    console.log(`[create-stripe-checkout] Raw response (${responseText.length} chars):`,
+      responseText.length > 200 ? responseText.substring(0, 200) + '...' : responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (jsonError) {
+      console.error(`[create-stripe-checkout] JSON parse error:`, jsonError);
+      console.error(`[create-stripe-checkout] Non-parseable response:`, responseText);
+      return {
+        success: false,
+        error: 'Invalid JSON response from server',
+        details: {
+          parseError: jsonError.message,
+          responseText: responseText.substring(0, 500) // Log first 500 chars
+        }
+      };
+    }
+    
+    console.log('[create-stripe-checkout] Parsed response:', data);
+    
+    return data;
+  } catch (e) {
+    // Get detailed error info
+    const errorInfo = {
+      name: e.name,
+      message: e.message,
+      stack: e.stack,
+      toString: e.toString(),
+      constructor: e.constructor ? e.constructor.name : 'unknown'
+    };
+    
+    console.error('[create-stripe-checkout] Client error details:', errorInfo);
     
     return {
       success: false,

@@ -48,6 +48,32 @@ export default defineConfig({
             console.log('Proxying standard recharge request to:', req.url);
           });
         }
+      },
+      '/api/create-stripe-checkout': {
+        target: 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/create-stripe-checkout',
+        changeOrigin: true,
+        rewrite: (path) => '',
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('Proxy error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('Proxying create-stripe-checkout request to:', req.url);
+          });
+        }
+      },
+      '/api/stripe-webhook': {
+        target: 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/stripe-webhook',
+        changeOrigin: true,
+        rewrite: (path) => '',
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, _res) => {
+            console.log('Proxy error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            console.log('Proxying stripe-webhook request to:', req.url);
+          });
+        }
       }
     }
   },

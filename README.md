@@ -424,3 +424,174 @@ GROUP BY source_function, status;
 -- Clean up expired idempotency keys (automated)
 SELECT cleanup_expired_idempotency_keys();
 ```
+
+## 💳 Stripe Payment Architecture - Edge Function Comparison
+
+The system uses **two distinct edge functions** for handling Stripe payments, each serving a different purpose in the payment lifecycle. Understanding their differences is crucial for proper system operation and troubleshooting.
+
+### 🚀 **`create-stripe-checkout`** - Payment Initiation
+
+**Purpose**: Creates a new Stripe checkout session **BEFORE** payment  
+**Triggered by**: Frontend application when user wants to make a payment  
+**Timing**: **Before** user goes to Stripe to pay
+
+#### What it does:
+- ✅ **Validates** the card exists in database
+- ✅ **Creates** a Stripe checkout session 
+- ✅ **Returns** the checkout URL to redirect user to Stripe
+- ✅ **Implements** idempotency to prevent duplicate sessions
+- ✅ **Stores** session metadata (card_id, amount, client_request_id)
+
+#### Key Features:
+- **Card Validation**: Ensures card exists before creating session
+- **Idempotency Protection**: Uses `client_request_id` to prevent duplicate sessions
+- **Dynamic URL Generation**: Automatically constructs success/cancel URLs
+- **Comprehensive Error Handling**: Detailed validation and error responses
+- **Request Tracing**: Full logging for debugging and monitoring
+
+---
+
+### 🎯 **`stripe-webhook`** - Payment Processing
+
+**Purpose**: Processes the payment **AFTER** Stripe completes the transaction  
+**Triggered by**: Stripe servers when payment is completed  
+**Timing**: **After** user completes payment on Stripe
+
+#### What it does:
+- ✅ **Receives** webhook from Stripe when payment completes
+- ✅ **Verifies** webhook signature for security
+- ✅ **Processes** the `checkout.session.completed` event
+- ✅ **Updates** card balance through `sp_process_stripe_recharge` stored procedure
+- ✅ **Prevents** duplicate processing of same session
+
+#### Key Features:
+- **Webhook Signature Verification**: Ensures requests are from Stripe
+- **Atomic Balance Updates**: Uses stored procedures for race condition prevention
+- **Duplicate Session Detection**: Prevents processing the same payment twice
+- **Comprehensive Error Handling**: Handles various webhook scenarios
+- **Structured Logging**: Full request tracing and error reporting
+
+---
+
+### 🔄 Complete Payment Flow
+
+Here's how both functions work together in the **complete payment lifecycle**:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Frontend
+    participant CreateCheckout as create-stripe-checkout
+    participant Stripe as Stripe Checkout
+    participant StripeWebhook as stripe-webhook
+    participant Database
+
+    User->>Frontend: Click "Recharge Card"
+    Frontend->>CreateCheckout: POST /create-stripe-checkout
+    CreateCheckout->>Database: Validate card exists
+    CreateCheckout->>Stripe: Create checkout session
+    Stripe-->>CreateCheckout: Return session URL
+    CreateCheckout-->>Frontend: Return checkout URL
+    Frontend->>User: Redirect to Stripe checkout
+    
+    User->>Stripe: Complete payment
+    Stripe->>StripeWebhook: POST webhook (session.completed)
+    StripeWebhook->>Database: Call sp_process_stripe_recharge
+    Database-->>StripeWebhook: Update card balance
+    StripeWebhook-->>Stripe: Confirm webhook received
+    
+    Stripe->>User: Redirect to success page
+```
+
+### 📋 Function Comparison Table
+
+| Aspect | `create-stripe-checkout` | `stripe-webhook` |
+|--------|-------------------------|------------------|
+| **Timing** | ⏰ Before payment | ⏰ After payment |
+| **Trigger** | 👤 User action | 🔗 Stripe webhook |
+| **Purpose** | 🚀 Create session | ✅ Process result |
+| **Caller** | 🖥️ Frontend app | 🎯 Stripe servers |
+| **Main Action** | Create checkout URL | Update card balance |
+| **Database Operation** | Read card data | Write balance update |
+| **Idempotency** | Prevent duplicate sessions | Prevent duplicate processing |
+| **Response** | Checkout URL | Confirmation |
+| **Security** | Input validation | Webhook signature verification |
+
+### 🔐 Security & Reliability Features
+
+**Both functions implement**:
+- ✅ **Idempotency protection** to prevent duplicates
+- ✅ **Comprehensive error handling** with categorized responses
+- ✅ **Structured logging** for debugging and monitoring
+- ✅ **Input validation** and sanitization
+- ✅ **Request tracing** with unique identifiers
+
+**`create-stripe-checkout` specific**:
+- 🔍 **Card existence validation** before session creation
+- 🛡️ **Amount validation** and business rule enforcement
+- 🔄 **Session creation retry logic**
+
+**`stripe-webhook` specific**:
+- 🔒 **Webhook signature verification** for security
+- 🛡️ **Duplicate session detection** at database level
+- ⚡ **Atomic balance updates** through stored procedures
+
+### 🚨 Common Integration Issues
+
+#### For `create-stripe-checkout`:
+- **Missing client_request_id**: Always generate unique request ID
+- **Invalid card_id**: Validate card exists before session creation
+- **Amount validation**: Ensure amount is within business limits
+- **URL configuration**: Verify success/cancel URLs are accessible
+
+#### For `stripe-webhook`:
+- **Webhook signature**: Ensure `STRIPE_WEBHOOK_SECRET` is correctly configured
+- **Duplicate events**: Stripe may send duplicate webhooks - function handles this
+- **Metadata validation**: Ensure session includes required metadata
+- **Database connectivity**: Webhook requires database access for balance updates
+
+### 📊 Monitoring and Debugging
+
+#### Monitor Session Creation:
+```sql
+-- Check recent checkout session creations
+SELECT 
+    request_id,
+    status,
+    created_at,
+    updated_at
+FROM idempotency_keys 
+WHERE source_function = 'create-stripe-checkout' 
+ORDER BY created_at DESC 
+LIMIT 10;
+```
+
+#### Monitor Payment Processing:
+```sql
+-- Check recent Stripe recharges
+SELECT 
+    card_id,
+    amount_involved,
+    transaction_type,
+    created_at
+FROM app_transaction_log 
+WHERE transaction_type = 'stripe_recharge' 
+ORDER BY created_at DESC 
+LIMIT 10;
+```
+
+### 🔧 Troubleshooting Guide
+
+#### If checkout sessions fail to create:
+1. Check card exists in `table_cards`
+2. Verify `STRIPE_SECRET_KEY` is configured
+3. Check amount is within valid range (0.01-1000 EUR)
+4. Ensure `client_request_id` is unique
+
+#### If webhooks fail to process:
+1. Verify `STRIPE_WEBHOOK_SECRET` matches Stripe dashboard
+2. Check webhook signature in logs
+3. Ensure session metadata includes `card_id` and `amount`
+4. Verify database connectivity and stored procedure availability
+
+This architecture ensures **secure, reliable, and atomic** payment processing with comprehensive error handling and monitoring capabilities.

@@ -1,14 +1,23 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
-import Stripe from 'https://esm.sh/stripe@12.0.0?target=deno';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import Stripe from 'https://esm.sh/stripe@14.21.0';
 
 // =====================================================
 // ENVIRONMENT CONFIGURATION
 // =====================================================
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY_FINAL') || '', {
-  apiVersion: '2022-11-15',
+// Support both test and live modes
+const isTestMode = Deno.env.get('STRIPE_TEST_MODE') === 'true';
+const stripeSecretKey = isTestMode 
+  ? Deno.env.get('STRIPE_SECRET_KEY_TEST') 
+  : Deno.env.get('STRIPE_SECRET_KEY_FINAL');
+
+const stripe = new Stripe(stripeSecretKey || '', {
+  apiVersion: '2023-10-16',
 });
+
+console.log(`[stripe-webhook] Initialized in ${isTestMode ? 'TEST' : 'LIVE'} mode`);
 
 const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') || '';
 
@@ -18,6 +27,13 @@ const supabaseClient = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '',
   { auth: { persistSession: false } }
 );
+
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+};
 
 // =====================================================
 // UTILITY FUNCTIONS
@@ -59,43 +75,24 @@ function logError(requestId: string, message: string, error?: any) {
 }
 
 /**
- * Validates Stripe webhook signature
+ * Validates Stripe webhook signature (ASYNC VERSION for Deno)
  */
-function verifyWebhookSignature(body: string, signature: string): Stripe.Event {
+async function verifyWebhookSignature(body: string, signature: string): Promise<Stripe.Event> {
   try {
-    return stripe.webhooks.constructEvent(body, signature, endpointSecret);
+    // Use the async version for Deno edge runtime
+    return await stripe.webhooks.constructEventAsync(body, signature, endpointSecret);
   } catch (error) {
     throw new Error(`Webhook signature verification failed: ${error.message}`);
   }
 }
 
 /**
- * Validates checkout session metadata
- */
-function validateSessionMetadata(session: Stripe.Checkout.Session): { cardId: string; amount: string } {
-  const cardId = session.metadata?.cardId;
-  const amount = session.metadata?.amount;
-  
-  if (!cardId || !amount) {
-    throw new Error(`Missing required metadata - cardId: ${cardId}, amount: ${amount}`);
-  }
-  
-  // Validate amount is a valid number
-  const numericAmount = parseFloat(amount);
-  if (isNaN(numericAmount) || numericAmount <= 0) {
-    throw new Error(`Invalid amount in metadata: ${amount}`);
-  }
-  
-  return { cardId, amount };
-}
-
-/**
- * Calls the atomic stored procedure for Stripe recharge processing
+ * Calls the simplified stored procedure for Stripe recharge processing
  */
 async function processStripeRecharge(
   requestId: string,
   cardId: string,
-  amount: string,
+  amount: number,
   stripeSessionId: string,
   stripeMetadata: any
 ): Promise<any> {
@@ -107,9 +104,9 @@ async function processStripeRecharge(
 
   const { data, error } = await supabaseClient.rpc('sp_process_stripe_recharge', {
     card_id_in: cardId,
-    amount_in: parseFloat(amount),
+    amount_in: amount,
     stripe_session_id_in: stripeSessionId,
-    stripe_metadata_in: stripeMetadata
+    stripe_metadata_in: stripeMetadata || {}
   });
 
   if (error) {
@@ -128,46 +125,90 @@ async function processStripeRecharge(
 serve(async (req) => {
   const requestId = generateRequestId();
   
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { 
+      status: 200, 
+      headers: corsHeaders 
+    });
+  }
+  
+  // Log basic request info
   logInfo(requestId, 'Stripe webhook request received', {
     method: req.method,
-    url: req.url,
-    headers: Object.fromEntries(req.headers.entries())
+    userAgent: req.headers.get('user-agent'),
+    hasStripeSignature: !!req.headers.get('stripe-signature')
   });
 
   // Validate HTTP method
   if (req.method !== 'POST') {
     logError(requestId, 'Invalid HTTP method', { method: req.method });
-    return new Response('Method not allowed', { status: 405 });
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }), 
+      { 
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   // Validate Stripe signature header
   const signature = req.headers.get('stripe-signature');
   if (!signature) {
     logError(requestId, 'Missing Stripe signature header');
-    return new Response('Missing stripe-signature header', { status: 400 });
+    return new Response(
+      JSON.stringify({ 
+        error: 'Missing stripe-signature header',
+        message: 'This endpoint should only be called by Stripe webhooks'
+      }), 
+      { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 
   try {
     // Read request body
     const body = await req.text();
-    logInfo(requestId, 'Request body received', { bodyLength: body.length });
+    
+    if (!body) {
+      logError(requestId, 'Empty request body');
+      return new Response(
+        JSON.stringify({ error: 'Empty request body' }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
+    logInfo(requestId, 'Request body received', { 
+      bodyLength: body.length
+    });
 
-    // Verify webhook signature and construct event
+    // Verify webhook signature (ASYNC)
     let event: Stripe.Event;
     try {
-      event = verifyWebhookSignature(body, signature);
+      event = await verifyWebhookSignature(body, signature);
       logInfo(requestId, 'Webhook signature verified successfully', {
         eventType: event.type,
         eventId: event.id
       });
     } catch (error) {
       logError(requestId, 'Webhook signature verification failed', error);
-      return new Response(`Webhook signature verification failed: ${error.message}`, { 
-        status: 400 
-      });
+      return new Response(
+        JSON.stringify({ 
+          error: `Webhook signature verification failed: ${error.message}`
+        }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    // Filter for checkout.session.completed events only
+    // Only process checkout.session.completed events
     if (event.type !== 'checkout.session.completed') {
       logInfo(requestId, 'Ignoring non-checkout event', { eventType: event.type });
       return new Response(JSON.stringify({ 
@@ -176,7 +217,7 @@ serve(async (req) => {
         eventType: event.type 
       }), { 
         status: 200,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
@@ -188,106 +229,128 @@ serve(async (req) => {
       metadata: session.metadata
     });
 
-    // Validate session payment status
+    // Validate payment is completed
     if (session.payment_status !== 'paid') {
-      logError(requestId, 'Session payment not completed', {
+      logError(requestId, 'Payment not completed', {
         sessionId: session.id,
         paymentStatus: session.payment_status
       });
-      return new Response('Payment not completed', { status: 400 });
+      return new Response(
+        JSON.stringify({ error: 'Payment not completed' }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    // Validate and extract metadata
-    let cardId: string;
-    let amount: string;
-    try {
-      const metadata = validateSessionMetadata(session);
-      cardId = metadata.cardId;
-      amount = metadata.amount;
-    } catch (error) {
-      logError(requestId, 'Metadata validation failed', error);
-      return new Response(`Invalid session metadata: ${error.message}`, { status: 400 });
-    }
+    // Extract metadata
+    const metadata = session.metadata || {};
+    const cardId = metadata.card_id || metadata.cardId;
+    const amount = metadata.amount;
 
-    // Process recharge using atomic stored procedure
-    let result: any;
-    try {
-      result = await processStripeRecharge(
-        requestId,
+    if (!cardId || !amount) {
+      logError(requestId, 'Missing required metadata', {
         cardId,
         amount,
-        session.id,
-        session.metadata || {}
+        allMetadata: metadata
+      });
+      return new Response(
+        JSON.stringify({ 
+          error: 'Missing required metadata: card_id and amount' 
+        }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
       );
+    }
+
+    // Validate amount
+    const numericAmount = parseFloat(amount);
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      logError(requestId, 'Invalid amount', { amount });
+      return new Response(
+        JSON.stringify({ error: 'Invalid amount in metadata' }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Process the recharge
+    try {
+      const result = await processStripeRecharge(
+        requestId,
+        cardId,
+        numericAmount,
+        session.id,
+        metadata
+      );
+
+      // Check if it was a duplicate (expected behavior)
+      if (result && result.success === false && result.error === 'Duplicate Stripe session') {
+        logInfo(requestId, 'Duplicate session handled gracefully', {
+          sessionId: session.id
+        });
+        return new Response(JSON.stringify({
+          received: true,
+          message: 'Duplicate session - already processed',
+          sessionId: session.id
+        }), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Success case
+      logInfo(requestId, 'Webhook processed successfully', {
+        cardId,
+        amount: numericAmount,
+        sessionId: session.id,
+        result
+      });
+
+      return new Response(JSON.stringify({
+        received: true,
+        message: 'Webhook processed successfully',
+        data: {
+          cardId,
+          amount: numericAmount,
+          sessionId: session.id,
+          result
+        }
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+
     } catch (error) {
-      logError(requestId, 'Recharge processing failed', error);
-      
-      // Check if it's a duplicate session error (expected behavior)
-      if (error.message?.includes('Duplicate Stripe session') || 
-          result?.error === 'Duplicate Stripe session') {
-        logInfo(requestId, 'Duplicate session detected - returning success', {
-          sessionId: session.id
-        });
-        return new Response(JSON.stringify({
-          received: true,
-          message: 'Duplicate session - already processed',
-          sessionId: session.id
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      // Check if it's a card not found error
-      if (error.message?.includes('Card not found')) {
-        logError(requestId, 'Card not found', { cardId });
-        return new Response(`Card not found: ${cardId}`, { status: 404 });
-      }
-      
-      // Generic database error
-      return new Response(`Database error: ${error.message}`, { status: 500 });
+      logError(requestId, 'Failed to process recharge', error);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to process recharge',
+          details: error.message 
+        }), 
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
-
-    // Handle stored procedure response
-    if (!result.success) {
-      if (result.error === 'Duplicate Stripe session') {
-        logInfo(requestId, 'Duplicate session handled by stored procedure', {
-          sessionId: session.id
-        });
-        return new Response(JSON.stringify({
-          received: true,
-          message: 'Duplicate session - already processed',
-          sessionId: session.id
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      logError(requestId, 'Stored procedure returned error', result);
-      return new Response(`Processing error: ${result.error}`, { status: 500 });
-    }
-
-    // Success response
-    const successResponse = {
-      received: true,
-      cardId: cardId,
-      rechargeAmount: parseFloat(amount),
-      previousBalance: result.previous_balance,
-      newBalance: result.new_balance,
-      transactionId: result.transaction_id,
-      sessionId: session.id
-    };
-
-    logInfo(requestId, 'Recharge processed successfully', successResponse);
-
-    return new Response(JSON.stringify(successResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
 
   } catch (error) {
-    logError(requestId, 'Unexpected error in webhook handler', error);
-    return new Response(`Webhook error: ${error.message}`, { status: 500 });
+    logError(requestId, 'Unexpected error in webhook processing', error);
+    return new Response(
+      JSON.stringify({ 
+        error: 'Internal server error',
+        details: error.message 
+      }), 
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 });
