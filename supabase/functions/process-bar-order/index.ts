@@ -153,8 +153,8 @@ serve(async (req) => {
       validationErrors.push('items is required and must be a non-empty array');
     }
     
-    if (typeof total_amount !== 'number' || total_amount <= 0) {
-      validationErrors.push('total_amount is required and must be a positive number');
+    if (typeof total_amount !== 'number') {
+      validationErrors.push('total_amount is required and must be a number');
     }
     
     if (typeof point_of_sale !== 'number' || point_of_sale < 1) {
@@ -183,7 +183,12 @@ serve(async (req) => {
       });
       
       // Validate total amount matches item calculations
-      const calculatedTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+      // Consider returns (negative amounts) by checking if item is a return
+      const calculatedTotal = items.reduce((sum, item) => {
+        const itemTotal = item.quantity * item.unit_price;
+        // Subtract for returns, add for regular items
+        return sum + (item.is_return ? -itemTotal : itemTotal);
+      }, 0);
       const tolerance = 0.01; // Allow for small floating point differences
       if (Math.abs(calculatedTotal - total_amount) > tolerance) {
         validationErrors.push(`Total amount mismatch: calculated €${calculatedTotal.toFixed(2)}, provided €${total_amount.toFixed(2)}`);
@@ -211,7 +216,7 @@ serve(async (req) => {
     );
 
     console.log(`[${requestId}] ===== CALLING ATOMIC STORED PROCEDURE =====`);
-    console.log(`[${requestId}] Procedure: sp_process_bar_order`);
+    console.log(`[${requestId}] Procedure: sp_process_bar_order_with_debouncing`);
     console.log(`[${requestId}] Parameters: card_id=${card_id}, client_request_id=${client_request_id}, total_amount=${total_amount}, point_of_sale=${point_of_sale}`);
     
     // Call the atomic stored procedure - this eliminates ALL race conditions
@@ -222,7 +227,7 @@ serve(async (req) => {
     // - Transaction logging
     // - Error handling and rollback
     const { data: procedureResult, error: procedureError } = await supabaseAdmin
-      .rpc('sp_process_bar_order', {
+      .rpc('sp_process_bar_order_with_debouncing', {
         card_id_in: card_id.trim(),
         items_in: items,
         total_amount_in: total_amount,
@@ -265,14 +270,39 @@ serve(async (req) => {
 
       console.log(`[${requestId}] Returning error response: ${errorCode} - ${userFriendlyMessage}`);
 
+      // For insufficient funds, try to get current balance from the error details
+      let responseData: any = {
+        success: false,
+        error: userFriendlyMessage,
+        error_code: errorCode,
+        details: procedureError.message,
+        request_id: requestId
+      };
+
+      // If it's an insufficient funds error, fetch the current card balance directly
+      // since procedureResult is null when there's an error
+      if (errorCode === ErrorCode.INSUFFICIENT_FUNDS) {
+        try {
+          console.log(`[${requestId}] Fetching current balance for insufficient funds error`);
+          const { data: cardData, error: balanceError } = await supabaseAdmin
+            .from('table_cards')
+            .select('amount')
+            .eq('id', card_id.trim())
+            .single();
+          
+          if (!balanceError && cardData && cardData.amount !== undefined) {
+            responseData.previous_balance = parseFloat(cardData.amount);
+            console.log(`[${requestId}] Including current balance in error response: €${cardData.amount}`);
+          } else {
+            console.warn(`[${requestId}] Could not fetch balance for insufficient funds error:`, balanceError?.message);
+          }
+        } catch (balanceQueryError) {
+          console.warn(`[${requestId}] Error fetching balance for insufficient funds response:`, balanceQueryError);
+        }
+      }
+
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: userFriendlyMessage,
-          error_code: errorCode,
-          details: procedureError.message,
-          request_id: requestId
-        }),
+        JSON.stringify(responseData),
         { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: httpStatus }
       );
     }
@@ -332,12 +362,42 @@ serve(async (req) => {
       
       console.log(`[${requestId}] Returning business error: ${errorCode}`);
       
+      // Prepare response data
+      let responseData: any = {
+        ...result,
+        error_code: errorCode,
+        request_id: requestId
+      };
+
+      // For insufficient funds errors, try to get balance from result first, then fetch directly if needed
+      if (errorCode === ErrorCode.INSUFFICIENT_FUNDS) {
+        if (result.previous_balance !== undefined) {
+          console.log(`[${requestId}] Including current balance from procedure result: €${result.previous_balance}`);
+          responseData.previous_balance = result.previous_balance;
+        } else {
+          // Fetch balance directly since it's not in the procedure result
+          try {
+            console.log(`[${requestId}] Fetching current balance for insufficient funds business error`);
+            const { data: cardData, error: balanceError } = await supabaseAdmin
+              .from('table_cards')
+              .select('amount')
+              .eq('id', card_id.trim())
+              .single();
+            
+            if (!balanceError && cardData && cardData.amount !== undefined) {
+              responseData.previous_balance = parseFloat(cardData.amount);
+              console.log(`[${requestId}] Including current balance in business error response: €${cardData.amount}`);
+            } else {
+              console.warn(`[${requestId}] Could not fetch balance for insufficient funds business error:`, balanceError?.message);
+            }
+          } catch (balanceQueryError) {
+            console.warn(`[${requestId}] Error fetching balance for insufficient funds business response:`, balanceQueryError);
+          }
+        }
+      }
+      
       return new Response(
-        JSON.stringify({
-          ...result,
-          error_code: errorCode,
-          request_id: requestId
-        }),
+        JSON.stringify(responseData),
         { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: httpStatus }
       );
     }

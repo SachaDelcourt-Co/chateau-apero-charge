@@ -392,10 +392,19 @@ export async function processBarOrder(orderData: {
         errorDetail = response.statusText;
       }
       
+      // For error responses, try to extract balance information if available
+      let balanceInfo = {};
+      if (errorDetails && typeof errorDetails === 'object') {
+        if (errorDetails.previous_balance !== undefined) {
+          balanceInfo = { previous_balance: errorDetails.previous_balance };
+        }
+      }
+      
       return { 
         success: false, 
         error: errorDetail,
-        details: errorDetails
+        details: errorDetails,
+        ...balanceInfo  // Include balance info if available
       };
     }
     
