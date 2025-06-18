@@ -6,14 +6,24 @@ interface UseNfcOptions {
   onScan?: (id: string) => void;
   validateId?: (id: string) => boolean;
   getTotalAmount?: () => number; // Added this option to pass a function that returns the current total
+  getCurrentOrderData?: () => {
+    items: any[];
+    total: number;
+    isEmpty: boolean;
+  };
 }
 
-export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {}) {
+export function useNfc({ onScan, validateId, getTotalAmount, getCurrentOrderData }: UseNfcOptions = {}) {
   const [isScanning, setIsScanning] = useState(false);
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
   const [lastScannedId, setLastScannedId] = useState<string | null>(null);
   const nfcAbortController = useRef<AbortController | null>(null);
   const nfcReaderRef = useRef<any>(null); // Store reference to the NDEFReader
+  
+  // RACE CONDITION FIX: Add state flags to prevent overlapping NFC operations
+  // These prevent multiple concurrent start/stop operations that could corrupt scanner state
+  const isRestartingRef = useRef(false);
+  const isStoppingRef = useRef(false);
   
   // Check if NFC is supported
   useEffect(() => {
@@ -46,25 +56,40 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   const stopScanInternal = () => {
     logger.nfc('stopScanInternal called');
     
-    // Safely abort the controller if it exists
-    if (nfcAbortController.current) {
-      try {
-        nfcAbortController.current.abort();
-        logger.nfc('AbortController aborted successfully');
-      } catch (error) {
-        logger.error('Error aborting NFC controller:', error);
-      }
-      nfcAbortController.current = null;
+    // Prevent concurrent stop operations
+    if (isStoppingRef.current) {
+      logger.nfc('Stop already in progress, skipping');
+      return;
     }
     
-    // Clear reader reference
-    nfcReaderRef.current = null;
+    isStoppingRef.current = true;
     
-    // Reset the last scanned ID
-    setLastScannedId(null);
-    
-    // Update state
-    setIsScanning(false);
+    try {
+      // Safely abort the controller if it exists
+      if (nfcAbortController.current) {
+        try {
+          nfcAbortController.current.abort();
+          logger.nfc('AbortController aborted successfully');
+        } catch (error) {
+          logger.error('Error aborting NFC controller:', error);
+        }
+        nfcAbortController.current = null;
+      }
+      
+      // Clear reader reference
+      nfcReaderRef.current = null;
+      
+      // Reset the last scanned ID
+      setLastScannedId(null);
+      
+      // Update state
+      setIsScanning(false);
+      
+      // Reset restart flag in case it was set
+      isRestartingRef.current = false;
+    } finally {
+      isStoppingRef.current = false;
+    }
   };
 
   // Helper function to extract the ID from text content
@@ -92,8 +117,17 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
   const startScan = useCallback(async () => {
     logger.nfc('startScan called, isSupported:', isSupported);
     
-    // Log the current total amount if the function is provided
-    if (getTotalAmount) {
+    // Prevent concurrent start operations  
+    if (isRestartingRef.current) {
+      logger.nfc('Start already in progress, skipping');
+      return false;
+    }
+    
+    // Log the current order data if the function is provided
+    if (getCurrentOrderData) {
+      const orderData = getCurrentOrderData();
+      logger.nfc('Current order data:', orderData);
+    } else if (getTotalAmount) {
       const currentTotal = getTotalAmount();
       logger.nfc('Current total amount:', currentTotal);
     }
@@ -108,13 +142,15 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       return false;
     }
     
-    // First, ensure any existing scan is stopped completely
-    stopScanInternal();
-    
-    // Reset the last scanned ID to avoid any state being kept
-    setLastScannedId(null);
+    isRestartingRef.current = true;
     
     try {
+      // First, ensure any existing scan is stopped completely
+      stopScanInternal();
+      
+      // Reset the last scanned ID to avoid any state being kept
+      setLastScannedId(null);
+      
       // Create a fresh AbortController
       nfcAbortController.current = new AbortController();
       const signal = nfcAbortController.current.signal;
@@ -180,23 +216,18 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                 logger.nfc("Valid ID extracted from NFC payload:", extractedId);
                 setLastScannedId(extractedId);
                 
-                // Temporarily pause scanning but don't stop completely
-                // This prevents multiple rapid reads of the same card
-                const currentController = nfcAbortController.current;
-                if (currentController) {
-                  try {
-                    currentController.abort();
-                    logger.nfc("NFC scanning temporarily paused after card read");
-                  } catch (error) {
-                    logger.error('Error pausing NFC scan:', error);
-                  }
-                }
-                
                 // Call onScan with the extracted ID if provided
                 if (onScan) {
-                  // Check if we're in a payment or recharge context based on the total amount
-                  if (getTotalAmount) {
-                    // Payment context
+                  // Use getCurrentOrderData if available for current order context
+                  if (getCurrentOrderData) {
+                    const orderData = getCurrentOrderData();
+                    logger.payment('nfc_scan_payment_attempt', {
+                      cardId: extractedId,
+                      total: orderData.total,
+                      itemCount: orderData.items.length
+                    });
+                  } else if (getTotalAmount) {
+                    // Fallback to getTotalAmount for backwards compatibility
                     logger.payment('nfc_scan_payment_attempt', {
                       cardId: extractedId,
                       total: getTotalAmount() || 'unknown'
@@ -212,44 +243,8 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
                   onScan(extractedId);
                 }
                 
-                // Restart scan after a short delay to prevent multiple reads
-                setTimeout(async () => {
-                  try {
-                    // Only restart if we're still in scanning mode
-                    if (isScanning) {
-                      logger.nfc("Restarting scan after card read");
-                      
-                      // IMPORTANT: Stop completely first to ensure proper cleanup
-                      stopScanInternal();
-                      
-                      // Small delay to ensure everything is cleaned up
-                      await new Promise(resolve => setTimeout(resolve, 100));
-                      
-                      // Now create fresh instances
-                      nfcAbortController.current = new AbortController();
-                      const signal = nfcAbortController.current.signal;
-                      
-                      // @ts-ignore - TypeScript might not have NDEFReader in its types yet
-                      const newReader = new NDEFReader();
-                      nfcReaderRef.current = newReader;
-                      
-                      // Add minimal error handler
-                      newReader.addEventListener("error", (err: any) => {
-                        logger.error("NFC reading error in restarted scan:", err);
-                        stopScanInternal();
-                      });
-                      
-                      // Start the scan with the fresh reader
-                      await newReader.scan({ signal });
-                      setIsScanning(true);
-                      logger.nfc('NFC scanning successfully restarted');
-                    }
-                  } catch (error) {
-                    logger.error("Error restarting NFC scan:", error);
-                    stopScanInternal(); // Ensure we clean up
-                  }
-                }, 2000); // Wait 2 seconds before restarting scan
-                
+                // RACE CONDITION FIX: Don't restart automatically - let the parent component manage scanning state
+                // This eliminates the dangerous timeout-based restart logic that could create overlapping NFC readers
                 return;
               }
             }
@@ -264,69 +259,35 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
               logger.nfc("Using serial number as ID:", id);
               setLastScannedId(id);
               
-              // Temporarily pause scanning but don't stop completely
-              // This prevents multiple rapid reads of the same card
-              const currentController = nfcAbortController.current;
-              if (currentController) {
-                try {
-                  currentController.abort();
-                  logger.nfc("NFC scanning temporarily paused after card read");
-                } catch (error) {
-                  logger.error('Error pausing NFC scan:', error);
-                }
-              }
-              
-              // Log the payment attempt
-              if (onScan) {
-                logger.payment('nfc_serial_payment_attempt', {
-                  cardId: id,
-                  total: getTotalAmount ? getTotalAmount() : 'unknown'
-                });
-              }
-              
               // Call onScan with the ID if provided
               if (onScan) {
+                // Use getCurrentOrderData if available for current order context
+                if (getCurrentOrderData) {
+                  const orderData = getCurrentOrderData();
+                  logger.payment('nfc_serial_payment_attempt', {
+                    cardId: id,
+                    total: orderData.total,
+                    itemCount: orderData.items.length
+                  });
+                } else if (getTotalAmount) {
+                  // Fallback to getTotalAmount for backwards compatibility
+                  logger.payment('nfc_serial_payment_attempt', {
+                    cardId: id,
+                    total: getTotalAmount() || 'unknown'
+                  });
+                } else {
+                  // Likely a recharge context
+                  logger.recharge('recharge_scan_attempt', {
+                    cardId: id,
+                    timestamp: new Date().toISOString()
+                  });
+                }
+                
                 onScan(id);
               }
               
-              // Restart scan after a short delay to prevent multiple reads
-              setTimeout(async () => {
-                try {
-                  // Only restart if we're still in scanning mode
-                  if (isScanning) {
-                    logger.nfc("Restarting scan after card read");
-                    
-                    // IMPORTANT: Stop completely first to ensure proper cleanup
-                    stopScanInternal();
-                    
-                    // Small delay to ensure everything is cleaned up
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    // Now create fresh instances
-                    nfcAbortController.current = new AbortController();
-                    const signal = nfcAbortController.current.signal;
-                    
-                    // @ts-ignore - TypeScript might not have NDEFReader in its types yet
-                    const newReader = new NDEFReader();
-                    nfcReaderRef.current = newReader;
-                    
-                    // Add minimal error handler
-                    newReader.addEventListener("error", (err: any) => {
-                      logger.error("NFC reading error in restarted scan:", err);
-                      stopScanInternal();
-                    });
-                    
-                    // Start the scan with the fresh reader
-                    await newReader.scan({ signal });
-                    setIsScanning(true);
-                    logger.nfc('NFC scanning successfully restarted');
-                  }
-                } catch (error) {
-                  logger.error("Error restarting NFC scan:", error);
-                  stopScanInternal(); // Ensure we clean up
-                }
-              }, 2000); // Wait 2 seconds before restarting scan
-              
+              // RACE CONDITION FIX: Don't restart automatically - let the parent component manage scanning state
+              // This eliminates the dangerous timeout-based restart logic that could create overlapping NFC readers
               return;
             }
           }
@@ -364,8 +325,10 @@ export function useNfc({ onScan, validateId, getTotalAmount }: UseNfcOptions = {
       }
       
       return false;
+    } finally {
+      isRestartingRef.current = false;
     }
-  }, [isSupported, onScan, validateId, getTotalAmount]); // Added getTotalAmount to dependencies
+  }, [isSupported, onScan, validateId, getTotalAmount, getCurrentOrderData]);
   
   const stopScan = useCallback(() => {
     logger.nfc('stopScan called by user');

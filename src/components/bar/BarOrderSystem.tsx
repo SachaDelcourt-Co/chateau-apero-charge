@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
 import { Input } from '@/components/ui/input';
@@ -18,21 +18,20 @@ export const BarOrderSystem: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
-  // Store the latest calculated total to ensure consistency
-  const [currentTotal, setCurrentTotal] = useState<number>(0);
-  // Track if order was modified since last scan activation
-  const [orderModifiedAfterScan, setOrderModifiedAfterScan] = useState(false);
-  // Ref to track previous order items to avoid unnecessary scan stops
-  const previousOrderRef = useRef<string>('');
+  
+  // RACE CONDITION FIX: Use refs to track the latest order state for NFC operations
+  // This prevents stale closure data from being used in payment processing
+  const orderItemsRef = useRef<OrderItem[]>([]);
+  const isProcessingRef = useRef(false);
 
   // Log that the component initialized
   useEffect(() => {
     logger.info('BarOrderSystem component initialized');
   }, []);
 
-  // Calculate the total order amount
-  const calculateTotal = (): number => {
-    const total = orderItems.reduce((total, item) => {
+  // Synchronous function to calculate total from current order items
+  const calculateTotal = useCallback((items: OrderItem[] = orderItemsRef.current): number => {
+    const total = items.reduce((total, item) => {
       // Calculate per item considering quantity
       const itemTotal = item.price * item.quantity;
       // Subtract for returns (caution return), add for everything else
@@ -41,93 +40,58 @@ export const BarOrderSystem: React.FC = () => {
     
     console.log("[Total Debug] calculateTotal called, result:", total);
     return total;
-  };
+  }, []);
 
-  // Initialize NFC hook with a validation function and scan handler
+  // RACE CONDITION FIX: Function to get current order data - always returns latest state
+  // This ensures NFC scanning and payment processing always use the most current data
+  // instead of relying on potentially stale state from closures
+  const getCurrentOrderData = useCallback(() => {
+    return {
+      items: orderItemsRef.current,
+      total: calculateTotal(orderItemsRef.current),
+      isEmpty: orderItemsRef.current.length === 0
+    };
+  }, [calculateTotal]);
+
+  // Initialize NFC hook with functions that always get current data
   const { isScanning, startScan, stopScan, isSupported } = useNfc({
     // Validate that ID is 8 characters long
     validateId: (id) => id.length === 8,
-    // Handle scanned ID with the EXACT current UI total
+    // Get current total amount - this function always returns the latest total
+    getCurrentOrderData: getCurrentOrderData,
+    // Handle scanned ID with the EXACT current order data
     onScan: (id) => {
       console.log("[NFC Scan] Card scanned with ID:", id);
+      
+      // Prevent processing if already in progress
+      if (isProcessingRef.current) {
+        logger.warn("[NFC Scan] Payment already in progress, ignoring scan");
+        return;
+      }
+      
+      // Get the current order data at scan time
+      const orderData = getCurrentOrderData();
+      
       // Set card ID immediately for UI feedback
       setCardId(id);
       
-      // Calculate total directly from order items to ensure it's correct
-      const calculatedTotal = orderItems.reduce((sum, item) => {
-        return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
-      }, 0);
+      console.log("[NFC Scan] Current order data:", orderData);
+      console.log("[NFC Scan] *** FINAL AMOUNT TO PROCESS:", orderData.total, "€ ***");
       
-      // Log both values for debugging
-      console.log("[NFC Scan] State total:", currentTotal);
-      console.log("[NFC Scan] Calculated total:", calculatedTotal);
-      
-      // Use the calculated total to be absolutely sure
-      const finalTotal = calculatedTotal;
-      console.log("[NFC Scan] *** FINAL AMOUNT TO PROCESS:", finalTotal, "€ ***");
-      
-      // Process payment with this amount
-      processPayment(id, finalTotal);
+      // Process payment with current order data
+      processPayment(id, orderData.total, orderData.items);
     }
   });
-  
-  // Function to reset NFC scanner with appropriate logging
-  const resetScan = (reason: string) => {
-    if (isScanning) {
-      console.log(`Resetting NFC scanner after ${reason}`);
-      stopScan();
-      setTimeout(() => {
-        startScan();
-      }, 500);
-    }
-  };
 
-  // Update currentTotal whenever orderItems change
+  // Update refs whenever orderItems changes
   useEffect(() => {
-    // Calculate the new total and update state
-    const total = calculateTotal();
-    setCurrentTotal(total);
-    
-    // If scanning, update the NFC scanner when the order changes
-    if (isScanning) {
-      // Get current order string to compare
-      const currentOrderString = JSON.stringify(orderItems);
-      
-      // If we have a previous reference and it's different from current order
-      if (previousOrderRef.current && previousOrderRef.current !== currentOrderString) {
-        // Update the reference first
-        previousOrderRef.current = currentOrderString;
-        
-        // Restart the NFC scanner to capture the new total
-        console.log("Order changed, restarting NFC scanner with new total:", total);
-        
-        // First stop the scanner
-        stopScan();
-        
-        // Then restart after a short delay
-        setTimeout(() => {
-          startScan();
-        }, 500);
-      } 
-      // For first time setup, just save the reference
-      else if (!previousOrderRef.current) {
-        previousOrderRef.current = currentOrderString;
-      }
-    }
-  }, [orderItems, isScanning, stopScan, startScan]);
+    orderItemsRef.current = orderItems;
+  }, [orderItems]);
 
-  // Add an effect to track scanning state changes from the useNfc hook
+  // Update processing ref whenever isProcessing changes
   useEffect(() => {
-    console.log("[BarOrderSystem] Scanning state changed:", isScanning);
-    
-    // If scanning stopped (and it wasn't due to order modification)
-    if (!isScanning && !orderModifiedAfterScan) {
-      // Check if we have a card ID, which means a card was scanned
-      if (cardId) {
-        console.log("[BarOrderSystem] Scanning stopped after card scan, cardId:", cardId);
-      }
-    }
-  }, [isScanning, orderModifiedAfterScan, cardId]);
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
 
   // Load products on component mount
   useEffect(() => {
@@ -193,7 +157,6 @@ export const BarOrderSystem: React.FC = () => {
     setOrderItems([]);
     setCardId('');
     setErrorMessage(null);
-    setCurrentTotal(0);
   };
 
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,12 +167,12 @@ export const BarOrderSystem: React.FC = () => {
     // Process payment automatically when 8 characters are entered
     if (value.length === 8) {
       // Use the current total from state which is always up to date with orderItems
-      processPayment(value, currentTotal);
+      processPayment(value, calculateTotal(orderItems), orderItems);
     }
   };
 
-  const processPayment = async (id: string, total: number) => {
-    if (orderItems.length === 0) {
+  const processPayment = async (id: string, total: number, items: OrderItem[]) => {
+    if (items.length === 0) {
       setErrorMessage("Commande vide. Veuillez ajouter des produits.");
       logger.warn('Payment attempted with empty order');
       return;
@@ -219,12 +182,12 @@ export const BarOrderSystem: React.FC = () => {
     setErrorMessage(null);
     
     // Double check total amount - if it's 0 but we have order items, something is wrong
-    if (total === 0 && orderItems.length > 0) {
+    if (total === 0 && items.length > 0) {
       const error = "ERROR: Total amount is 0 but order has items!";
-      logger.error(error, { orderItems });
+      logger.error(error, { items });
       
       // Calculate directly as a fallback
-      total = orderItems.reduce((sum, item) => {
+      total = items.reduce((sum, item) => {
         return sum + (item.is_return ? -1 : 1) * item.price * item.quantity;
       }, 0);
       logger.info('Recalculated total as fallback:', total);
@@ -232,7 +195,7 @@ export const BarOrderSystem: React.FC = () => {
     
     // CRITICAL: Only error if total is zero when we have positive-value items but shouldn't be zero
     // Allow negative totals (returns can be worth more than purchases - valid scenario)
-    const nonReturnItems = orderItems.filter(item => !item.is_return);
+    const nonReturnItems = items.filter(item => !item.is_return);
     const nonReturnTotal = nonReturnItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
     if (total === 0 && nonReturnTotal > 0) {
@@ -241,7 +204,7 @@ export const BarOrderSystem: React.FC = () => {
         total, 
         nonReturnTotal,
         nonReturnItems,
-        allItems: orderItems
+        allItems: items
       });
       setErrorMessage("Erreur de calcul. Le montant total est incorrect.");
       setIsProcessing(false);
@@ -251,7 +214,7 @@ export const BarOrderSystem: React.FC = () => {
     logger.payment('payment_started', { 
       cardId: id, 
       total, 
-      items: orderItems.map(item => ({ 
+      items: items.map(item => ({ 
         name: item.product_name,
         price: item.price,
         quantity: item.quantity,
@@ -261,7 +224,7 @@ export const BarOrderSystem: React.FC = () => {
 
     try {
       // Format the items for the Edge Function
-      const formattedItems = orderItems.map(item => ({
+      const formattedItems = items.map(item => ({
         product_id: 0, // Not used by the stored procedure but required for interface
         quantity: item.quantity,
         unit_price: item.price,
@@ -273,7 +236,7 @@ export const BarOrderSystem: React.FC = () => {
       logger.payment('submitting_order', { 
         cardId: id, 
         total, 
-        itemCount: orderItems.length,
+        itemCount: items.length,
         transactionSafe: true // Log that we're using the transaction-safe method
       });
 
@@ -324,16 +287,19 @@ export const BarOrderSystem: React.FC = () => {
         // Completely reset all state
         setOrderItems([]);
         setCardId('');
-        setCurrentTotal(0);
-        previousOrderRef.current = '';
         
         // Restart scanning after a sufficient delay if it was active
         if (wasScanning) {
           logger.nfc("Will restart scanner with clean state after delay");
-          setTimeout(() => {
+          setTimeout(async () => {
             logger.nfc("Restarting NFC scanner with fresh state");
-            startScan();
-          }, 800); // Slightly longer delay for better cleanup
+            try {
+              await startScan();
+              logger.nfc("NFC scanner successfully restarted after payment");
+            } catch (error) {
+              logger.error("Failed to restart NFC scanner after payment:", error);
+            }
+          }, 1000); // Sufficient delay for complete state cleanup
         }
       } else {
         // Handle specific error cases
@@ -370,12 +336,12 @@ export const BarOrderSystem: React.FC = () => {
           transactionSafe: true
         });
         
-        resetScan("order processing error");
+        stopScan();
       }
     } catch (error) {
       logger.error('Error processing payment:', error, { cardId: id, total });
       setErrorMessage("Une erreur s'est produite. Veuillez réessayer.");
-      resetScan("payment processing error");
+      stopScan();
     } finally {
       setIsProcessing(false);
     }
@@ -394,9 +360,6 @@ export const BarOrderSystem: React.FC = () => {
         
         // Reset any error state
         setErrorMessage(null);
-        
-        // Set initial order reference 
-        previousOrderRef.current = JSON.stringify(orderItems);
         
         // Start scanning
         await startScan();
@@ -493,7 +456,7 @@ export const BarOrderSystem: React.FC = () => {
               <div className="flex justify-between items-center mb-2">
                 <span className="text-base font-semibold text-white">Total:</span>
                 <span className="text-lg font-bold text-white">
-                  {orderItems.length === 0 ? "0.00€" : `${currentTotal.toFixed(2)}€`}
+                  {orderItems.length === 0 ? "0.00€" : `${calculateTotal(orderItems)}€`}
                 </span>
               </div>
               
@@ -535,7 +498,7 @@ export const BarOrderSystem: React.FC = () => {
                     {orderItems.length === 0 ? (
                       <span>Ajoutez des produits</span>
                     ) : (
-                      <span>Présentez une carte - <strong>{currentTotal.toFixed(2)}€</strong></span>
+                      <span>Présentez une carte - <strong>{calculateTotal(orderItems).toFixed(2)}€</strong></span>
                     )}
                   </div>
                 )}
