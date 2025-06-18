@@ -175,8 +175,6 @@ export interface BarOrderRequest {
   point_of_sale?: number;
 }
 
-
-
 export interface StandardRechargeRequest {
   card_id: string;
   amount: number;
@@ -263,7 +261,7 @@ interface BarOrderTransactionResult {
 
 /**
  * Process a bar order through the Edge Function for transaction safety
- * @param orderData Order data including card_id, items, total_amount, and client_request_id
+ * @param orderData Order data including card_id, items, and total_amount
  * @returns Result of the transaction including success status and balance information
  */
 export async function processBarOrder(orderData: {
@@ -277,20 +275,15 @@ export async function processBarOrder(orderData: {
     is_return?: boolean;
   }>;
   total_amount: number;
-  client_request_id?: string; // Optional for backward compatibility
 }): Promise<BarOrderTransactionResult> {
   try {
     // Log the original data
     console.log('[process-bar-order] Called with:', JSON.stringify(orderData, null, 2));
     
-    // Generate client_request_id if not provided for backward compatibility
-    const clientRequestId = orderData.client_request_id || generateClientRequestId();
-    
-    // Create a clean payload with proper boolean handling and client_request_id
+    // Create a clean payload with proper boolean handling
     const payload = {
       card_id: orderData.card_id,
       total_amount: orderData.total_amount,
-      client_request_id: clientRequestId,
       items: orderData.items.map(item => ({
         product_id: item.product_id || 0,
         quantity: item.quantity,
@@ -339,18 +332,11 @@ export async function processBarOrder(orderData: {
       setTimeout(() => reject(new Error('Request timeout after 15s')), FETCH_TIMEOUT)
     );
     
-    // Get the current session for authorization
-    const { data: { session } } = await supabase.auth.getSession();
-    const authHeaders = session?.access_token 
-      ? { 'Authorization': `Bearer ${session.access_token}` }
-      : { 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` };
-    
     const fetchPromise = fetch(functionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        ...authHeaders
+        'Accept': 'application/json'
       },
       body: jsonPayload,
       // Use credentials for cookies if needed by your auth setup
@@ -435,8 +421,8 @@ export async function processBarOrder(orderData: {
     
     console.error('[process-bar-order] Client error details:', errorInfo);
     
-    return {
-      success: false,
+    return { 
+      success: false, 
       error: 'Network or client error',
       details: errorInfo
     };
@@ -598,13 +584,6 @@ export async function createStripeCheckout(checkoutData: CreateStripeCheckoutReq
     };
   }
 }
-
-/**
- * Process a standard recharge through the Edge Function to avoid race conditions
- * @param rechargeData Recharge data including card_id, amount, payment_method, and client_request_id
- * @returns Result of the recharge including success status and balance information
- */
-
 
 /**
  * Process a standard recharge through the Edge Function to avoid race conditions

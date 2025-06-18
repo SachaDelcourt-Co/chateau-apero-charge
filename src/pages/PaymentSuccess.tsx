@@ -28,7 +28,7 @@ const PaymentSuccess: React.FC = () => {
     // Get parameters from URL if present
     const params = new URLSearchParams(location.search);
     const amountParam = params.get('amount');
-    const cardIdParam = params.get('card_id') || params.get('cardId');
+    const cardIdParam = params.get('cardId');
       
       // Check multiple possible parameter names for the session ID
       // Stripe might use 'session_id', 'sessionId', or other variants
@@ -46,14 +46,8 @@ const PaymentSuccess: React.FC = () => {
     }
 
       // Log the found session ID and URL parameters for debugging
-      console.log('Full URL:', window.location.href);
-      console.log('URL search params:', location.search);
-      console.log('All URL parameters:', Object.fromEntries(params.entries()));
-      console.log('Raw card_id param:', params.get('card_id'));
-      console.log('Raw cardId param:', params.get('cardId'));
+      console.log('URL parameters:', Object.fromEntries(params.entries()));
       console.log('Session ID found:', sessionIdParam);
-      console.log('Card ID found:', cardIdParam);
-      console.log('Amount found:', amountParam);
 
     if (sessionIdParam) {
       setSessionId(sessionIdParam);
@@ -74,36 +68,29 @@ const PaymentSuccess: React.FC = () => {
             fetchCardData(cardIdParam);
           }
         } else {
-          // Si nous avons un ID de session, cela signifie que le paiement a été complété
-          // La balance sera mise à jour par le webhook Stripe automatiquement
-          if (cardIdParam && amountParam) {
-            // Mark this session as processed to avoid duplicate processing
+      // Si nous avons un ID de session, cela signifie que le paiement a été complété
+      if (cardIdParam && amountParam) {
+            // Mark this session as processed before updating the balance
             localStorage.setItem(
               'processedTransactions', 
               JSON.stringify([...processedTransactions, sessionIdParam])
             );
             
-            console.log(`[PaymentSuccess] Payment completed with session ${sessionIdParam}. Webhook will handle balance update.`);
+            // Update the balance and get back the new balance
+            const newBalance = await updateCardBalance(cardIdParam, amountParam);
             
-            // Wait a moment for webhook to process, then fetch updated card data
-            setTimeout(() => {
+            // Only fetch card data if the update didn't return a balance (failed)
+            if (newBalance === null) {
               fetchCardData(cardIdParam);
-            }, 2000); // Give webhook time to process
+            }
+            // Otherwise we already have the latest balance from the update operation
           }
         }
-              } else {
+      } else {
         // If no session ID was found but we have card ID and amount,
         // attempt to update the balance anyway - the webhook might have already processed it
         if (cardIdParam) {
-          console.log('No session ID found, but have card ID. Fetching card data...');
           fetchCardData(cardIdParam);
-        } else {
-          console.error('No session ID or card ID found in URL parameters');
-          toast({
-            title: "Erreur",
-            description: "Paramètres de paiement manquants. Veuillez vérifier l'URL.",
-            variant: "destructive"
-          });
         }
       }
     };
@@ -112,33 +99,97 @@ const PaymentSuccess: React.FC = () => {
     processPayment();
   }, [location]);
 
-  // Function to wait for webhook processing and show appropriate message
-  const waitForWebhookProcessing = async (cardId: string, expectedAmount: string) => {
+  // Fonction pour mettre à jour directement le solde de la carte
+  const updateCardBalance = async (id: string, rechargeAmount: string) => {
+    console.log(`Attempting to update card balance: Card ID=${id}, Amount=${rechargeAmount}`);
+    
+    // Generate a unique transaction key for this update
+    const transactionKey = `card_${id}_amount_${rechargeAmount}_time_${Date.now()}`;
+    
+    // Check if we're in an update operation already - prevent concurrent updates
+    const ongoingUpdate = localStorage.getItem('ongoingCardUpdate');
+    if (ongoingUpdate) {
+      console.log('Another update is already in progress. Aborting.');
+      toast({
+        title: "Mise à jour en cours",
+        description: "Une mise à jour est déjà en cours. Veuillez patienter."
+      });
+      return;
+    }
+    
+    // Set the flag that we're updating
+    localStorage.setItem('ongoingCardUpdate', transactionKey);
     setUpdatingBalance(true);
     
     try {
-      console.log(`[PaymentSuccess] Waiting for webhook to process payment for card ${cardId}, amount ${expectedAmount}`);
+      // Récupérer d'abord le solde actuel
+      const currentCard = await getTableCardById(id);
       
-      // Give webhook some time to process
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      if (!currentCard) {
+        console.error(`Card not found: ${id}`);
+        throw new Error("Carte non trouvée");
+      }
       
-      // Fetch updated card data
-      await fetchCardData(cardId);
+      console.log('Current card data:', currentCard);
       
-      toast({
-        title: "Paiement traité",
-        description: `Votre carte a été rechargée de ${expectedAmount}€`,
+      // Calculer le nouveau solde
+      const currentAmount = parseFloat(currentCard.amount || '0');
+      const addAmount = parseFloat(rechargeAmount);
+      const newAmount = (currentAmount + addAmount).toFixed(2);
+      
+      console.log(`Mise à jour du solde: ${currentAmount} + ${addAmount} = ${newAmount}`);
+      
+      // Mettre à jour le solde dans Supabase
+      const updateSuccess = await updateTableCardAmount(id, newAmount);
+      
+      if (!updateSuccess) {
+        console.error(`Failed to update card amount in Supabase: ${id}`);
+        throw new Error("Échec de la mise à jour du solde");
+      }
+      
+      console.log(`Card balance updated successfully: ${newAmount}€`);
+      
+      // Record this transaction in local storage to prevent duplicate updates
+      const completedUpdates = JSON.parse(localStorage.getItem('completedCardUpdates') || '[]');
+      completedUpdates.push({
+        cardId: id,
+        amount: rechargeAmount,
+        timestamp: Date.now(),
+        transactionKey
       });
-    } catch (error) {
-      console.error('Erreur lors de la vérification du solde:', error);
+      localStorage.setItem('completedCardUpdates', JSON.stringify(completedUpdates));
+      
+      // IMPORTANT: Add a delay before fetching updated data to allow consistency
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Manually update the card data with our known new value
+      // instead of immediately fetching possibly stale data
+      setCard({
+        id: id,
+        amount: newAmount,
+        description: currentCard.description
+      });
+
       toast({
-        title: "Vérification en cours",
-        description: "Le paiement est en cours de traitement. Rafraîchissez la page dans quelques instants.",
-        variant: "default"
+        title: "Solde mis à jour",
+        description: `Votre carte a été rechargée de ${rechargeAmount}€`,
+      });
+      
+      return newAmount; // Return the new amount so we know what it is
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du solde:', error);
+      toast({
+        title: "Erreur",
+        description: "Une erreur s'est produite lors de la mise à jour du solde",
+        variant: "destructive"
       });
     } finally {
       setUpdatingBalance(false);
+      // Clear the ongoing update flag
+      localStorage.removeItem('ongoingCardUpdate');
     }
+    
+    return null; // Return null if the update failed
   };
 
   const fetchCardData = async (id: string, knownNewBalance = null) => {
@@ -168,13 +219,14 @@ const PaymentSuccess: React.FC = () => {
       console.log('Données de carte récupérées:', cardData);
       setCard(cardData);
 
-      // If we have a payment amount to check against and the webhook might still be processing
-      if (amount && cardData.amount && sessionId && 
-          parseFloat(cardData.amount) < (parseFloat(cardData.amount) + parseFloat(amount)) && 
+      // If we didn't find a card with the expected amount and we have retries left,
+      // schedule another fetch after a delay (webhook might still be processing)
+      if (amount && cardData.amount && 
+          parseFloat(cardData.amount) < parseFloat(amount) && 
           retryCount < MAX_RETRIES) {
-        console.log(`[PaymentSuccess] Balance may not reflect recent payment yet. Scheduling retry... (${retryCount + 1}/${MAX_RETRIES})`);
+        console.log(`Card amount (${cardData.amount}) doesn't include payment (${amount}). Scheduling retry...`);
         setRetryCount(prev => prev + 1);
-        setTimeout(() => fetchCardData(id), 5000); // Give webhook more time
+        setTimeout(() => fetchCardData(id), 3000); // Retry after 3 seconds
       }
     } catch (error) {
       console.error('Erreur lors de la récupération des détails de la carte:', error);
@@ -196,22 +248,60 @@ const PaymentSuccess: React.FC = () => {
     }
   };
 
-  // Manual update functionality - waits for webhook processing
+  // Add manual update functionality
   const handleManualUpdate = () => {
-    if (cardId && amount) {
+    if (cardId && amount && sessionId) {
+      // Check if this session has already been manually updated
+      const manuallyUpdatedSessions = JSON.parse(localStorage.getItem('manuallyUpdatedSessions') || '[]');
+      
+      if (manuallyUpdatedSessions.includes(sessionId)) {
+        toast({
+          title: "Action impossible",
+          description: "Cette transaction a déjà été mise à jour manuellement.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       toast({
-        title: "Actualisation manuelle",
-        description: "Récupération des dernières données..."
+        title: "Mise à jour manuelle",
+        description: "Tentative de mise à jour du solde..."
       });
       
-      // Wait for webhook processing and fetch updated data
-      waitForWebhookProcessing(cardId, amount);
-    } else {
+      // Add to manually updated sessions
+      localStorage.setItem(
+        'manuallyUpdatedSessions',
+        JSON.stringify([...manuallyUpdatedSessions, sessionId])
+      );
+      
+      updateCardBalance(cardId, amount);
+    } else if (cardId && amount) {
+      // No session ID, but we have cardId and amount
+      // Generate a unique ID for this manual update to prevent duplicates
+      const manualUpdateId = `manual_${Date.now()}_${cardId}_${amount}`;
+      const manualUpdates = JSON.parse(localStorage.getItem('manualUpdates') || '[]');
+      
+      if (manualUpdates.some(update => update.cardId === cardId && update.amount === amount)) {
+        toast({
+          title: "Action impossible",
+          description: "Un rechargement manuel a déjà été effectué pour ce montant.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
       toast({
-        title: "Action impossible",
-        description: "Informations de paiement manquantes.",
-        variant: "destructive"
+        title: "Mise à jour manuelle",
+        description: "Tentative de mise à jour du solde..."
       });
+      
+      // Add to manual updates
+      localStorage.setItem(
+        'manualUpdates',
+        JSON.stringify([...manualUpdates, { id: manualUpdateId, cardId, amount }])
+      );
+      
+      updateCardBalance(cardId, amount);
     }
   };
 
@@ -304,21 +394,16 @@ const PaymentSuccess: React.FC = () => {
               En cas de perte, vous ne serez pas remboursé.
             </p>
             
-            {!updatingBalance && !loading && sessionId && (
-              <div className="bg-blue-600/20 p-3 rounded-lg mt-2">
-                <p className="text-sm">💡 Votre paiement est traité automatiquement par notre système sécurisé.</p>
-                {retryCount >= MAX_RETRIES && (
-                  <>
-                    <p className="text-sm mt-1">Si le solde ne s'affiche pas correctement:</p>
-                    <Button
-                      variant="outline"
-                      className="bg-transparent text-white border-white hover:bg-white/10 w-full mt-2"
-                      onClick={handleManualUpdate}
-                    >
-                      Actualiser le solde
-                    </Button>
-                  </>
-                )}
+            {!updatingBalance && !loading && retryCount >= MAX_RETRIES && (
+              <div className="bg-amber-600/20 p-3 rounded-lg mt-2">
+                <p className="text-sm">Si votre solde n'a pas été mis à jour, vous pouvez:</p>
+                <Button
+                  variant="outline"
+                  className="bg-transparent text-white border-white hover:bg-white/10 w-full mt-2"
+                  onClick={handleManualUpdate}
+                >
+                  Réessayer la mise à jour
+                </Button>
               </div>
             )}
           </div>

@@ -87,7 +87,7 @@ gcp_jwt_path = "supabase/gcloud.json"
 verify_jwt = true
 
 # Function that creates a Stripe checkout session
-[functions.create-checkout-session]
+[functions.create-stripe-checkout]
 verify_jwt = false
 
 # Function that handles Stripe webhooks
@@ -96,4 +96,8 @@ verify_jwt = false
 
 # Function that processes bar orders
 [functions.process-bar-order]
+verify_jwt = false
+
+# Function that processes standard recharges
+[functions.process-standard-recharge]
 verify_jwt = false
