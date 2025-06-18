@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, processBarOrder, generateClientRequestId } from '@/lib/supabase';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, CreditCard, AlertCircle, Scan } from 'lucide-react';
+import { Loader2, CreditCard, AlertCircle, Scan, Trash2, Minus } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNfc } from '@/hooks/use-nfc';
 import { logger } from '@/lib/logger';
@@ -230,12 +230,18 @@ export const BarOrderSystem: React.FC = () => {
       logger.info('Recalculated total as fallback:', total);
     }
     
-    // CRITICAL: Ensure the amount is not zero if we have items
-    if (total <= 0 && orderItems.some(item => !item.is_return)) {
-      const error = "CRITICAL ERROR: Total is zero or negative but has non-return items!";
+    // CRITICAL: Only error if total is zero when we have positive-value items but shouldn't be zero
+    // Allow negative totals (returns can be worth more than purchases - valid scenario)
+    const nonReturnItems = orderItems.filter(item => !item.is_return);
+    const nonReturnTotal = nonReturnItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    if (total === 0 && nonReturnTotal > 0) {
+      const error = "CRITICAL ERROR: Total is zero but should have positive value from non-return items!";
       logger.error(error, { 
         total, 
-        orderItems: orderItems.filter(item => !item.is_return) 
+        nonReturnTotal,
+        nonReturnItems,
+        allItems: orderItems
       });
       setErrorMessage("Erreur de calcul. Le montant total est incorrect.");
       setIsProcessing(false);
@@ -339,7 +345,7 @@ export const BarOrderSystem: React.FC = () => {
             // We have balance information from the transaction
             toast({
               title: "Solde insuffisant",
-              description: `La carte dispose de ${orderResult.previous_balance.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
+              description: `La solde de la carte est de ${orderResult.previous_balance.toFixed(2)}€ mais le total est de ${total.toFixed(2)}€.`,
               variant: "destructive"
             });
           } else {
@@ -429,12 +435,15 @@ export const BarOrderSystem: React.FC = () => {
               <h3 className="text-lg font-semibold text-white">Récapitulatif</h3>
               
               {orderItems.length > 0 && (
-                <button 
-                  className="text-xs text-red-400 hover:text-red-200" 
+                <Button
+                  variant="destructive"
+                  size="sm"
                   onClick={handleClearOrder}
+                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 h-auto"
                 >
+                  <Trash2 className="h-3 w-3 mr-1" />
                   Effacer
-                </button>
+                </Button>
               )}
             </div>
             
@@ -468,10 +477,11 @@ export const BarOrderSystem: React.FC = () => {
                       </div>
                       
                       <button 
-                        className="text-xs text-gray-400 hover:text-red-400 px-2 py-1" 
+                        className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 min-w-[24px] h-6 flex items-center justify-center transition-colors" 
                         onClick={() => handleRemoveItem(index)}
+                        title="Retirer un article"
                       >
-                        -
+                        <Minus className="h-3 w-3" />
                       </button>
                     </li>
                   ))}
