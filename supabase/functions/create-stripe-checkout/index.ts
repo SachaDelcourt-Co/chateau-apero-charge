@@ -219,11 +219,8 @@ serve(async (req) => {
       card_id,
       successUrl,
       cancelUrl,
-      metadata: {
-        card_id: card_id,
-        amount: amount.toString(),
-        client_request_id: client_request_id
-      }
+      client_request_id,
+      mode: isTestMode ? 'TEST' : 'LIVE'
     });
 
     // Create Stripe checkout session
@@ -245,38 +242,40 @@ serve(async (req) => {
       mode: 'payment',
       success_url: successUrl,
       cancel_url: cancelUrl,
-      client_reference_id: card_id,
+      client_reference_id: card_id, // Store card ID for webhook processing
       metadata: {
         card_id: card_id,
-        amount: amount.toString(),
-        client_request_id: client_request_id
+        original_amount: amount.toString(),
+        client_request_id: client_request_id,
+        source: 'create-stripe-checkout'
       }
     });
 
-    console.log('[create-stripe-checkout] Stripe session created:', session.id);
+    console.log('[create-stripe-checkout] Stripe session created:', {
+      session_id: session.id,
+      url: session.url
+    });
 
     // Prepare successful response
-    const successResponse: CreateCheckoutResponse = {
+    const response = {
       success: true,
-      checkout_url: session.url || undefined,
+      checkout_url: session.url,
       session_id: session.id
     };
 
-    // Cache successful response
+    // Update idempotency key with completed status and response
     await supabase
       .from('idempotency_keys')
       .update({
         status: 'completed',
-        response_payload: JSON.stringify(successResponse),
+        response_payload: JSON.stringify(response),
         updated_at: new Date().toISOString()
       })
       .eq('request_id', client_request_id)
       .eq('source_function', 'create-stripe-checkout');
 
-    console.log('[create-stripe-checkout] Checkout session creation completed successfully');
-
     return new Response(
-      JSON.stringify(successResponse),
+      JSON.stringify(response),
       { 
         status: 200, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -284,36 +283,39 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[create-stripe-checkout] Unexpected error:', error);
-    
-    // Try to update idempotency record as failed
-    try {
-      const requestBody = await req.clone().json();
-      if (requestBody && requestBody.client_request_id) {
-        const supabaseUrl = Deno.env.get('SUPABASE_URL');
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-        
-        if (supabaseUrl && supabaseServiceKey) {
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
-          await supabase
-            .from('idempotency_keys')
-            .update({
-              status: 'failed',
-              updated_at: new Date().toISOString()
-            })
-            .eq('request_id', requestBody.client_request_id)
-            .eq('source_function', 'create-stripe-checkout');
+    console.error('[create-stripe-checkout] Error:', error);
+
+    // Update idempotency key to failed status if we have client_request_id
+    if (req.url) {
+      try {
+        const body = await req.clone().json();
+        if (body?.client_request_id) {
+          const supabaseUrl = Deno.env.get('SUPABASE_URL');
+          const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+          if (supabaseUrl && supabaseServiceKey) {
+            const supabase = createClient(supabaseUrl, supabaseServiceKey);
+            await supabase
+              .from('idempotency_keys')
+              .update({
+                status: 'failed',
+                error_details: error.message,
+                updated_at: new Date().toISOString()
+              })
+              .eq('request_id', body.client_request_id)
+              .eq('source_function', 'create-stripe-checkout');
+          }
         }
+      } catch (e) {
+        // Ignore cleanup errors
+        console.error('[create-stripe-checkout] Error during cleanup:', e);
       }
-    } catch (cleanupError) {
-      console.error('[create-stripe-checkout] Error during cleanup:', cleanupError);
     }
 
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Internal server error',
-        details: error.message 
+        error: error.message || 'Internal server error',
+        details: error.stack
       }),
       { 
         status: 500, 
