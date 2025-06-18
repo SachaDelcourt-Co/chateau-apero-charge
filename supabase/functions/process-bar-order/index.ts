@@ -59,8 +59,24 @@ serve(async (req) => {
   console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
   console.log(`[${requestId}] User-Agent: ${req.headers.get('user-agent') || 'unknown'}`);
   
+  // CORS headers for all responses
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+  
   try {
-    // Only accept POST requests
+    // Handle CORS preflight requests
+    if (req.method === 'OPTIONS') {
+      console.log(`[${requestId}] Handling CORS preflight request`);
+      return new Response(null, {
+        status: 200,
+        headers: corsHeaders
+      });
+    }
+
+    // Only accept POST requests after handling OPTIONS
     if (req.method !== 'POST') {
       console.log(`[${requestId}] Invalid method: ${req.method}`);
       return new Response(
@@ -70,7 +86,10 @@ serve(async (req) => {
           error_code: ErrorCode.INVALID_REQUEST
         }),
         { 
-          headers: { 'Content-Type': 'application/json' }, 
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }, 
           status: 405 
         }
       );
@@ -89,7 +108,7 @@ serve(async (req) => {
             error: 'Request body is required',
             error_code: ErrorCode.INVALID_REQUEST
           }),
-          { headers: { 'Content-Type': 'application/json' }, status: 400 }
+          { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: 400 }
         );
       }
       
@@ -98,15 +117,15 @@ serve(async (req) => {
       
     } catch (parseError) {
       console.error(`[${requestId}] JSON parse error: ${parseError.message}`);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Invalid JSON format',
-          error_code: ErrorCode.INVALID_REQUEST,
-          details: parseError.message
-        }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
-      );
+              return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Invalid JSON format',
+            error_code: ErrorCode.INVALID_REQUEST,
+            details: parseError.message
+          }),
+          { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: 400 }
+        );
     }
 
     // Extract and validate request parameters
@@ -180,7 +199,7 @@ serve(async (req) => {
           error_code: ErrorCode.INVALID_REQUEST,
           details: validationErrors
         }),
-        { headers: { 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: 400 }
       );
     }
 
@@ -254,7 +273,7 @@ serve(async (req) => {
           details: procedureError.message,
           request_id: requestId
         }),
-        { headers: { 'Content-Type': 'application/json' }, status: httpStatus }
+        { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: httpStatus }
       );
     }
 
@@ -266,7 +285,7 @@ serve(async (req) => {
           error: 'No result from database operation',
           error_code: ErrorCode.DATABASE_ERROR
         }),
-        { headers: { 'Content-Type': 'application/json' }, status: 500 }
+        { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: 500 }
       );
     }
 
@@ -291,7 +310,7 @@ serve(async (req) => {
           processing_time_ms: processingTime
         }),
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
           status: 200
         }
       );
@@ -319,7 +338,7 @@ serve(async (req) => {
           error_code: errorCode,
           request_id: requestId
         }),
-        { headers: { 'Content-Type': 'application/json' }, status: httpStatus }
+        { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: httpStatus }
       );
     }
     
@@ -340,7 +359,7 @@ serve(async (req) => {
         details: error.message,
         request_id: requestId
       }),
-      { headers: { 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { 'Content-Type': 'application/json', ...corsHeaders }, status: 500 }
     );
   }
 })
