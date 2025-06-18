@@ -226,7 +226,9 @@ serve(async (req) => {
     logInfo(requestId, 'Processing checkout.session.completed event', {
       sessionId: session.id,
       paymentStatus: session.payment_status,
-      metadata: session.metadata
+      metadata: session.metadata,
+      clientReferenceId: session.client_reference_id,
+      amountTotal: session.amount_total
     });
 
     // Validate payment is completed
@@ -247,17 +249,37 @@ serve(async (req) => {
     // Extract metadata
     const metadata = session.metadata || {};
     const cardId = metadata.card_id || metadata.cardId;
-    const amount = metadata.amount;
+    // Support both 'amount' and 'original_amount' field names
+    const amount = metadata.amount || metadata.original_amount;
+    
+    logInfo(requestId, 'Extracted metadata fields', {
+      cardId,
+      amount,
+      hasAmount: !!metadata.amount,
+      hasOriginalAmount: !!metadata.original_amount,
+      allMetadataKeys: Object.keys(metadata)
+    });
 
-    if (!cardId || !amount) {
+    // Enhanced validation with better error details
+    const missingFields: string[] = [];
+    if (!cardId) missingFields.push('card_id');
+    if (!amount) missingFields.push('amount');
+
+    if (missingFields.length > 0) {
       logError(requestId, 'Missing required metadata', {
+        missingFields,
         cardId,
         amount,
-        allMetadata: metadata
+        allMetadata: metadata,
+        sessionId: session.id
       });
       return new Response(
         JSON.stringify({ 
-          error: 'Missing required metadata: card_id and amount' 
+          error: `Missing required metadata fields: ${missingFields.join(', ')}`,
+          details: {
+            received_metadata: metadata,
+            missing_fields: missingFields
+          }
         }), 
         { 
           status: 400,
