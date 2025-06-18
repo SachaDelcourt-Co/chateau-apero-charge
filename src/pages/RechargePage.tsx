@@ -18,7 +18,8 @@ const RecentTransactions = () => {
 
   useEffect(() => {
     // Get recent recharge logs from localStorage
-    const rechargeLogs = logger.getLogs('recharge');
+    const allLogs = logger.getAllLogs();
+    const rechargeLogs = allLogs.recharge || [];
     
     // Filter for successful recharges only and sort by timestamp (newest first)
     const successfulRecharges = Array.isArray(rechargeLogs) 
