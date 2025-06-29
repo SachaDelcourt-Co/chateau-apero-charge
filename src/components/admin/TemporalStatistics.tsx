@@ -704,7 +704,7 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({
 
   // Effect to load data when component mounts or edition changes
   useEffect(() => {
-    if (editionConfig && !data && !loading && !internalLoading) {
+    if (editionConfig && !loading && !internalLoading) {
       loadTemporalData();
     }
   }, [editionConfig]);

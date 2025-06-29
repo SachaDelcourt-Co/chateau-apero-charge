@@ -131,7 +131,7 @@ interface ProductStatisticsData {
   metrics: ProductMetrics;
   topProducts: ProductRanking[];
   productAnalysis: ProductAnalysis[];
-  leastSoldProducts: ProductAnalysis[];
+  pieChartData: Array<{ name: string; revenue: number; quantity: number; color: string }>;
   hourlyPatterns: HourlyProductData[];
   popularCombinations: ProductCombination[];
   depositAnalysis: DepositAnalysis;
@@ -265,10 +265,9 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
           rank: index + 1
         }));
 
-      // Calculate product analysis (top products by quantity sold, excluding caution items)
+      // Calculate product analysis (ALL products by quantity sold, excluding caution items)
       const productAnalysis: ProductAnalysis[] = topProducts
         .filter(product => !product.isDeposit && !product.isReturn) // Exclude caution verre and retour verre
-        .slice(0, 8) // Show top 8 products
         .map(product => ({
           productName: product.name,
           category: product.category,
@@ -279,20 +278,31 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
           icon: CATEGORY_CONFIG[product.category as keyof typeof CATEGORY_CONFIG]?.icon || CATEGORY_CONFIG.Other.icon
         }));
 
-      // Calculate least sold products (excluding caution items)
-      const leastSoldProducts: ProductAnalysis[] = topProducts
-        .filter(product => !product.isDeposit && !product.isReturn && product.quantitySold > 0) // Exclude caution items and products with 0 sales
-        .slice(-8) // Take the last 8 (least sold)
-        .reverse() // Reverse to show least sold first
-        .map(product => ({
-          productName: product.name,
-          category: product.category,
-          revenue: product.revenue,
-          quantity: product.quantitySold,
-          averagePrice: product.averagePrice,
-          color: CATEGORY_CONFIG[product.category as keyof typeof CATEGORY_CONFIG]?.color || CATEGORY_CONFIG.Other.color,
-          icon: CATEGORY_CONFIG[product.category as keyof typeof CATEGORY_CONFIG]?.icon || CATEGORY_CONFIG.Other.icon
-        }));
+      // Create category-based data for pie chart
+      const categoryData = new Map<string, { name: string; revenue: number; quantity: number; color: string }>();
+      
+      productAnalysis.forEach(product => {
+        const categoryName = product.category === 'Soft' ? 'Boissons Sans Alcool' :
+                           product.category === 'Cocktail' ? 'Cocktails' :
+                           product.category === 'Vin' ? 'Vins' :
+                           product.category === 'Bière' ? 'Bières' :
+                           product.category === 'Caution' ? 'Caution' : product.category;
+        
+        if (!categoryData.has(categoryName)) {
+          categoryData.set(categoryName, {
+            name: categoryName,
+            revenue: 0,
+            quantity: 0,
+            color: product.color
+          });
+        }
+        
+        const category = categoryData.get(categoryName)!;
+        category.revenue += product.revenue;
+        category.quantity += product.quantity;
+      });
+
+      const pieChartData = Array.from(categoryData.values());
 
       // Generate 15-minute interval patterns from 17:00 to midnight
       const hourlyPatterns: HourlyProductData[] = [];
@@ -500,7 +510,7 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
         },
         topProducts: topProducts.slice(0, 10),
         productAnalysis,
-        leastSoldProducts,
+        pieChartData,
         hourlyPatterns,
         popularCombinations,
         depositAnalysis,
@@ -527,10 +537,10 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
 
   // Load data when component mounts or edition changes
   useEffect(() => {
-    if (editionConfig && !loading && !data) {
+    if (editionConfig && !loading) {
       fetchProductStatistics();
     }
-  }, [editionConfig, loading]);
+  }, [editionConfig]);
 
   // Handle manual load
   const handleLoad = () => {
@@ -565,64 +575,61 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
         </Alert>
       )}
 
-      {/* Produits les Mieux Vendus par Catégorie - Selon les spécifications */}
+      {/* Ventes par Catégorie - Graphique en Secteurs */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <PieChart className="h-5 w-5" />
-            Top Produits les Plus Vendus (par quantité)
+            Ventes par Catégorie de Produits
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : data && data.productAnalysis.length > 0 ? (
+            <Skeleton className="h-96 w-full" />
+          ) : data && data.pieChartData.length > 0 ? (
             <div className="space-y-4">
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={400}>
                 <RechartsPieChart>
                   <Pie
-                    data={data.productAnalysis}
+                    data={data.pieChartData}
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
+                    outerRadius={150}
                     dataKey="revenue"
-                    label={({ productName, revenue }) => `${productName}: ${formatCurrency(revenue)}`}
+                    label={({ name, revenue }) => `${name}: ${formatCurrency(revenue)}`}
                   >
-                    {data.productAnalysis.map((entry, index) => (
+                    {data.pieChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip 
+                    formatter={(value: number, name: string) => [formatCurrency(value), 'Revenus']}
+                    labelFormatter={(label) => `Catégorie: ${label}`}
+                  />
                 </RechartsPieChart>
               </ResponsiveContainer>
-              <div className="space-y-2">
-                {data.productAnalysis.map((product) => {
-                  const ProductIcon = product.icon;
-                  const categoryName = product.category === 'Soft' ? 'Boissons Sans Alcool' :
-                                     product.category === 'Cocktail' ? 'Cocktails' :
-                                     product.category === 'Vin' ? 'Vins' :
-                                     product.category === 'Bière' ? 'Bières' :
-                                     product.category === 'Caution' ? 'Caution' : product.category;
-                  return (
-                    <div key={product.productName} className="flex items-center justify-between p-2 rounded border">
-                      <div className="flex items-center gap-2">
-                        <ProductIcon className="h-4 w-4" />
-                        <span className="font-medium">{product.productName}</span>
-                        <Badge variant="secondary" className="text-xs">{categoryName}</Badge>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-bold">{formatCurrency(product.revenue)}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {product.quantity} vendus
-                        </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {data.pieChartData.map((category) => (
+                  <div key={category.name} className="flex items-center justify-between p-3 rounded border">
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-4 h-4 rounded"
+                        style={{ backgroundColor: category.color }}
+                      />
+                      <span className="font-medium">{category.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold">{formatCurrency(category.revenue)}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {category.quantity} vendus
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
+            <div className="h-96 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
                 <PieChart className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Aucune donnée de catégorie disponible</p>
@@ -632,20 +639,20 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
         </CardContent>
       </Card>
 
-      {/* Produits les Moins Vendus */}
+      {/* Classement Complet des Produits */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TrendingDown className="h-5 w-5" />
-            Produits les Moins Vendus (par quantité)
+            <Trophy className="h-5 w-5" />
+            Classement Complet des Produits (par quantité vendue)
           </CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Skeleton className="h-64 w-full" />
-          ) : data && data.leastSoldProducts.length > 0 ? (
-            <div className="space-y-2">
-              {data.leastSoldProducts.map((product) => {
+            <Skeleton className="h-96 w-full" />
+          ) : data && data.productAnalysis.length > 0 ? (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {data.productAnalysis.map((product, index) => {
                 const ProductIcon = product.icon;
                 const categoryName = product.category === 'Soft' ? 'Boissons Sans Alcool' :
                                    product.category === 'Cocktail' ? 'Cocktails' :
@@ -653,14 +660,19 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
                                    product.category === 'Bière' ? 'Bières' :
                                    product.category === 'Caution' ? 'Caution' : product.category;
                 return (
-                  <div key={product.productName} className="flex items-center justify-between p-2 rounded border border-orange-200 bg-orange-50">
-                    <div className="flex items-center gap-2">
-                      <ProductIcon className="h-4 w-4" />
-                      <span className="font-medium">{product.productName}</span>
-                      <Badge variant="secondary" className="text-xs">{categoryName}</Badge>
+                  <div key={product.productName} className="flex items-center justify-between p-3 rounded border hover:bg-gray-50">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-sm font-bold">
+                        {index + 1}
+                      </div>
+                      <ProductIcon className="h-5 w-5" />
+                      <div>
+                        <div className="font-medium">{product.productName}</div>
+                        <Badge variant="secondary" className="text-xs">{categoryName}</Badge>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-orange-700">{formatCurrency(product.revenue)}</div>
+                      <div className="font-bold">{formatCurrency(product.revenue)}</div>
                       <div className="text-sm text-muted-foreground">
                         {product.quantity} vendus
                       </div>
@@ -670,9 +682,9 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
               })}
             </div>
           ) : (
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
+            <div className="h-96 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                <TrendingDown className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Aucune donnée de produits disponible</p>
               </div>
             </div>

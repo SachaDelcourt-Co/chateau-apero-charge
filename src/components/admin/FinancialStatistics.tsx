@@ -447,10 +447,10 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({
 
   // Load data when component mounts or edition changes
   useEffect(() => {
-    if (editionConfig && !loading && !data) {
+    if (editionConfig && !loading) {
       fetchFinancialStatistics();
     }
-  }, [editionConfig, loading]);
+  }, [editionConfig]);
 
   // Handle manual load
   const handleLoad = () => {

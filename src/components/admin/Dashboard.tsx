@@ -180,6 +180,7 @@ const FESTIVAL_EDITIONS: EditionConfig[] = [
 
 const Dashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('users');
   const [state, setState] = useState<DashboardState>({
     selectedEdition: 'may-8th',
     loading: {
@@ -238,21 +239,12 @@ const Dashboard: React.FC = () => {
     setRefreshing(true);
     
     try {
-      // Refresh user statistics if data exists
-      if (state.data.users && selectedEditionConfig) {
-        const userStats = await fetchUserStatistics(selectedEditionConfig);
-        setState(prev => ({
-          ...prev,
-          data: { ...prev.data, users: userStats }
-        }));
-      }
-      
-      // Simulate refresh delay for other categories
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Refresh current active tab
+      await loadStatistics(activeTab as keyof DashboardState['data']);
       
       toast({
         title: "Données Actualisées",
-        description: "Toutes les statistiques ont été mises à jour avec succès"
+        description: "Les statistiques ont été mises à jour avec succès"
       });
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -268,6 +260,15 @@ const Dashboard: React.FC = () => {
 
   // Load statistics for specific category
   const loadStatistics = async (category: keyof DashboardState['data']) => {
+    if (!selectedEditionConfig) {
+      toast({
+        title: "Aucune Édition Sélectionnée",
+        description: "Veuillez sélectionner une édition du festival",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setState(prev => ({
       ...prev,
       loading: { ...prev.loading, [category]: true },
@@ -276,7 +277,7 @@ const Dashboard: React.FC = () => {
 
     try {
       if (category === 'users') {
-        const userStats = await fetchUserStatistics(selectedEditionConfig!);
+        const userStats = await fetchUserStatistics(selectedEditionConfig);
         setState(prev => ({
           ...prev,
           loading: { ...prev.loading, [category]: false },
@@ -290,9 +291,8 @@ const Dashboard: React.FC = () => {
           loading: { ...prev.loading, [category]: false }
         }));
       } else {
-        // Simulate API call delay for other categories
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
+        // For products and temporal, the components handle their own data loading
+        // Just update the loading state
         setState(prev => ({
           ...prev,
           loading: { ...prev.loading, [category]: false }
@@ -305,6 +305,17 @@ const Dashboard: React.FC = () => {
         loading: { ...prev.loading, [category]: false },
         errors: { ...prev.errors, [category]: `Failed to load ${category} statistics: ${error instanceof Error ? error.message : 'Unknown error'}` }
       }));
+    }
+  };
+
+  // Handle tab change with automatic data loading
+  const handleTabChange = (tabValue: string) => {
+    setActiveTab(tabValue);
+    
+    // Automatically load data for the new tab if not already loaded
+    const category = tabValue as keyof DashboardState['data'];
+    if (!state.data[category] && !state.loading[category]) {
+      loadStatistics(category);
     }
   };
 
@@ -401,6 +412,16 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Auto-load data for the active tab when component mounts or edition/tab changes
+  React.useEffect(() => {
+    if (selectedEditionConfig && !state.loading[activeTab as keyof DashboardState['data']]) {
+      // Load data if no data exists for current tab (either initial load or after edition change)
+      if (!state.data[activeTab as keyof DashboardState['data']]) {
+        loadStatistics(activeTab as keyof DashboardState['data']);
+      }
+    }
+  }, [state.selectedEdition, activeTab]); // Depend on selectedEdition string to trigger on edition changes
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -480,7 +501,7 @@ const Dashboard: React.FC = () => {
       </Card>
 
       {/* Onglets des Statistiques */}
-      <Tabs defaultValue="users" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -507,6 +528,7 @@ const Dashboard: React.FC = () => {
         {/* User Statistics Tab */}
         <TabsContent value="users" className="space-y-6">
           <UserStatisticsComponent
+            key={`users-${state.selectedEdition}`}
             loading={state.loading.users}
             error={state.errors.users}
             data={state.data.users}
@@ -519,6 +541,7 @@ const Dashboard: React.FC = () => {
         {/* Financial Statistics Tab */}
         <TabsContent value="financial" className="space-y-6">
           <FinancialStatistics
+            key={`financial-${state.selectedEdition}`}
             loading={state.loading.financial}
             error={state.errors.financial}
             onLoad={() => loadStatistics('financial')}
@@ -531,6 +554,7 @@ const Dashboard: React.FC = () => {
         {/* Product Statistics Tab */}
         <TabsContent value="products" className="space-y-6">
           <ProductStatistics
+            key={`products-${state.selectedEdition}`}
             loading={state.loading.products}
             error={state.errors.products}
             onLoad={() => loadStatistics('products')}
@@ -543,6 +567,7 @@ const Dashboard: React.FC = () => {
         {/* Temporal Statistics Tab */}
         <TabsContent value="temporal" className="space-y-6">
           <TemporalStatisticsComponent
+            key={`temporal-${state.selectedEdition}`}
             loading={state.loading.temporal}
             error={state.errors.temporal}
             onLoad={() => loadStatistics('temporal')}
@@ -582,12 +607,8 @@ const UserStatisticsComponent: React.FC<UserStatisticsProps> = ({
   editionName,
   refreshing
 }) => {
-  // Auto-load data when component mounts or when there's no data and not currently loading
-  React.useEffect(() => {
-    if (!data && !loading && !refreshing && editionName) {
-      onLoad();
-    }
-  }, [data, loading, refreshing, editionName, onLoad]);
+  // Note: Auto-loading is now handled by the parent Dashboard component
+  // This prevents duplicate loading when edition changes
 
   const formatCurrency = (amount: number) => `€${amount.toFixed(2)}`;
   const formatPercentage = (percentage: number) => `${percentage.toFixed(1)}%`;
