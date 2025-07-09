@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarProductList } from './BarProductList';
+import { BarOrderCompletedPopup, CompletedOrder } from './BarOrderSummary';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { BarProduct, OrderItem, BarOrder, getBarProducts, getTableCardById, processBarOrder, generateClientRequestId } from '@/lib/supabase';
@@ -17,6 +18,8 @@ export const BarOrderSystem: React.FC = () => {
   const [cardId, setCardId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showCompletedOrderPopup, setShowCompletedOrderPopup] = useState(false);
+  const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
   const isMobile = useIsMobile();
   
   // RACE CONDITION FIX: Use refs to track the latest order state for NFC operations
@@ -159,6 +162,11 @@ export const BarOrderSystem: React.FC = () => {
     setErrorMessage(null);
   };
 
+  const handleCloseCompletedOrderPopup = () => {
+    setShowCompletedOrderPopup(false);
+    setCompletedOrder(null);
+  };
+
   const handleCardIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setCardId(value);
@@ -277,6 +285,18 @@ export const BarOrderSystem: React.FC = () => {
           logger.nfc("Completely stopping NFC scanner before reset");
           stopScan();
         }
+        
+        // Store the completed order data for the popup BEFORE clearing the state
+        const completedOrderData: CompletedOrder = {
+          items: [...items], // Create a copy of the items
+          total: total,
+          cardId: id,
+          newBalance: orderResult.new_balance,
+          orderId: orderResult.order_id
+        };
+        
+        setCompletedOrder(completedOrderData);
+        setShowCompletedOrderPopup(true);
         
         // Show success message with the new balance from the transaction
         toast({
@@ -521,6 +541,13 @@ export const BarOrderSystem: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Order Completed Popup */}
+      <BarOrderCompletedPopup
+        isOpen={showCompletedOrderPopup}
+        completedOrder={completedOrder}
+        onClose={handleCloseCompletedOrderPopup}
+      />
     </div>
   );
 };
