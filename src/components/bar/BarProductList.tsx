@@ -152,13 +152,27 @@ export const BarProductList: React.FC<BarProductListProps> = ({
             {category.products.map(product => (
               <Button
                 key={product.id}
-                className={`h-auto min-h-[90px] py-2 px-1.5 flex flex-col items-center justify-between ${getButtonColor(product)} text-white`}
+                className={`h-auto min-h-[120px] py-2 px-1 flex flex-col items-center justify-between ${getButtonColor(product)} text-white`}
                 onClick={() => onAddProduct(product)}
               >
-                <span className="text-xs font-medium text-center leading-tight px-1 break-words hyphens-auto w-full flex-1 flex items-center justify-center">
-                  {product.name}
-                </span>
-                <div className="flex items-center mt-1 flex-shrink-0">
+                <div className="flex-1 flex items-center justify-center w-full px-1 py-1 overflow-hidden">
+                  <span 
+                    className="text-xs font-medium text-center leading-tight w-full" 
+                    style={{
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                      wordBreak: 'break-word',
+                      whiteSpace: 'normal',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical' as any,
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {product.name}
+                  </span>
+                </div>
+                <div className="flex items-center flex-shrink-0 bg-black/20 rounded px-2 py-1 mt-1">
                   <span className="text-xs font-bold whitespace-nowrap">{product.price.toFixed(2)}€</span>
                 </div>
               </Button>
