@@ -7,6 +7,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   RefreshCw,
   Calendar,
@@ -22,10 +27,17 @@ import {
   Repeat,
   Target,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Download,
+  FileText,
+  Settings,
+  AlertCircle,
+  CheckCircle,
+  Loader2
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { validateBelgianIBAN } from "@/lib/refund-utils";
 import FinancialStatistics from "./FinancialStatistics";
 import ProductStatistics from "./ProductStatistics";
 import TemporalStatisticsComponent from "./TemporalStatistics";
@@ -115,6 +127,62 @@ interface TemporalStatistics {
   }>;
 }
 
+// Refund Configuration Interfaces
+interface RefundDebtorConfig {
+  name: string;
+  iban: string;
+  bic?: string;
+  address_line1?: string;
+  address_line2?: string;
+  country: string;
+  organization_id?: string;
+  organization_issuer?: string;
+}
+
+interface RefundXMLOptions {
+  message_id_prefix?: string;
+  payment_info_id_prefix?: string;
+  instruction_priority?: 'NORM' | 'HIGH';
+  service_level?: 'SEPA' | 'PRPT';
+  category_purpose?: 'SUPP' | 'SALA' | 'INTC' | 'TREA' | 'TAXS';
+  charge_bearer?: 'SLEV' | 'SHAR';
+  batch_booking?: boolean;
+  requested_execution_date?: string;
+}
+
+interface RefundProcessingOptions {
+  max_refunds?: number;
+  dry_run?: boolean;
+  include_warnings?: boolean;
+}
+
+interface RefundProcessRequest {
+  debtor_config: RefundDebtorConfig;
+  xml_options?: RefundXMLOptions;
+  processing_options?: RefundProcessingOptions;
+}
+
+interface RefundProcessResponse {
+  success: boolean;
+  message?: string;
+  data?: {
+    message_id: string;
+    transaction_count: number;
+    total_amount: number;
+    filename: string;
+    processing_summary: {
+      refunds_processed: number;
+      validation_errors: number;
+      xml_generation_time_ms: number;
+      total_processing_time_ms: number;
+    };
+  };
+  error?: string;
+  error_code?: string;
+  details?: any;
+  request_id: string;
+}
+
 // Main Dashboard State Interface
 interface DashboardState {
   selectedEdition: string;
@@ -135,6 +203,13 @@ interface DashboardState {
     financial: string | null;
     products: string | null;
     temporal: string | null;
+  };
+  refund: {
+    processing: boolean;
+    configDialogOpen: boolean;
+    config: RefundDebtorConfig;
+    xmlOptions: RefundXMLOptions;
+    processingOptions: RefundProcessingOptions;
   };
 }
 
@@ -200,6 +275,29 @@ const Dashboard: React.FC = () => {
       financial: null,
       products: null,
       temporal: null
+    },
+    refund: {
+      processing: false,
+      configDialogOpen: false,
+      config: {
+        name: '',
+        iban: '',
+        country: 'BE'
+      },
+      xmlOptions: {
+        message_id_prefix: 'CBC',
+        payment_info_id_prefix: 'PMT',
+        instruction_priority: 'NORM',
+        service_level: 'SEPA',
+        category_purpose: 'SUPP',
+        charge_bearer: 'SLEV',
+        batch_booking: true
+      },
+      processingOptions: {
+        max_refunds: 100,
+        dry_run: false,
+        include_warnings: true
+      }
     }
   });
 
@@ -207,6 +305,224 @@ const Dashboard: React.FC = () => {
   const selectedEditionConfig = FESTIVAL_EDITIONS.find(
     edition => edition.id === state.selectedEdition
   );
+
+
+  // Handle refund configuration dialog
+  const handleOpenRefundDialog = () => {
+    console.log('Opening refund dialog');
+    setState(prev => ({
+      ...prev,
+      refund: {
+        ...prev.refund,
+        configDialogOpen: true
+      }
+    }));
+  };
+
+  const handleCloseRefundDialog = () => {
+    setState(prev => ({
+      ...prev,
+      refund: {
+        ...prev.refund,
+        configDialogOpen: false
+      }
+    }));
+  };
+
+  // Handle refund configuration changes
+  const handleRefundConfigChange = (field: keyof RefundDebtorConfig, value: string) => {
+    setState(prev => ({
+      ...prev,
+      refund: {
+        ...prev.refund,
+        config: {
+          ...prev.refund.config,
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const handleRefundProcessingOptionChange = (field: keyof RefundProcessingOptions, value: any) => {
+    setState(prev => ({
+      ...prev,
+      refund: {
+        ...prev.refund,
+        processingOptions: {
+          ...prev.refund.processingOptions,
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  // File download helper
+  const downloadFile = (content: string, filename: string, contentType: string) => {
+    const blob = new Blob([content], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  // Handle refund generation
+  const handleGenerateRefunds = async () => {
+    console.log('Starting refund generation process');
+    console.log('Current refund config:', state.refund.config);
+    
+    // Validate configuration
+    if (!state.refund.config.name.trim()) {
+      toast({
+        title: "Configuration Incomplète",
+        description: "Le nom de l'organisation est requis",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!state.refund.config.iban.trim()) {
+      toast({
+        title: "Configuration Incomplète",
+        description: "L'IBAN est requis",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validateBelgianIBAN(state.refund.config.iban)) {
+      toast({
+        title: "IBAN Invalide",
+        description: "Veuillez saisir un IBAN belge valide",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setState(prev => ({
+      ...prev,
+      refund: {
+        ...prev.refund,
+        processing: true,
+        configDialogOpen: false
+      }
+    }));
+
+    try {
+      const requestBody: RefundProcessRequest = {
+        debtor_config: state.refund.config,
+        xml_options: state.refund.xmlOptions,
+        processing_options: state.refund.processingOptions
+      };
+
+      console.log('Sending refund request:', requestBody);
+
+      // Get the current session to ensure we have authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        throw new Error('Vous devez être connecté pour générer des remboursements');
+      }
+
+      // Use supabase.functions.invoke for secure API calls
+      const { data, error } = await supabase.functions.invoke('process-refunds', {
+        body: requestBody,
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        }
+      });
+
+      if (error) {
+        console.error('Refund function error:', error);
+        throw new Error(error.message || 'Failed to process refunds');
+      }
+
+      // Handle the response based on content type
+      const response = data;
+
+      console.log('Refund response received:', response);
+
+      // Check if response is XML content (successful file generation)
+      if (typeof response === 'string' && response.includes('<?xml')) {
+        console.log('Received XML content, length:', response.length);
+        
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+        const filename = `remboursements_${timestamp}.xml`;
+        
+        // Download the XML file
+        downloadFile(response, filename, 'application/xml');
+        
+        toast({
+          title: "Remboursements Générés",
+          description: `Le fichier XML a été généré et téléchargé avec succès`,
+        });
+      } else {
+        // Handle JSON response (dry run or error)
+        const result = response as RefundProcessResponse;
+        
+        if (result.success) {
+          if (state.refund.processingOptions.dry_run) {
+            toast({
+              title: "Test Réussi",
+              description: `${result.data?.transaction_count || 0} remboursements seraient traités pour un montant total de €${result.data?.total_amount?.toFixed(2) || '0.00'}`,
+            });
+          } else {
+            toast({
+              title: "Remboursements Traités",
+              description: `${result.data?.transaction_count || 0} remboursements traités avec succès`,
+            });
+          }
+        } else {
+          throw new Error(result.error || 'Erreur inconnue');
+        }
+      }
+
+    } catch (error) {
+      console.error('Error generating refunds:', error);
+      
+      let errorMessage = "Erreur lors de la génération des remboursements";
+      let errorTitle = "Erreur de Génération";
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Authentication')) {
+          errorTitle = "Erreur d'Authentification";
+          errorMessage = "Vous devez être connecté pour générer des remboursements";
+        } else if (error.message.includes('No refunds available after applying processing filters')) {
+          errorTitle = "Aucun Remboursement Disponible";
+          errorMessage = "Aucun remboursement valide trouvé après filtrage. Essayez d'activer l'option 'Inclure les remboursements avec avertissements'.";
+        } else if (error.message.includes('400')) {
+          errorTitle = "Erreur de Configuration";
+          errorMessage = "Vérifiez la configuration des remboursements";
+        } else if (error.message.includes('401')) {
+          errorTitle = "Accès Non Autorisé";
+          errorMessage = "Vous n'avez pas les permissions nécessaires";
+        } else if (error.message.includes('500')) {
+          errorTitle = "Erreur Serveur";
+          errorMessage = "Erreur interne du serveur. Veuillez réessayer plus tard";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setState(prev => ({
+        ...prev,
+        refund: {
+          ...prev.refund,
+          processing: false
+        }
+      }));
+    }
+  };
 
   // Handle edition selection change
   const handleEditionChange = (editionId: string) => {
@@ -432,16 +748,213 @@ const Dashboard: React.FC = () => {
             Analyses complètes pour les éditions du festival
           </p>
         </div>
-        <Button
-          onClick={handleRefreshAll}
-          variant="outline"
-          size="sm"
-          disabled={refreshing}
-          className="flex items-center gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          {refreshing ? 'Actualisation...' : 'Actualiser Tout'}
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Dialog open={state.refund.configDialogOpen} onOpenChange={(open) => {
+            if (open) {
+              handleOpenRefundDialog();
+            } else {
+              handleCloseRefundDialog();
+            }
+          }}>
+            <DialogTrigger asChild>
+              <Button
+                variant="default"
+                size="sm"
+                disabled={state.refund.processing}
+                className="flex items-center gap-2"
+              >
+                {state.refund.processing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                {state.refund.processing ? 'Génération...' : 'Générer fichier de remboursement'}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Configuration des Remboursements
+                </DialogTitle>
+                <DialogDescription>
+                  Configurez les paramètres pour générer le fichier XML de remboursement CBC
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-6 py-4">
+                {/* Debtor Configuration */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Informations du Débiteur
+                  </h4>
+                  
+                  <div className="grid gap-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="debtor-name">Nom de l'organisation *</Label>
+                        <Input
+                          id="debtor-name"
+                          value={state.refund.config.name}
+                          onChange={(e) => handleRefundConfigChange('name', e.target.value)}
+                          placeholder="Nom de votre organisation"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="debtor-country">Pays *</Label>
+                        <Select
+                          value={state.refund.config.country}
+                          onValueChange={(value) => handleRefundConfigChange('country', value)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="BE">Belgique</SelectItem>
+                            <SelectItem value="FR">France</SelectItem>
+                            <SelectItem value="NL">Pays-Bas</SelectItem>
+                            <SelectItem value="DE">Allemagne</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="debtor-iban">IBAN *</Label>
+                        <Input
+                          id="debtor-iban"
+                          value={state.refund.config.iban}
+                          onChange={(e) => handleRefundConfigChange('iban', e.target.value.toUpperCase())}
+                          placeholder="BE00 0000 0000 0000"
+                          className={!validateBelgianIBAN(state.refund.config.iban) && state.refund.config.iban ? 'border-red-500' : ''}
+                        />
+                        {!validateBelgianIBAN(state.refund.config.iban) && state.refund.config.iban && (
+                          <p className="text-sm text-red-500 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            IBAN invalide
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="debtor-bic">BIC (optionnel)</Label>
+                        <Input
+                          id="debtor-bic"
+                          value={state.refund.config.bic || ''}
+                          onChange={(e) => handleRefundConfigChange('bic', e.target.value)}
+                          placeholder="GKCCBEBB"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor-address1">Adresse ligne 1</Label>
+                      <Input
+                        id="debtor-address1"
+                        value={state.refund.config.address_line1 || ''}
+                        onChange={(e) => handleRefundConfigChange('address_line1', e.target.value)}
+                        placeholder="Rue et numéro"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="debtor-address2">Adresse ligne 2</Label>
+                      <Input
+                        id="debtor-address2"
+                        value={state.refund.config.address_line2 || ''}
+                        onChange={(e) => handleRefundConfigChange('address_line2', e.target.value)}
+                        placeholder="Code postal et ville"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="organization-id">ID Organisation</Label>
+                      <Input
+                        id="organization-id"
+                        value={state.refund.config.organization_id || ''}
+                        onChange={(e) => handleRefundConfigChange('organization_id', e.target.value)}
+                        placeholder="Numéro d'entreprise BCE"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Processing Options */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium">Options de Traitement</h4>
+                  
+                  <div className="grid gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="max-refunds">Nombre maximum de remboursements</Label>
+                      <Input
+                        id="max-refunds"
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={state.refund.processingOptions.max_refunds || ''}
+                        onChange={(e) => handleRefundProcessingOptionChange('max_refunds', parseInt(e.target.value) || undefined)}
+                        placeholder="100"
+                      />
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="include-warnings"
+                        checked={state.refund.processingOptions.include_warnings || false}
+                        onCheckedChange={(checked) => handleRefundProcessingOptionChange('include_warnings', checked)}
+                      />
+                      <Label htmlFor="include-warnings">Inclure les remboursements avec avertissements</Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="dry-run"
+                        checked={state.refund.processingOptions.dry_run || false}
+                        onCheckedChange={(checked) => handleRefundProcessingOptionChange('dry_run', checked)}
+                      />
+                      <Label htmlFor="dry-run">Mode test (pas de génération de fichier)</Label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={handleCloseRefundDialog}>
+                  Annuler
+                </Button>
+                <Button
+                  onClick={handleGenerateRefunds}
+                  disabled={!state.refund.config.name.trim() || !state.refund.config.iban.trim() || !validateBelgianIBAN(state.refund.config.iban)}
+                  className="flex items-center gap-2"
+                >
+                  {state.refund.processingOptions.dry_run ? (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      Tester la Configuration
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Générer le Fichier XML
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          <Button
+            onClick={handleRefreshAll}
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Actualisation...' : 'Actualiser Tout'}
+          </Button>
+        </div>
       </div>
 
       {/* Edition Selector Section */}
