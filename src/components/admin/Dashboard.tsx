@@ -415,7 +415,11 @@ const Dashboard: React.FC = () => {
       const requestBody: RefundProcessRequest = {
         debtor_config: state.refund.config,
         xml_options: state.refund.xmlOptions,
-        processing_options: state.refund.processingOptions
+        processing_options: {
+          ...state.refund.processingOptions,
+          dry_run: false,
+          include_warnings: true
+        }
       };
 
       console.log('Sending refund request:', requestBody);
@@ -461,21 +465,14 @@ const Dashboard: React.FC = () => {
           description: `Le fichier XML a été généré et téléchargé avec succès`,
         });
       } else {
-        // Handle JSON response (dry run or error)
+        // Handle JSON response (error)
         const result = response as RefundProcessResponse;
         
         if (result.success) {
-          if (state.refund.processingOptions.dry_run) {
-            toast({
-              title: "Test Réussi",
-              description: `${result.data?.transaction_count || 0} remboursements seraient traités pour un montant total de €${result.data?.total_amount?.toFixed(2) || '0.00'}`,
-            });
-          } else {
-            toast({
-              title: "Remboursements Traités",
-              description: `${result.data?.transaction_count || 0} remboursements traités avec succès`,
-            });
-          }
+          toast({
+            title: "Remboursements Traités",
+            description: `${result.data?.transaction_count || 0} remboursements traités avec succès`,
+          });
         } else {
           throw new Error(result.error || 'Erreur inconnue');
         }
@@ -898,23 +895,6 @@ const Dashboard: React.FC = () => {
                       />
                     </div>
                     
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="include-warnings"
-                        checked={state.refund.processingOptions.include_warnings || false}
-                        onCheckedChange={(checked) => handleRefundProcessingOptionChange('include_warnings', checked)}
-                      />
-                      <Label htmlFor="include-warnings">Inclure les remboursements avec avertissements</Label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="dry-run"
-                        checked={state.refund.processingOptions.dry_run || false}
-                        onCheckedChange={(checked) => handleRefundProcessingOptionChange('dry_run', checked)}
-                      />
-                      <Label htmlFor="dry-run">Mode test (pas de génération de fichier)</Label>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -928,17 +908,8 @@ const Dashboard: React.FC = () => {
                   disabled={!state.refund.config.name.trim() || !state.refund.config.iban.trim() || !validateBelgianIBAN(state.refund.config.iban)}
                   className="flex items-center gap-2"
                 >
-                  {state.refund.processingOptions.dry_run ? (
-                    <>
-                      <CheckCircle className="h-4 w-4" />
-                      Tester la Configuration
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4" />
-                      Générer le Fichier XML
-                    </>
-                  )}
+                  <Download className="h-4 w-4" />
+                  Générer le Fichier XML
                 </Button>
               </DialogFooter>
             </DialogContent>
