@@ -46,6 +46,7 @@ import {
 } from 'recharts';
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getCETDateRange, getCETTime } from "@/lib/utils";
 
 // Edition Configuration Interface
 interface EditionConfig {
@@ -222,26 +223,26 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({
 
   // Fetch temporal statistics from Supabase
   const fetchTemporalStatistics = async (editionConfig: EditionConfig): Promise<TemporalStatistics> => {
-    const startDate = editionConfig.dateRange.start;
-    const endDate = editionConfig.dateRange.end;
+    // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+    const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
     try {
-      // Get bar orders within the edition date range
+      // Get bar orders within the edition date range (using CET timezone)
       const { data: barOrders, error: barOrdersError } = await supabase
         .from('bar_orders')
         .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z')
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end)
         .order('created_at', { ascending: true });
 
       if (barOrdersError) throw barOrdersError;
 
-      // Get recharges within the edition date range
+      // Get recharges within the edition date range (using CET timezone)
       const { data: recharges, error: rechargesError } = await supabase
         .from('recharges')
         .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z')
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end)
         .order('created_at', { ascending: true });
 
       if (rechargesError) throw rechargesError;
@@ -263,11 +264,11 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({
       ].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       if (allTransactions.length === 0) {
-        return createEmptyTemporalStatistics(startDate, endDate);
+        return createEmptyTemporalStatistics(editionConfig.dateRange.start, editionConfig.dateRange.end);
       }
 
       // Process transactions into temporal analytics
-      return processTemporalAnalytics(allTransactions, startDate, endDate);
+      return processTemporalAnalytics(allTransactions, editionConfig.dateRange.start, editionConfig.dateRange.end);
     } catch (error) {
       console.error('Error fetching temporal statistics:', error);
       throw error;
@@ -358,8 +359,9 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({
     const cardTransactions: { [cardId: string]: any[] } = {};
 
     transactions.forEach(transaction => {
-      const timestamp = new Date(transaction.timestamp);
-      const hour = timestamp.getHours();
+      // Use CET timezone for consistent hour calculations
+      const cetTime = getCETTime(transaction.timestamp);
+      const hour = cetTime.hour;
       const amount = parseFloat(transaction.amount) || 0;
       
       totalTransactions++;
@@ -606,7 +608,9 @@ const TemporalStatistics: React.FC<TemporalStatisticsProps> = ({
     let nightOwls = 0;
 
     transactions.forEach(transaction => {
-      const hour = new Date(transaction.timestamp).getHours();
+      // Use CET timezone for consistent hour calculations
+      const cetTime = getCETTime(transaction.timestamp);
+      const hour = cetTime.hour;
       if (hour < 12) earlyBirds++;
       else if (hour < 18) primeTime++;
       else nightOwls++;
@@ -891,21 +895,21 @@ const IntervalChart: React.FC<IntervalChartProps> = ({ editionConfig }) => {
   const fetchIntervalData = async () => {
     setLoading(true);
     try {
-      const startDate = editionConfig.dateRange.start;
-      const endDate = editionConfig.dateRange.end;
+      // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+      const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
-      // Get bar orders and recharges
+      // Get bar orders and recharges (using CET timezone)
       const [{ data: barOrders }, { data: recharges }] = await Promise.all([
         supabase
           .from('bar_orders')
           .select('*')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z'),
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end),
         supabase
           .from('recharges')
           .select('*')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z')
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end)
       ]);
 
       // Create 15-minute intervals from 17:00 to 24:00 (28 intervals)
@@ -925,9 +929,10 @@ const IntervalChart: React.FC<IntervalChartProps> = ({ editionConfig }) => {
 
       // Process bar orders
       barOrders?.forEach(order => {
-        const timestamp = new Date(order.created_at);
-        const hour = timestamp.getHours();
-        const minute = timestamp.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(order.created_at);
+        const hour = cetTime.hour;
+        const minute = cetTime.minute;
         
         if (hour >= 17 && hour < 24) {
           const intervalMinute = Math.floor(minute / 15) * 15;
@@ -943,9 +948,10 @@ const IntervalChart: React.FC<IntervalChartProps> = ({ editionConfig }) => {
 
       // Process recharges
       recharges?.forEach(recharge => {
-        const timestamp = new Date(recharge.created_at);
-        const hour = timestamp.getHours();
-        const minute = timestamp.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(recharge.created_at);
+        const hour = cetTime.hour;
+        const minute = cetTime.minute;
         
         if (hour >= 17 && hour < 24) {
           const intervalMinute = Math.floor(minute / 15) * 15;
@@ -1086,22 +1092,22 @@ const TransactionIntervalsAnalysis: React.FC<TransactionIntervalsAnalysisProps> 
   const fetchIntervalAnalysis = async () => {
     setLoading(true);
     try {
-      const startDate = editionConfig.dateRange.start;
-      const endDate = editionConfig.dateRange.end;
+      // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+      const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
-      // Get all transactions (bar orders and recharges) for the edition
+      // Get all transactions (bar orders and recharges) for the edition (using CET timezone)
       const [{ data: barOrders }, { data: recharges }] = await Promise.all([
         supabase
           .from('bar_orders')
           .select('card_id, created_at, total_amount')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z')
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end)
           .order('created_at', { ascending: true }),
         supabase
           .from('recharges')
           .select('card_id, created_at, amount')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z')
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end)
           .order('created_at', { ascending: true })
       ]);
 
@@ -1439,21 +1445,21 @@ const PeakIntervalsDisplay: React.FC<PeakIntervalsDisplayProps> = ({ editionConf
   const fetchPeakIntervals = async () => {
     setLoading(true);
     try {
-      const startDate = editionConfig.dateRange.start;
-      const endDate = editionConfig.dateRange.end;
+      // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+      const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
-      // Get bar orders and recharges
+      // Get bar orders and recharges (using CET timezone)
       const [{ data: barOrders }, { data: recharges }] = await Promise.all([
         supabase
           .from('bar_orders')
           .select('*')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z'),
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end),
         supabase
           .from('recharges')
           .select('*')
-          .gte('created_at', startDate)
-          .lte('created_at', endDate + 'T23:59:59.999Z')
+          .gte('created_at', cetDateRange.start)
+          .lte('created_at', cetDateRange.end)
       ]);
 
       // Create 15-minute intervals from 17:00 to 24:00
@@ -1468,9 +1474,10 @@ const PeakIntervalsDisplay: React.FC<PeakIntervalsDisplayProps> = ({ editionConf
 
       // Process bar orders
       barOrders?.forEach(order => {
-        const timestamp = new Date(order.created_at);
-        const hour = timestamp.getHours();
-        const minute = timestamp.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(order.created_at);
+        const hour = cetTime.hour;
+        const minute = cetTime.minute;
         
         if (hour >= 17 && hour < 24) {
           const intervalMinute = Math.floor(minute / 15) * 15;
@@ -1486,9 +1493,10 @@ const PeakIntervalsDisplay: React.FC<PeakIntervalsDisplayProps> = ({ editionConf
 
       // Process recharges
       recharges?.forEach(recharge => {
-        const timestamp = new Date(recharge.created_at);
-        const hour = timestamp.getHours();
-        const minute = timestamp.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(recharge.created_at);
+        const hour = cetTime.hour;
+        const minute = cetTime.minute;
         
         if (hour >= 17 && hour < 24) {
           const intervalMinute = Math.floor(minute / 15) * 15;

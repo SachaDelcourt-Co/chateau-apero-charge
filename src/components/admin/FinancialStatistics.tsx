@@ -38,6 +38,7 @@ import {
 } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getCETDateRange, getCETTime } from "@/lib/utils";
 
 // Edition Configuration Interface
 interface EditionConfig {
@@ -146,24 +147,24 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({
 
     setInternalLoading(true);
     try {
-      const startDate = editionConfig.dateRange.start;
-      const endDate = editionConfig.dateRange.end;
+      // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+      const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
-      // Fetch bar orders for total sales
+      // Fetch bar orders for total sales (using CET timezone)
       const { data: barOrders, error: barOrdersError } = await supabase
         .from('bar_orders')
         .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z');
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end);
 
       if (barOrdersError) throw barOrdersError;
 
-      // Fetch recharges for payment method breakdown
+      // Fetch recharges for payment method breakdown (using CET timezone)
       const { data: recharges, error: rechargesError } = await supabase
         .from('recharges')
         .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z');
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end);
 
       if (rechargesError) throw rechargesError;
 
@@ -255,9 +256,10 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({
 
       // Process recharges (Stripe and terminal)
       recharges?.forEach(recharge => {
-        const rechargeDate = new Date(recharge.created_at);
-        const rechargeHour = rechargeDate.getHours();
-        const rechargeMinute = rechargeDate.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(recharge.created_at);
+        const rechargeHour = cetTime.hour;
+        const rechargeMinute = cetTime.minute;
         
         // Only process recharges within event hours (17:00 - 23:59)
         if (rechargeHour >= 17 && rechargeHour <= 23) {
@@ -285,9 +287,10 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({
 
       // Process bar orders
       barOrders?.forEach(order => {
-        const orderDate = new Date(order.created_at);
-        const orderHour = orderDate.getHours();
-        const orderMinute = orderDate.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(order.created_at);
+        const orderHour = cetTime.hour;
+        const orderMinute = cetTime.minute;
         
         // Only process orders within event hours (17:00 - 23:59)
         if (orderHour >= 17 && orderHour <= 23) {

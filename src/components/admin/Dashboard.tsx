@@ -38,6 +38,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { validateBelgianIBAN } from "@/lib/refund-utils";
+import { getCETDateRange } from "@/lib/utils";
 import FinancialStatistics from "./FinancialStatistics";
 import ProductStatistics from "./ProductStatistics";
 import TemporalStatisticsComponent from "./TemporalStatistics";
@@ -634,8 +635,8 @@ const Dashboard: React.FC = () => {
 
   // Récupérer les statistiques utilisateur depuis Supabase - Métriques simplifiées
   const fetchUserStatistics = async (editionConfig: EditionConfig): Promise<UserStatistics> => {
-    const startDate = editionConfig.dateRange.start;
-    const endDate = editionConfig.dateRange.end;
+    // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+    const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
     try {
       // Fetch all card balances with increased limit
@@ -647,12 +648,12 @@ const Dashboard: React.FC = () => {
       console.log("cardBalances", cardBalances);
 
 
-      // Récupérer les recharges dans la plage de dates de l'édition
+      // Récupérer les recharges dans la plage de dates de l'édition (using CET timezone)
       const { data: recharges, error: rechargesError } = await supabase
         .from('recharges')
         .select('*')
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z');
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end);
 
       if (rechargesError) throw rechargesError;
 
@@ -674,7 +675,7 @@ const Dashboard: React.FC = () => {
       const { data: previousOrders, error: previousOrdersError } = await supabase
         .from('bar_orders')
         .select('card_id')
-        .lt('created_at', startDate);
+        .lt('created_at', cetDateRange.start);
 
       if (previousOrdersError) {
         console.warn('Error fetching previous orders:', previousOrdersError);
@@ -684,7 +685,7 @@ const Dashboard: React.FC = () => {
       const { data: previousRecharges, error: previousRechargesError } = await supabase
         .from('recharges')
         .select('card_id')
-        .lt('created_at', startDate);
+        .lt('created_at', cetDateRange.start);
 
       if (previousRechargesError) {
         console.warn('Error fetching previous recharges:', previousRechargesError);

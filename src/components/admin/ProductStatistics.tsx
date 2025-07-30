@@ -45,6 +45,7 @@ import {
 } from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getCETDateRange, getCETTime } from "@/lib/utils";
 
 // Edition Configuration Interface
 interface EditionConfig {
@@ -182,10 +183,10 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
 
     setInternalLoading(true);
     try {
-      const startDate = editionConfig.dateRange.start;
-      const endDate = editionConfig.dateRange.end;
+      // Convert dates to CET timezone to ensure consistent results regardless of user's timezone
+      const cetDateRange = getCETDateRange(editionConfig.dateRange.start, editionConfig.dateRange.end);
 
-      // Fetch bar orders with items and products
+      // Fetch bar orders with items and products (using CET timezone)
       const { data: barOrders, error: barOrdersError } = await supabase
         .from('bar_orders')
         .select(`
@@ -199,8 +200,8 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
             is_return
           )
         `)
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59.999Z');
+        .gte('created_at', cetDateRange.start)
+        .lte('created_at', cetDateRange.end);
 
       if (barOrdersError) throw barOrdersError;
 
@@ -344,9 +345,10 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
 
       // Process actual order items
       allOrderItems.forEach(item => {
-        const orderDate = new Date(item.orderCreatedAt);
-        const orderHour = orderDate.getHours();
-        const orderMinute = orderDate.getMinutes();
+        // Use CET timezone for consistent hour calculations
+        const cetTime = getCETTime(item.orderCreatedAt);
+        const orderHour = cetTime.hour;
+        const orderMinute = cetTime.minute;
         
         // Only process orders within event hours (17:00 - 23:59)
         if (orderHour >= 17 && orderHour <= 23) {
@@ -445,9 +447,10 @@ const ProductStatistics: React.FC<ProductStatisticsProps> = ({
       
       timeSlots.forEach(timeSlot => {
         const returnsInSlot = returnItems.filter(item => {
-          const itemDate = new Date(item.orderCreatedAt);
-          const itemHour = itemDate.getHours();
-          const itemMinute = itemDate.getMinutes();
+          // Use CET timezone for consistent hour calculations
+          const cetTime = getCETTime(item.orderCreatedAt);
+          const itemHour = cetTime.hour;
+          const itemMinute = cetTime.minute;
           
           if (itemHour >= 17 && itemHour <= 23) {
             const roundedMinute = Math.floor(itemMinute / 15) * 15;
