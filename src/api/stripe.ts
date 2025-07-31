@@ -2,7 +2,7 @@
  * API functions for Stripe integration
  */
 
-import { createStripeCheckout, generateClientRequestId } from '@/lib/supabase';
+import { createStripeCheckout, generateClientRequestId } from '../lib/supabase';
 
 /**
  * Method to create a Stripe checkout session through the backend edge function

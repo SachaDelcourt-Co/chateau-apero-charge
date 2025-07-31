@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { supabase as integrationSupabase } from "@/integrations/supabase/client";
-import { logger } from '@/lib/logger';
+import { supabase as integrationSupabase } from "../integrations/supabase/client";
+import { logger } from './logger';
 
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
