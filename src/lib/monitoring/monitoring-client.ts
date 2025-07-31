@@ -10,7 +10,7 @@
  */
 
 import { supabase } from '../../integrations/supabase/client';
-import { detectionService } from './detection-service';
+import { detectionService } from './detection-service.ts';
 import {
   MonitoringEventType,
   MonitoringSeverity,

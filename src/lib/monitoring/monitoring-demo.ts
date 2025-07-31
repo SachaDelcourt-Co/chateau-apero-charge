@@ -20,9 +20,9 @@
  * @date 2025-06-15
  */
 
-import { detectionService } from './detection-service';
-import { monitoringClient } from './monitoring-client';
-import { backgroundProcessor } from './background-processor';
+import { detectionService } from './detection-service.ts';
+import { monitoringClient } from './monitoring-client.ts';
+import { backgroundProcessor } from './background-processor.ts';
 import { 
   MonitoringEventType, 
   MonitoringSeverity,

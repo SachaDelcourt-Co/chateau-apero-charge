@@ -10,9 +10,9 @@
  */
 
 // Export main services
-export { DetectionService, detectionService } from './detection-service';
-export { BackgroundProcessor, backgroundProcessor } from './background-processor';
-export { MonitoringClient, monitoringClient } from './monitoring-client';
+export { DetectionService, detectionService } from './detection-service.ts';
+export { BackgroundProcessor, backgroundProcessor } from './background-processor.ts';
+export { MonitoringClient, monitoringClient } from './monitoring-client.ts';
 
 // Export types for convenience
 export type {
@@ -50,9 +50,9 @@ export {
 } from '../../types/monitoring';
 
 // Import the instances we need
-import { detectionService } from './detection-service';
-import { backgroundProcessor } from './background-processor';
-import { monitoringClient } from './monitoring-client';
+import { detectionService } from './detection-service.ts';
+import { backgroundProcessor } from './background-processor.ts';
+import { monitoringClient } from './monitoring-client.ts';
 
 /**
  * Initialize the monitoring system

@@ -9,7 +9,7 @@
  * @date 2025-06-14
  */
 
-import { detectionService } from './detection-service';
+import { detectionService } from './detection-service.ts';
 import {
   CircuitBreakerState,
   DEFAULT_MONITORING_CONFIG
