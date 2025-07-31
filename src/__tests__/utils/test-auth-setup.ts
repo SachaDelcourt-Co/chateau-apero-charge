@@ -6,8 +6,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Test authentication configuration
-const TEST_SUPABASE_URL = "https://dqghjrpeoyqvkvoivfnz.supabase.co";
-const TEST_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
+const TEST_SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'http://localhost:54321';
+const TEST_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'test-anon-key';
 const TEST_SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-service-key';
 
 // Create test Supabase client
