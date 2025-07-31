@@ -46,12 +46,12 @@ const RecentTransactions = () => {
         {transactions.map((tx, index) => (
           <div key={index} className="bg-white p-2 rounded-md border border-gray-100 text-xs sm:text-sm">
             <div className="flex justify-between">
-              <span>Carte: <strong>{tx.data?.cardId || 'N/A'}</strong></span>
-              <span className="text-green-600">{tx.data?.amount || '0'}€</span>
+              <span>Carte: <strong>{tx.data.cardId}</strong></span>
+              <span className="text-green-600">{tx.data.amount}€</span>
             </div>
             <div className="flex justify-between text-gray-500">
               <span>{tx.formattedTime}</span>
-              <span>Nouveau solde: {tx.data?.newBalance != null ? tx.data.newBalance.toFixed(2) : '0.00'}€</span>
+              <span>Nouveau solde: {tx.data.newBalance.toFixed(2)}€</span>
             </div>
           </div>
         ))}

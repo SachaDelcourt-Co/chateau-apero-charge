@@ -12,12 +12,12 @@
  * @date 2025-06-14
  */
 
-import { supabase } from '../../integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client';
 import {
   MonitoringEventType,
   MonitoringSeverity,
   DEFAULT_MONITORING_CONFIG
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type {
   MonitoringEvent,
   MonitoringEventInsert,
@@ -31,7 +31,7 @@ import type {
   DuplicateNFCEventData,
   RaceConditionEventData,
   MonitoringContextData
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 /**
  * Core detection service that implements all monitoring algorithms

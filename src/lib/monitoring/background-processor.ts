@@ -9,11 +9,11 @@
  * @date 2025-06-14
  */
 
-import { detectionService } from './detection-service.ts';
+import { detectionService } from './detection-service';
 import {
   CircuitBreakerState,
   DEFAULT_MONITORING_CONFIG
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type {
   BackgroundJobConfig,
   BackgroundJobResult,
@@ -21,7 +21,7 @@ import type {
   CircuitBreakerInfo,
   MonitoringDetectionCycleResult,
   PerformanceMetrics
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 /**
  * Circuit breaker implementation for fault tolerance

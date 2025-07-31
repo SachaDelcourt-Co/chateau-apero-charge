@@ -37,7 +37,7 @@ import {
   SystemHealthStatus,
   CircuitBreakerState,
   DEFAULT_MONITORING_CONFIG 
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type { 
   MonitoringEvent, 
   MonitoringDetectionCycleResult,
@@ -47,7 +47,7 @@ import type {
   BalanceDiscrepancyDetectionResult,
   DuplicateNFCDetectionResult,
   RaceConditionDetectionResult
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 // =====================================================
 // PRODUCTION READINESS TEST CONFIGURATION

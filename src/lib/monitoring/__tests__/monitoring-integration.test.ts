@@ -26,13 +26,13 @@ import {
   MonitoringSeverity, 
   MonitoringEventStatus,
   DEFAULT_MONITORING_CONFIG 
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type { 
   MonitoringEvent, 
   MonitoringDetectionCycleResult,
   HealthCheckResponse,
   DashboardResponse 
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 // =====================================================
 // TEST CONFIGURATION AND SETUP

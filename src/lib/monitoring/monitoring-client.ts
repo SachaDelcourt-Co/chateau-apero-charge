@@ -9,8 +9,8 @@
  * @date 2025-06-14
  */
 
-import { supabase } from '../../integrations/supabase/client';
-import { detectionService } from './detection-service.ts';
+import { supabase } from '@/integrations/supabase/client';
+import { detectionService } from './detection-service';
 import {
   MonitoringEventType,
   MonitoringSeverity,
@@ -20,7 +20,7 @@ import {
   ComponentStatus,
   CircuitBreakerState,
   DEFAULT_MONITORING_CONFIG
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type {
   MonitoringEvent,
   MonitoringEventsFilters,
@@ -37,7 +37,7 @@ import type {
   TimeSeriesDataPoint,
   ChartData,
   ProcessStatus
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 /**
  * Cache entry structure

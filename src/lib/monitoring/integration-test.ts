@@ -9,10 +9,10 @@
  * @date 2025-06-15
  */
 
-import { monitoringClient } from './monitoring-client.ts';
-import { backgroundProcessor } from './background-processor.ts';
-import { detectionService } from './detection-service.ts';
-import { MonitoringEventType, MonitoringSeverity } from '../../types/monitoring';
+import { monitoringClient } from './monitoring-client';
+import { backgroundProcessor } from './background-processor';
+import { detectionService } from './detection-service';
+import { MonitoringEventType, MonitoringSeverity } from '@/types/monitoring';
 
 /**
  * Integration test suite for the monitoring system

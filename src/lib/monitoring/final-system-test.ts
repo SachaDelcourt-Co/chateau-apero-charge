@@ -26,23 +26,23 @@
  * @date 2025-06-15
  */
 
-import { detectionService } from './detection-service.ts';
-import { monitoringClient } from './monitoring-client.ts';
-import { backgroundProcessor } from './background-processor.ts';
+import { detectionService } from './detection-service';
+import { monitoringClient } from './monitoring-client';
+import { backgroundProcessor } from './background-processor';
 import { 
   MonitoringEventType, 
   MonitoringSeverity, 
   MonitoringEventStatus,
   SystemHealthStatus,
   DEFAULT_MONITORING_CONFIG 
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 import type { 
   MonitoringEvent, 
   MonitoringDetectionCycleResult,
   HealthCheckResponse,
   DashboardResponse,
   SystemHealthSnapshot
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 // =====================================================
 // FINAL SYSTEM TEST CONFIGURATION

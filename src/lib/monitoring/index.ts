@@ -10,9 +10,9 @@
  */
 
 // Export main services
-export { DetectionService, detectionService } from './detection-service.ts';
-export { BackgroundProcessor, backgroundProcessor } from './background-processor.ts';
-export { MonitoringClient, monitoringClient } from './monitoring-client.ts';
+export { DetectionService, detectionService } from './detection-service';
+export { BackgroundProcessor, backgroundProcessor } from './background-processor';
+export { MonitoringClient, monitoringClient } from './monitoring-client';
 
 // Export types for convenience
 export type {
@@ -34,7 +34,7 @@ export type {
   BackgroundJobResult,
   CircuitBreakerInfo,
   PerformanceMetrics
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 export {
   MonitoringEventType,
@@ -47,12 +47,12 @@ export {
   DEFAULT_MONITORING_CONFIG,
   DETECTION_PRIORITIES,
   SEVERITY_WEIGHTS
-} from '../../types/monitoring';
+} from '@/types/monitoring';
 
 // Import the instances we need
-import { detectionService } from './detection-service.ts';
-import { backgroundProcessor } from './background-processor.ts';
-import { monitoringClient } from './monitoring-client.ts';
+import { detectionService } from './detection-service';
+import { backgroundProcessor } from './background-processor';
+import { monitoringClient } from './monitoring-client';
 
 /**
  * Initialize the monitoring system
