@@ -141,8 +141,8 @@ export class CBCXMLGenerator {
       const executionDate = this.options.requested_execution_date || 
                            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      // Calculate totals
-      const totalAmount = refunds.reduce((sum, refund) => sum + refund.amount_recharged, 0);
+      // Calculate totals with precision
+      const totalAmount = this.calculateControlSum(refunds);
       const transactionCount = refunds.length;
 
       // Generate XML content
@@ -183,6 +183,21 @@ export class CBCXMLGenerator {
   }
 
   /**
+   * Validate BCE company number format
+   */
+  private isValidBCENumber(bceNumber: string): boolean {
+    if (!bceNumber) return false;
+    
+    // Remove spaces and dots
+    const cleanBCE = bceNumber.replace(/[\s\.]/g, '');
+    
+    // Belgian BCE number format: 10 digits (0123456789)
+    const bceRegex = /^\d{10}$/;
+    
+    return bceRegex.test(cleanBCE);
+  }
+
+  /**
    * Validate debtor configuration
    */
   private validateDebtorConfiguration(): void {
@@ -205,6 +220,11 @@ export class CBCXMLGenerator {
     // Validate character set
     if (!this.ALLOWED_CHARS_REGEX.test(this.debtorConfig.name)) {
       throw new Error('Debtor name contains invalid characters');
+    }
+
+    // Validate BCE company number if provided
+    if (this.debtorConfig.organization_id && !this.isValidBCENumber(this.debtorConfig.organization_id)) {
+      throw new Error(`Invalid BCE company number format: ${this.debtorConfig.organization_id}. Expected 10 digits.`);
     }
   }
 
@@ -408,7 +428,20 @@ export class CBCXMLGenerator {
    * Format amount for XML (ensure proper decimal format)
    */
   private formatAmount(amount: number): string {
-    return amount.toFixed(2);
+    // Ensure precise rounding to 2 decimal places for CBC compliance
+    return (Math.round(amount * 100) / 100).toFixed(2);
+  }
+
+  /**
+   * Calculate precise control sum for CBC compliance
+   */
+  private calculateControlSum(refunds: ValidatedRefundRecord[]): number {
+    // Use precise calculation to avoid floating point errors
+    const totalCents = refunds.reduce((sum, refund) => {
+      return sum + Math.round(refund.amount_recharged * 100);
+    }, 0);
+    
+    return totalCents / 100;
   }
 
   /**
@@ -426,7 +459,7 @@ export class CBCXMLGenerator {
     const { messageId, paymentInfoId, creationDateTime, executionDate, transactionCount, totalAmount, refunds } = params;
 
     return `<?xml version="1.0" encoding="UTF-8"?>
-<Document xmlns="${this.NAMESPACE}" xmlns:xsi="${this.XSI_NAMESPACE}">
+<Document xmlns="${this.NAMESPACE}" xmlns:xsi="${this.XSI_NAMESPACE}" xsi:schemaLocation="${this.NAMESPACE} pain.001.001.03.xsd">
     <CstmrCdtTrfInitn>
         ${this.buildGroupHeader(messageId, creationDateTime, transactionCount, totalAmount)}
         ${this.buildPaymentInformation(paymentInfoId, executionDate, transactionCount, totalAmount, refunds)}
@@ -488,7 +521,7 @@ export class CBCXMLGenerator {
             </Dbtr>
             <DbtrAcct>
                 <Id>
-                    <IBAN>${this.debtorConfig.iban.replace(/\s/g, '')}</IBAN>
+                    <IBAN>${this.debtorConfig.iban.replace(/\s/g, '').toUpperCase()}</IBAN>
                 </Id>
                 <Ccy>${this.CURRENCY}</Ccy>
             </DbtrAcct>
@@ -551,7 +584,7 @@ ${addressLines}
     const endToEndId = this.generateEndToEndId(refund.id);
     const creditorName = this.sanitizeText(`${refund.first_name} ${refund.last_name}`);
     const amount = this.formatAmount(refund.amount_recharged);
-    const iban = refund.account.replace(/\s/g, '');
+    const iban = refund.account.replace(/\s/g, '').toUpperCase();
     
     // Standardized payment object text as required
     const remittanceInfo = "Remboursement Les Aperos du chateau";
@@ -569,7 +602,7 @@ ${addressLines}
                 </Cdtr>
                 <CdtrAcct>
                     <Id>
-                        <IBAN>${iban}</IBAN>
+                        <IBAN>${iban.toUpperCase()}</IBAN>
                     </Id>
                 </CdtrAcct>
                 <RmtInf>
