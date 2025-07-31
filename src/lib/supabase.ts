@@ -5,8 +5,12 @@ import { logger } from '@/lib/logger';
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
 
-// Anon key for authorization headers
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y";
+// Anon key for authorization headers - get from environment variables
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_ANON_KEY) {
+  throw new Error('VITE_SUPABASE_ANON_KEY environment variable is required');
+}
 
 // Client Request ID generation utility for idempotency protection
 export function generateClientRequestId(): string {
@@ -312,7 +316,7 @@ export async function processBarOrder(orderData: {
     const apiUrl = '/api/process-bar-order';
     
     // Fallback to direct URL only when needed
-    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-bar-order';
+    const directUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-bar-order`;
     
     // Choose the URL based on environment
     // In development or when using tunnels like ngrok, use the proxy approach
@@ -482,7 +486,7 @@ export async function createStripeCheckout(checkoutData: CreateStripeCheckoutReq
     const apiUrl = '/api/create-stripe-checkout';
     
     // Fallback to direct URL only when needed
-    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/create-stripe-checkout';
+    const directUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-stripe-checkout`;
     
     // Choose the URL based on environment
     // In development or when using tunnels like ngrok, use the proxy approach
@@ -644,7 +648,7 @@ export async function processStandardRecharge(rechargeData: StandardRechargeRequ
     const apiUrl = '/api/process-standard-recharge';
     
     // Fallback to direct URL only when needed
-    const directUrl = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/process-standard-recharge';
+    const directUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-standard-recharge`;
     
     // Choose the URL based on environment
     // In development or when using tunnels like ngrok, use the proxy approach

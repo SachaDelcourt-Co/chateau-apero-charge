@@ -54,7 +54,7 @@ export type RechargeEventType =
 
 // Remote logging configuration
 const REMOTE_LOGGING_ENABLED = true; // Can be toggled in production
-const SUPABASE_LOG_ENDPOINT = 'https://dqghjrpeoyqvkvoivfnz.supabase.co/functions/v1/log';
+const SUPABASE_LOG_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/log`;
 const LOG_LEVEL_THRESHOLD = 'info'; // Changed from 'debug' to 'info' to reduce log volume
 const LOG_BATCH_SIZE = 10; // Number of logs to batch before sending
 const LOG_BATCH_INTERVAL = 5000; // Milliseconds between batch sends

@@ -6,7 +6,7 @@ import ChateauCard from '@/components/ChateauCard';
 import ChateauLogo from '@/components/ChateauLogo';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getTableCardById, TableCard } from '@/lib/supabase';
+import { getCardInfoSecurely, CardInfo } from '@/lib/secure-card-api';
 import { Loader2, CreditCard, AlertCircle } from "lucide-react";
 import { redirectToCheckout } from '@/api/stripe';
 
@@ -23,7 +23,7 @@ const Payment: React.FC = () => {
   const [stripeProcessing, setStripeProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stripeError, setStripeError] = useState<string | null>(null);
-  const [card, setCard] = useState<TableCard | null>(null);
+  const [card, setCard] = useState<CardInfo | null>(null);
   const [amount, setAmount] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -37,10 +37,10 @@ const Payment: React.FC = () => {
 
     const fetchCardDetails = async () => {
       try {
-        console.log('Vérification de la carte:', id);
-        const cardData = await getTableCardById(id);
+        console.log('Vérification sécurisée de la carte:', id);
+        const cardData = await getCardInfoSecurely(id);
         
-        console.log('Résultat de la recherche:', cardData);
+        console.log('Résultat de la recherche sécurisée:', cardData);
 
         if (!cardData) {
           setError("Carte non trouvée");
@@ -51,8 +51,8 @@ const Payment: React.FC = () => {
         setCard(cardData);
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching card details:', error);
-        setError("Une erreur s'est produite");
+        console.error('Error fetching card details securely:', error);
+        setError(error instanceof Error ? error.message : "Une erreur s'est produite");
         setLoading(false);
       }
     };
