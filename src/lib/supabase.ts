@@ -5,10 +5,11 @@ import { logger } from '@/lib/logger';
 // We use the client from the integrations directory, which is already configured
 export const supabase = integrationSupabase;
 
-// Anon key for authorization headers - get from environment variables
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Anon key for authorization headers - get from environment variables with fallback
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxZ2hqcnBlb3lxdmt2b2l2Zm56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQwMjE5MDgsImV4cCI6MjA1OTU5NzkwOH0.zzvFJVZ_b4zFe54eTY2iuE0ce-AkhdjjLWewSDoFu-Y';
 
-if (!SUPABASE_ANON_KEY) {
+// Validation with fallback support
+if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'undefined') {
   throw new Error('VITE_SUPABASE_ANON_KEY environment variable is required');
 }
 
