@@ -488,7 +488,7 @@ export class CBCXMLGenerator {
             </Dbtr>
             <DbtrAcct>
                 <Id>
-                    <IBAN>${this.debtorConfig.iban.replace(/\s/g, '')}</IBAN>
+                    <IBAN>${this.debtorConfig.iban.replace(/\s/g, '').toUpperCase()}</IBAN>
                 </Id>
                 <Ccy>${this.CURRENCY}</Ccy>
             </DbtrAcct>
@@ -551,7 +551,7 @@ ${addressLines}
     const endToEndId = this.generateEndToEndId(refund.id);
     const creditorName = this.sanitizeText(`${refund.first_name} ${refund.last_name}`);
     const amount = this.formatAmount(refund.amount_recharged);
-    const iban = refund.account.replace(/\s/g, '');
+    const iban = refund.account.replace(/\s/g, '').toUpperCase();
     
     // Standardized payment object text as required
     const remittanceInfo = "Remboursement Les Aperos du chateau";
