@@ -232,13 +232,13 @@ const FESTIVAL_EDITIONS: EditionConfig[] = [
     id: 'july-10th',
     name: '10 Juillet',
     dateRange: { start: '2025-07-10', end: '2025-07-11' },
-    status: 'upcoming'
+    status: 'done'
   },
   {
     id: 'august-7th',
     name: '7 Août',
     dateRange: { start: '2025-08-07', end: '2025-08-08' },
-    status: 'upcoming'
+    status: 'done'
   },
   {
     id: 'september-11th',
