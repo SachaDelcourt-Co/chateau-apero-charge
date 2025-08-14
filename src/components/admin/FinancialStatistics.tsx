@@ -213,13 +213,26 @@ const FinancialStatistics: React.FC<FinancialStatisticsProps> = ({
       // Calculate remaining card balances
       const totalRemainingBalance = cardBalances?.reduce((sum, card) => sum + (card.current_balance || 0), 0) || 0;
 
-      // Calculate active cards (cards with transactions)
-      const activeCards = cardBalances?.filter(card => 
-        (card.order_count && card.order_count > 0) || 
-        (card.recharge_count && card.recharge_count > 0)
-      ).length || 0;
+      // Calculate active cards for this specific edition (cards with activity during the edition)
+      const activeCardsInEdition = new Set<string>();
 
-      // Calculate average spending per card
+      // Add cards that made bar orders during this edition
+      barOrders?.forEach(order => {
+        if (order.card_id) {
+          activeCardsInEdition.add(order.card_id);
+        }
+      });
+
+      // Add cards that made recharges during this edition
+      recharges?.forEach(recharge => {
+        if (recharge.card_id) {
+          activeCardsInEdition.add(recharge.card_id);
+        }
+      });
+
+      const activeCards = activeCardsInEdition.size;
+
+      // Calculate average spending per card (for cards active during this edition)
       const averageSpendingPerCard = activeCards > 0 ? totalSales / activeCards : 0;
 
       // Calculate average transaction value
