@@ -95,7 +95,11 @@ export class CBCXMLGenerator {
   private options: XMLGenerationOptions;
 
   constructor(debtorConfig: DebtorConfiguration, options: XMLGenerationOptions = {}) {
-    this.debtorConfig = debtorConfig;
+    // Normalize debtor IBAN
+    this.debtorConfig = {
+      ...debtorConfig,
+      iban: debtorConfig.iban ? debtorConfig.iban.replace(/\s/g, '').toUpperCase() : ''
+    };
     this.options = {
       message_id_prefix: 'CBC',
       payment_info_id_prefix: 'PMT',
@@ -121,8 +125,17 @@ export class CBCXMLGenerator {
     try {
       console.log(`[CBCXMLGenerator] Starting XML generation for ${refunds.length} refunds`);
 
+      // Normalize IBAN formats and deduplicate refunds
+      const processedRefunds = this.deduplicateRefunds(this.normalizeRefundIBANs(refunds));
+      
+      if (processedRefunds.length < refunds.length) {
+        const duplicatesRemoved = refunds.length - processedRefunds.length;
+        warnings.push(`${duplicatesRemoved} duplicate transfer(s) removed (same IBAN, amount, and card ID)`);
+        console.log(`[CBCXMLGenerator] Removed ${duplicatesRemoved} duplicate transfers`);
+      }
+
       // Validate input data
-      const validationResult = this.validateRefundData(refunds);
+      const validationResult = this.validateRefundData(processedRefunds);
       if (!validationResult.isValid) {
         return {
           success: false,
@@ -142,8 +155,8 @@ export class CBCXMLGenerator {
                            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       // Calculate totals
-      const totalAmount = refunds.reduce((sum, refund) => sum + refund.amount_recharged, 0);
-      const transactionCount = refunds.length;
+      const totalAmount = processedRefunds.reduce((sum, refund) => sum + refund.amount_recharged, 0);
+      const transactionCount = processedRefunds.length;
 
       // Generate XML content
       const xmlContent = this.buildXMLDocument({
@@ -153,7 +166,7 @@ export class CBCXMLGenerator {
         executionDate,
         transactionCount,
         totalAmount,
-        refunds
+        refunds: processedRefunds
       });
 
       console.log(`[CBCXMLGenerator] XML generation completed successfully`);
@@ -206,6 +219,46 @@ export class CBCXMLGenerator {
     if (!this.ALLOWED_CHARS_REGEX.test(this.debtorConfig.name)) {
       throw new Error('Debtor name contains invalid characters');
     }
+  }
+
+  /**
+   * Normalize IBAN format in refund records (ensure uppercase)
+   */
+  private normalizeRefundIBANs(refunds: ValidatedRefundRecord[]): ValidatedRefundRecord[] {
+    return refunds.map(refund => ({
+      ...refund,
+      account: this.normalizeIBAN(refund.account)
+    }));
+  }
+
+  /**
+   * Normalize IBAN format (remove spaces, convert to uppercase)
+   */
+  private normalizeIBAN(iban: string): string {
+    if (!iban) return '';
+    return iban.replace(/\s/g, '').toUpperCase();
+  }
+
+  /**
+   * Remove duplicate refunds based on IBAN, amount, and card ID
+   */
+  private deduplicateRefunds(refunds: ValidatedRefundRecord[]): ValidatedRefundRecord[] {
+    const seen = new Set<string>();
+    const deduplicated: ValidatedRefundRecord[] = [];
+
+    for (const refund of refunds) {
+      // Create a unique key based on IBAN, amount, and card ID
+      const key = `${this.normalizeIBAN(refund.account)}_${refund.amount_recharged.toFixed(2)}_${refund.matched_card || 'no_card'}`;
+      
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicated.push(refund);
+      } else {
+        console.log(`[CBCXMLGenerator] Removing duplicate: IBAN=${refund.account}, Amount=${refund.amount_recharged}, Card=${refund.matched_card}`);
+      }
+    }
+
+    return deduplicated;
   }
 
   /**
@@ -322,8 +375,8 @@ export class CBCXMLGenerator {
   private isValidBelgianIBAN(iban: string): boolean {
     if (!iban) return false;
     
-    // Remove spaces and convert to uppercase
-    const cleanIban = iban.replace(/\s/g, '').toUpperCase();
+    // Normalize IBAN format
+    const cleanIban = this.normalizeIBAN(iban);
     
     // Belgian IBAN format: BE + 2 check digits + 12 digits
     const belgianIbanRegex = /^BE\d{14}$/;
@@ -488,7 +541,7 @@ export class CBCXMLGenerator {
             </Dbtr>
             <DbtrAcct>
                 <Id>
-                    <IBAN>${this.debtorConfig.iban.replace(/\s/g, '').toUpperCase()}</IBAN>
+                    <IBAN>${this.normalizeIBAN(this.debtorConfig.iban)}</IBAN>
                 </Id>
                 <Ccy>${this.CURRENCY}</Ccy>
             </DbtrAcct>
@@ -551,7 +604,7 @@ ${addressLines}
     const endToEndId = this.generateEndToEndId(refund.id);
     const creditorName = this.sanitizeText(`${refund.first_name} ${refund.last_name}`);
     const amount = this.formatAmount(refund.amount_recharged);
-    const iban = refund.account.replace(/\s/g, '').toUpperCase();
+    const iban = this.normalizeIBAN(refund.account);
     
     // Standardized payment object text as required
     const remittanceInfo = "Remboursement Les Aperos du chateau";

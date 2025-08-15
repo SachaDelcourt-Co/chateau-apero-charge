@@ -1,0 +1,683 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ns0:Document xmlns:ns0="urn:iso:std:iso:20022:tech:xsd:pain.001.001.03">
+    <ns0:CstmrCdtTrfInitn>
+                <ns0:GrpHdr>
+            <ns0:MsgId>CBC20250815070932_741</ns0:MsgId>
+            <ns0:CreDtTm>2025-08-15T07:09:32.709Z</ns0:CreDtTm>
+            <ns0:NbOfTxs>31</ns0:NbOfTxs>
+            <ns0:CtrlSum>624.00</ns0:CtrlSum>
+            <ns0:InitgPty>
+                <ns0:Nm>Les Aperos de Seneffe ASBL</ns0:Nm>
+                <ns0:Id>
+                    <ns0:OrgId>
+                        <ns0:Othr>
+                            <ns0:Id>BE1022.001.995</ns0:Id>
+                            <ns0:Issr>KBO-BCE</ns0:Issr>
+                        </ns0:Othr>
+                    </ns0:OrgId>
+                </ns0:Id>
+            </ns0:InitgPty>
+        </ns0:GrpHdr>
+                <ns0:PmtInf>
+            <ns0:PmtInfId>PMT_20250815070932</ns0:PmtInfId>
+            <ns0:PmtMtd>TRF</ns0:PmtMtd>
+            <ns0:BtchBookg>true</ns0:BtchBookg>
+            <ns0:NbOfTxs>31</ns0:NbOfTxs>
+            <ns0:CtrlSum>624.00</ns0:CtrlSum>
+            <ns0:PmtTpInf>
+                <ns0:InstrPrty>NORM</ns0:InstrPrty>
+                <ns0:SvcLvl>
+                    <ns0:Cd>SEPA</ns0:Cd>
+                </ns0:SvcLvl>
+                <ns0:CtgyPurp>
+                    <ns0:Cd>SUPP</ns0:Cd>
+                </ns0:CtgyPurp>
+            </ns0:PmtTpInf>
+            <ns0:ReqdExctnDt>2025-08-16</ns0:ReqdExctnDt>
+            <ns0:Dbtr>
+                <ns0:Nm>Les Aperos de Seneffe ASBL</ns0:Nm>
+                <ns0:Id>
+                    <ns0:OrgId>
+                        <ns0:Othr>
+                            <ns0:Id>BE1022.001.995</ns0:Id>
+                            <ns0:Issr>KBO-BCE</ns0:Issr>
+                        </ns0:Othr>
+                    </ns0:OrgId>
+                </ns0:Id>
+            </ns0:Dbtr>
+            <ns0:DbtrAcct>
+                <ns0:Id>
+                    <ns0:IBAN>BE85732081252406</ns0:IBAN>
+                </ns0:Id>
+                <ns0:Ccy>EUR</ns0:Ccy>
+            </ns0:DbtrAcct>
+            <ns0:DbtrAgt>
+                <ns0:FinInstnId>
+                    <ns0:BIC>GKCCBEBB</ns0:BIC>
+                </ns0:FinInstnId>
+            </ns0:DbtrAgt>
+            <ns0:ChrgBr>SLEV</ns0:ChrgBr>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000196_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000196</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">28.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Stephanie Verelst</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE18001778394865</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000195_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000195</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">17.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Jordy De vlieger</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE98363205490193</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000193_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000193</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">14.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Emily werry</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE86000450240250</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000191_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000191</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">16.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Aurélie Geeurickx</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE73377070210960</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000189_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000189</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">9.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Pascale Swaelens</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE30973184064911</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000188_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000188</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">2.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Robert Pakuszewski</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE72973007855216</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000185_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000185</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">15.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Lally Grossard</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE86126209809050</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000183_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000183</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">26.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Sylvie Decaesstecker</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE66310093067243</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000181_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000181</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">10.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>philippe jadoul</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE06001880211422</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000180_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000180</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">19.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>philippe jadoul</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE06001880211422</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000179_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000179</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">14.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Pauline Tricot</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE21063466634703</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000178_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000178</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">3.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>François-Xavier De Bosscher</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE82732027966868</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000173_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000173</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">7.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Grégory Lescart</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE16271016038374</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000166_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000166</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">30.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Mirella Guerra</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE75063726997251</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000163_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000163</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">3.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Lauriane Coppens</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE20001888023356</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000162_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000162</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">31.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Laure Beauchampet</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE64063454272152</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000161_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000161</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">3.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Sebastien Peleriaux</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE08001511096413</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000159_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000159</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">21.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Florent Jeanmart</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE67063645355987</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000157_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000157</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">30.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Baptiste Noppe</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE59063678019426</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000156_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000156</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">16.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Deborah Iuliano</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE37001402225128</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000155_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000155</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">10.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Adrien Godart</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE17001445554321</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000154_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000154</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">11.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Angie Goudaillier</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE88732015150441</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000153_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000153</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">7.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Luciano D'AMATO</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE62063102648061</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000152_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000152</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">48.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Olivier Elsen</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE40001441222663</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000151_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000151</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">2.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Stijn De Bruyn</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE03103046144584</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000150_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000150</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">7.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Fabien Crefcoeur</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE64340064137852</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000146_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000146</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">24.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Frederic De backer</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE71750651656569</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000145_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000145</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">42.50</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Noémie Scarnière</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE15001741036630</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000141_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000141</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">7.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Gaspard Baudelet</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE23363082493991</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000138_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000138</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">24.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Kelly Biancardi</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE88126209051541</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+            <ns0:CdtTrfTxInf>
+                <ns0:PmtId>
+                    <ns0:InstrId>TXN000137_20250815</ns0:InstrId>
+                    <ns0:EndToEndId>REFUND_000137</ns0:EndToEndId>
+                </ns0:PmtId>
+                <ns0:Amt>
+                    <ns0:InstdAmt Ccy="EUR">125.00</ns0:InstdAmt>
+                </ns0:Amt>
+                <ns0:Cdtr>
+                    <ns0:Nm>Jeyson Servais</ns0:Nm>
+                </ns0:Cdtr>
+                <ns0:CdtrAcct>
+                    <ns0:Id>
+                        <ns0:IBAN>BE86063915865850</ns0:IBAN>
+                    </ns0:Id>
+                </ns0:CdtrAcct>
+                <ns0:RmtInf>
+                    <ns0:Ustrd>Remboursement Les Aperos du chateau</ns0:Ustrd>
+                </ns0:RmtInf>
+            </ns0:CdtTrfTxInf>
+        </ns0:PmtInf>
+    </ns0:CstmrCdtTrfInitn>
+</ns0:Document>
